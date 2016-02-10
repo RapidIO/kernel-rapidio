@@ -249,7 +249,7 @@ enum rio_phy_type {
  * @node: Node in global list of master ports
  * @nnode: Node in network list of master ports
  * @net: RIO net this mport is attached to
- * @mutex lock: lock to synchronize lists manipulations
+ * @lock: lock to synchronize lists manipulations
  * @iores: I/O mem resource that this master port interface owns
  * @riores: RIO resources that this master port interfaces owns
  * @inb_msg: RIO inbound message event descriptors
@@ -275,7 +275,7 @@ struct rio_mport {
 	struct list_head node;	/* node in global list of ports */
 	struct list_head nnode;	/* node in net list of ports */
 	struct rio_net *net;	/* RIO net this mport is attached to */
-	struct mutex lock;	/* lock to synchronize lists manipulations */
+	struct mutex lock;
 	struct resource iores;
 	struct resource riores[RIO_MAX_MPORT_RESOURCES];
 	struct rio_msg inb_msg[RIO_MAX_MBOX];
@@ -320,6 +320,7 @@ static inline int rio_mport_is_running(struct rio_mport *mport)
  * @mports: List of master ports accessing this network
  * @hport: Default port for accessing this network
  * @id: RIO network ID
+ * @dev: Device object
  * @enum_data: private data specific to a network enumerator
  * @release: enumerator-specific release callback
  */

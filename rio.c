@@ -643,7 +643,7 @@ EXPORT_SYMBOL_GPL(rio_release_inb_pwrite);
 
 /**
  * rio_pw_enable - Enables/disables port-write handling by a master port
- * @port: Master port associated with port-write handling
+ * @mport: Master port associated with port-write handling
  * @enable:  1=enable,  0=disable
  */
 void rio_pw_enable(struct rio_mport *mport, int enable)
