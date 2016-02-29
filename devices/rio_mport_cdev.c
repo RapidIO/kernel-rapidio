@@ -1142,7 +1142,7 @@ static int rio_mport_transfer_ioctl(struct file *filp, void *arg)
 	return -ENODEV;
 }
 
-static int rio_mport_wait_for_async_dma(struct file *filp, int32_t arg)
+static int rio_mport_wait_for_async_dma(struct file *filp, void __user *arg)
 {
 	return -ENODEV;
 }
@@ -1235,6 +1235,16 @@ static int rio_mport_free_dma(struct file *filp, void __user *arg)
 	}
 
 	return 0;
+}
+#else
+static int rio_mport_alloc_dma(struct file *filp, void __user *arg)
+{
+	return -ENODEV;
+}
+
+static int rio_mport_free_dma(struct file *filp, void __user *arg)
+{
+	return -ENODEV;
 }
 
 #endif /* CONFIG_RAPIDIO_DMA_ENGINE */
@@ -1944,10 +1954,7 @@ static int mport_cdev_open(struct inode *inode, struct file *filp)
 
 	INIT_LIST_HEAD(&priv->db_filters);
 	INIT_LIST_HEAD(&priv->pw_filters);
-	INIT_LIST_HEAD(&priv->async_list);
-	INIT_LIST_HEAD(&priv->pend_list);
 	spin_lock_init(&priv->fifo_lock);
-	spin_lock_init(&priv->req_lock);
 	init_waitqueue_head(&priv->event_rx_wait);
 	ret = kfifo_alloc(&priv->event_fifo,
 			  sizeof(struct rio_event) * MPORT_EVENT_DEPTH,
@@ -1959,6 +1966,9 @@ static int mport_cdev_open(struct inode *inode, struct file *filp)
 	}
 
 #ifdef CONFIG_DMA_ENGINE
+	INIT_LIST_HEAD(&priv->async_list);
+	INIT_LIST_HEAD(&priv->pend_list);
+	spin_lock_init(&priv->req_lock);
 	mutex_init(&priv->dma_lock);
 #endif
 
