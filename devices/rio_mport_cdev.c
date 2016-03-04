@@ -2155,9 +2155,10 @@ static long mport_cdev_ioctl(struct file *filp,
 		return maint_port_idx_get(data, (void __user *)arg);
 	case RIO_MPORT_GET_PROPERTIES:
 		md->properties.hdid = md->mport->host_deviceid;
-		err = copy_to_user((void __user *)arg, &(data->md->properties),
-				   sizeof(data->md->properties));
-		break;
+		if (copy_to_user((void __user *)arg, &(data->md->properties),
+				 sizeof(data->md->properties)))
+			return -EFAULT;
+		return 0;
 	case RIO_ENABLE_DOORBELL_RANGE:
 		return rio_mport_add_db_filter(data, (void __user *)arg);
 	case RIO_DISABLE_DOORBELL_RANGE:
@@ -2170,8 +2171,10 @@ static long mport_cdev_ioctl(struct file *filp,
 		data->event_mask = arg;
 		return 0;
 	case RIO_GET_EVENT_MASK:
-		return copy_to_user((void __user *)arg, &data->event_mask,
-				    sizeof(data->event_mask));
+		if (copy_to_user((void __user *)arg, &data->event_mask,
+				    sizeof(data->event_mask)))
+			return -EFAULT;
+		return 0;
 	case RIO_MAP_OUTBOUND:
 		return rio_mport_obw_map(filp, (void __user *)arg);
 	case RIO_MAP_INBOUND:
