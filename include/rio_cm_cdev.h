@@ -35,8 +35,8 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _RIO_MPORT_H_
-#define _RIO_MPORT_H_
+#ifndef _RIO_CM_CDEV_H_
+#define _RIO_CM_CDEV_H_
 
 #ifndef __user
 #define __user
@@ -62,7 +62,7 @@ struct rio_cm_accept {
 	uint32_t wait_to;	/* accept timeout in mSec. 0 = blocking */
 };
 
-/* RapidIO Channel Manager driver IOCTLs */
+/* RapidIO Channelized Messaging Driver IOCTLs */
 #define RIO_CM_IOC_MAGIC	'c'
 
 #define RIO_CM_EP_GET_LIST_SIZE	_IOWR(RIO_CM_IOC_MAGIC, 1, uint32_t)
@@ -77,4 +77,4 @@ struct rio_cm_accept {
 #define RIO_CM_CHAN_RECEIVE	_IOWR(RIO_CM_IOC_MAGIC, 10, struct rio_cm_msg)
 #define RIO_CM_MPORT_GET_LIST	_IOWR(RIO_CM_IOC_MAGIC, 11, uint32_t)
 
-#endif /* _RIO_MPORT_H_ */
+#endif /* _RIO_CM_CDEV_H_ */

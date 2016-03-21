@@ -1,8 +1,7 @@
 /*
- * rio_cm - RapidIO messaging channel manager
+ * rio_cm - RapidIO Channelized Messaging Driver
  *
- * Copyright 2013-2015 Integrated Device Technology, Inc.
- * Alexandre Bounine <alexandre.bounine@idt.com>
+ * Copyright 2013-2016 Integrated Device Technology, Inc.
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -35,9 +34,9 @@
 #include "include/rio_cm_cdev.h"
 
 #define DRV_NAME        "rio_cm"
-#define DRV_VERSION     "0.5"
+#define DRV_VERSION     "1.0.0"
 #define DRV_AUTHOR      "Alexandre Bounine <alexandre.bounine@idt.com>"
-#define DRV_DESC        "RapidIO Messaging Channel Manager"
+#define DRV_DESC        "RapidIO Channelized Messaging Driver"
 #define DEV_NAME	"rio_cm"
 
 /* Debug output filtering masks */
@@ -93,6 +92,7 @@ MODULE_PARM_DESC(dbg_level, "Debugging output level (default 0 = none)");
 MODULE_AUTHOR(DRV_AUTHOR);
 MODULE_DESCRIPTION(DRV_DESC);
 MODULE_LICENSE("GPL");
+MODULE_VERSION(DRV_VERSION);
 
 #define RIOCM_TX_RING_SIZE	128
 #define RIOCM_RX_RING_SIZE	128
@@ -138,7 +138,7 @@ struct rio_ch_chan_hdr {
 	u8 ch_op;
 	u16 dst_ch;
 	u16 src_ch;
-	u16 msg_len; /* for NACK response acts as an error code */
+	u16 msg_len;
 	u16 rsrvd;
 } __attribute__((__packed__));
 
@@ -165,7 +165,6 @@ struct cm_dev {
 	struct list_head	peers;
 	int			npeers;
 	struct tasklet_struct	rx_tasklet;
-	struct tasklet_struct	tx_tasklet;
 };
 
 struct chan_rx_ring {
@@ -194,8 +193,8 @@ struct rio_channel {
 	u16			rem_channel;	/* remote channel ID */
 	struct list_head	accept_queue;
 	struct list_head	ch_node;
-	wait_queue_head_t	wait_q;
 	struct completion	comp;
+	struct completion	comp_close;
 	struct chan_rx_ring	rx_ring;
 };
 
@@ -218,7 +217,7 @@ struct conn_req {
 };
 
 /*
- * A channel_dev represents a structure on mport
+ * A channel_dev structure represents a CM_CDEV
  * @cdev	Character device
  * @dev		Associated device object
  */
@@ -252,23 +251,23 @@ static struct channel_dev riocm_cdev;
 #define dev_cm_capable(dev) \
 	is_msg_capable(dev->src_ops, dev->dst_ops)
 
-static int riocm_comp(struct rio_channel *ch, enum rio_cm_state comp)
+static int riocm_cmp(struct rio_channel *ch, enum rio_cm_state cmp)
 {
 	int ret;
 
 	spin_lock_bh(&ch->lock);
-	ret = (ch->state == comp);
+	ret = (ch->state == cmp);
 	spin_unlock_bh(&ch->lock);
 	return ret;
 }
 
-static int riocm_comp_exch(struct rio_channel *ch,
-			   enum rio_cm_state comp, enum rio_cm_state exch)
+static int riocm_cmp_exch(struct rio_channel *ch,
+			   enum rio_cm_state cmp, enum rio_cm_state exch)
 {
 	int ret;
 
 	spin_lock_bh(&ch->lock);
-	ret = (ch->state == comp);
+	ret = (ch->state == cmp);
 	if (ret)
 		ch->state = exch;
 	spin_unlock_bh(&ch->lock);
@@ -370,6 +369,16 @@ static void riocm_rx_free(struct cm_dev *cm)
 	}
 }
 
+/*
+ * riocm_req_handler - connection request handler
+ * @cm: cm_dev object
+ * @req_data: pointer to the request packet
+ *
+ * Returns: 0 if success, or
+ *          -EINVAL if channel is not in correct state,
+ *          -ENODEV if cannot find a channel with specified ID,
+ *          -ENOMEM if unable to allocate memory to store the request
+ */
 static int riocm_req_handler(struct cm_dev *cm, void *req_data)
 {
 	struct rio_channel *ch;
@@ -402,21 +411,26 @@ static int riocm_req_handler(struct cm_dev *cm, void *req_data)
 
 	spin_lock_bh(&ch->lock);
 	list_add_tail(&req->node, &ch->accept_queue);
-	wake_up(&ch->wait_q);
 	spin_unlock_bh(&ch->lock);
+	complete(&ch->comp);
 	riocm_put_channel(ch);
 
 	return 0;
 }
 
+/*
+ * riocm_resp_handler - response to connection request handler
+ * @resp_data: pointer to the response packet
+ *
+ * Returns: 0 if success, or
+ *          -EINVAL if channel is not in correct state,
+ *          -ENODEV if cannot find a channel with specified ID,
+ */
 static int riocm_resp_handler(void *resp_data)
 {
 	struct rio_channel *ch;
 	struct rio_ch_chan_hdr *hh = resp_data;
 	u16 chnum;
-
-	if (hh->ch_op != CM_CONN_ACK)
-		return -EINVAL;
 
 	chnum = ntohs(hh->dst_ch);
 	ch = riocm_get_channel(chnum);
@@ -430,22 +444,25 @@ static int riocm_resp_handler(void *resp_data)
 
 	riocm_exch(ch, RIO_CM_CONNECTED);
 	ch->rem_channel = ntohs(hh->src_ch);
-	wake_up(&ch->wait_q);
+	complete(&ch->comp);
 	riocm_put_channel(ch);
 
 	return 0;
 }
 
+/*
+ * riocm_close_handler - channel close request handler
+ * @req_data: pointer to the request packet
+ *
+ * Returns: 0 if success, or
+ *          -ENODEV if cannot find a channel with specified ID,
+ *            + error codes returned by riocm_ch_close.
+ */
 static int riocm_close_handler(void *data)
 {
 	struct rio_channel *ch;
 	struct rio_ch_chan_hdr *hh = data;
 	int ret;
-
-	if (hh->ch_op != CM_CONN_CLOSE) {
-		riocm_error("Invalid request header");
-		return -EINVAL;
-	}
 
 	riocm_debug(RX_CMD, "for ch=%d", ntohs(hh->dst_ch));
 
@@ -467,6 +484,9 @@ static int riocm_close_handler(void *data)
 	return 0;
 }
 
+/*
+ * rio_cm_handler - worker thread that services request (non-data) packets
+ */
 static void rio_cm_handler(struct work_struct *_work)
 {
 	struct rio_cm_work *work;
@@ -503,6 +523,16 @@ out:
 	kfree(work);
 }
 
+/*
+ * rio_rx_data_handler - received data packet handler
+ * @cm: cm_dev object
+ * @buf: data packet
+ *
+ * Returns: 0 if success, or
+ *          -ENODEV if cannot find a channel with specified ID,
+ *          -EIO if channel is not in CONNECTED state,
+ *          -ENOMEM if channel RX queue is full (packet discarded)
+ */
 static int rio_rx_data_handler(struct cm_dev *cm, void *buf)
 {
 	struct rio_ch_chan_hdr *hdr;
@@ -518,11 +548,7 @@ static int rio_rx_data_handler(struct cm_dev *cm, void *buf)
 		kfree(buf);
 		return -ENODEV;
 	}
-#if (0)
-	riocm_debug(RX_DATA, "found ch=%d", ch->id);
-	riocm_debug(RX_DATA, "msg=%s",
-		 (char *)((u8 *)buf + sizeof(struct rio_ch_chan_hdr)));
-#endif
+
 	/* Place pointer to the buffer into channel's RX queue */
 	spin_lock(&ch->lock);
 
@@ -550,7 +576,7 @@ static int rio_rx_data_handler(struct cm_dev *cm, void *buf)
 	ch->rx_ring.count++;
 	ch->rx_ring.head %= RIOCM_RX_RING_SIZE;
 
-	wake_up(&ch->wait_q);
+	complete(&ch->comp);
 
 	spin_unlock(&ch->lock);
 	riocm_put_channel(ch);
@@ -558,6 +584,9 @@ static int rio_rx_data_handler(struct cm_dev *cm, void *buf)
 	return 0;
 }
 
+/*
+ * rio_ibmsg_handler - inbound message packet handler (tasklet)
+ */
 static void rio_ibmsg_handler(unsigned long context)
 {
 	struct cm_dev *cm = (struct cm_dev *)context;
@@ -612,7 +641,7 @@ static void rio_ibmsg_handler(unsigned long context)
 }
 
 static void riocm_inb_msg_event(struct rio_mport *mport, void *dev_id,
-			 int mbox, int slot)
+				int mbox, int slot)
 {
 	struct cm_dev *cm = (struct cm_dev *)dev_id;
 
@@ -620,11 +649,20 @@ static void riocm_inb_msg_event(struct rio_mport *mport, void *dev_id,
 		tasklet_schedule(&cm->rx_tasklet);
 }
 
+/*
+ * rio_txcq_handler - TX completion handler
+ * @cm: cm_dev object
+ * @slot: TX queue slot
+ *
+ * TX completion handler also ensures that pending request packets are placed
+ * into transmit queue as soon as a free slot becomes available. This is done
+ * to give higher priority to request packets during high intensity data flow.
+ */
 static void rio_txcq_handler(struct cm_dev *cm, int slot)
 {
 	int ack_slot;
 
-	/* FIXME: We do not need TX completion notification until direct buffer
+	/* ATTN: Add TX completion notification if/when direct buffer
 	 * transfer is implemented. At this moment only correct tracking
 	 * of tx_count is important.
 	 */
@@ -653,6 +691,9 @@ static void rio_txcq_handler(struct cm_dev *cm, int slot)
 
 	cm->tx_ack_slot = ack_slot;
 
+	/*
+	 * If there are pending requests, insert them into transmit queue
+	 */
 	if (!list_empty(&cm->tx_reqs) && (cm->tx_cnt < RIOCM_TX_RING_SIZE)) {
 		struct tx_req *req, *_req;
 		int rc;
@@ -677,7 +718,7 @@ static void rio_txcq_handler(struct cm_dev *cm, int slot)
 }
 
 static void riocm_outb_msg_event(struct rio_mport *mport, void *dev_id,
-			  int mbox, int slot)
+				 int mbox, int slot)
 {
 	struct cm_dev *cm = (struct cm_dev *)dev_id;
 
@@ -685,6 +726,16 @@ static void riocm_outb_msg_event(struct rio_mport *mport, void *dev_id,
 		rio_txcq_handler(cm, slot);
 }
 
+/*
+ * riocm_post_send - helper function that places packet into msg TX queue
+ * @cm: cm_dev object
+ * @rdev: target RapidIO device object (required by outbound msg interface)
+ * @buffer: pointer to a packet buffer to send
+ * @len: length of data to transfer
+ * @req: request priority flag
+ *
+ * Returns: 0 if success, or error code otherwise.
+ */
 static int riocm_post_send(struct cm_dev *cm, struct rio_dev *rdev,
 			   void *buffer, size_t len, int req)
 {
@@ -743,8 +794,8 @@ err_out:
  * Returns: 0 if success, or
  *          -EINVAL if one or more input parameters is/are not valid,
  *          -ENODEV if cannot find a channel with specified ID,
- *          -EAGAIN if a channel is not in connected state,
- *	    error codes returned by HW send routine.
+ *          -EAGAIN if a channel is not in CONNECTED state,
+ *	    + error codes returned by HW send routine.
  */
 static int riocm_ch_send(u16 ch_id, void *buf, int len)
 {
@@ -756,10 +807,13 @@ static int riocm_ch_send(u16 ch_id, void *buf, int len)
 		return -EINVAL;
 
 	ch = riocm_get_channel(ch_id);
-	if (!ch)
+	if (!ch) {
+		riocm_error("%s(%d) ch_%d not found", current->comm,
+			    task_pid_nr(current), ch_id);
 		return -ENODEV;
+	}
 
-	if (!riocm_comp(ch, RIO_CM_CONNECTED)) {
+	if (!riocm_cmp(ch, RIO_CM_CONNECTED)) {
 		ret = -EAGAIN;
 		goto err_out;
 	}
@@ -779,9 +833,10 @@ static int riocm_ch_send(u16 ch_id, void *buf, int len)
 	hdr->src_ch = htons(ch->id);
 	hdr->msg_len = htons((u16)len);
 
-	/* FIXME: the function call below relies on the fact that underlying
-	 * add_outb_message() routine copies TX data into its internal transfer
-	 * buffer. Needs to be reviewed if switched to direct buffer version.
+	/* ATTN: the function call below relies on the fact that underlying
+	 * HW-specific add_outb_message() routine copies TX data into its own
+	 * internal transfer buffer (true for all RIONET compatible mport
+	 * drivers). Must be reviewed if mport driver uses the buffer directly.
 	 */
 
 	ret = riocm_post_send(ch->cmdev, ch->rdev, buf, len, 0);
@@ -790,56 +845,6 @@ static int riocm_ch_send(u16 ch_id, void *buf, int len)
 err_out:
 	riocm_put_channel(ch);
 	return ret;
-}
-
-/*
- * riocm_wait_for_rx_data - waits for received data message
- * @ch: channel object
- *
- * ATTN: THIS FUNCTION MUST BE CALLED WITH CHANNEL SPINLOCK HELD BY CALLER.
- *
- * Returns: 0 if success (accept queue is not empty), or
- *          -EINTR if wait was interrupted by signal
- */
-static int riocm_wait_for_rx_data(struct rio_channel *ch, long timeout)
-__releases(ch->lock)
-__acquires(ch->lock)
-{
-	int err;
-	DEFINE_WAIT(wait);
-
-	riocm_debug(WAIT, "on %d", ch->id);
-
-	for (;;) {
-		prepare_to_wait_exclusive(&ch->wait_q, &wait,
-					  TASK_INTERRUPTIBLE);
-		spin_unlock_bh(&ch->lock);
-		if (ch->rx_ring.count == 0)
-			timeout = schedule_timeout(timeout);
-
-		spin_lock_bh(&ch->lock);
-
-		if (signal_pending(current)) {
-			err = -EINTR;
-			break;
-		}
-		if (ch->rx_ring.count) {
-			err = 0;
-			break;
-		}
-		if (ch->state != RIO_CM_CONNECTED) {
-			err = -ECONNRESET;
-			break;
-		}
-		if (!timeout) {
-			err = -ETIME;
-			break;
-		}
-	}
-
-	finish_wait(&ch->wait_q, &wait);
-	riocm_debug(WAIT, "on %d returns %d", ch->id, err);
-	return err;
 }
 
 static int riocm_ch_free_rxbuf(struct rio_channel *ch, void *buf)
@@ -865,13 +870,27 @@ static int riocm_ch_free_rxbuf(struct rio_channel *ch, void *buf)
 	return ret;
 }
 
-static int riocm_ch_receive(struct rio_channel *ch, void **buf, int *len,
-			      long timeout)
+/*
+ * riocm_ch_receive - fetch a data packet received for the specified channel
+ * @ch_id: local channel ID
+ * @buf: pointer to a data buffer to send (including CM header)
+ * @timeout: timeout to wait for incoming packet (in jiffies)
+ *
+ * ATTN: ASSUMES THAT THE HEADER SPACE IS RESERVED PART OF THE DATA PACKET
+ *
+ * Returns: 0 and valid buffer pointer if success, or NULL pointer and one of:
+ *          -EAGAIN if a channel is not in CONNECTED state,
+ *          -ENOMEM if in-use tracking queue is full,
+ *          -ETIME if wait timeout expired,
+ *	    -EINTR if wait was interrupted.
+ */
+static int riocm_ch_receive(struct rio_channel *ch, void **buf, long timeout)
 {
 	void *rxmsg = NULL;
 	int i, ret = 0;
+	long wret;
 
-	if (!riocm_comp(ch, RIO_CM_CONNECTED)) {
+	if (!riocm_cmp(ch, RIO_CM_CONNECTED)) {
 		ret = -EAGAIN;
 		goto out;
 	}
@@ -884,13 +903,21 @@ static int riocm_ch_receive(struct rio_channel *ch, void **buf, int *len,
 		goto out;
 	}
 
-	spin_lock_bh(&ch->lock);
+	wret = wait_for_completion_interruptible_timeout(&ch->comp, timeout);
 
-	if (ch->rx_ring.count == 0) {
-		ret = riocm_wait_for_rx_data(ch, timeout);
-		if (ret)
-			goto out_wait;
-	}
+	riocm_debug(WAIT, "wait on %d returned %ld", ch->id, wret);
+
+	if (!wret)
+		ret = -ETIME;
+	else if (wret == -ERESTARTSYS)
+		ret = -EINTR;
+	else
+		ret = riocm_cmp(ch, RIO_CM_CONNECTED) ? 0 : -ECONNRESET;
+
+	if (ret)
+		goto out;
+
+	spin_lock_bh(&ch->lock);
 
 	rxmsg = ch->rx_ring.buf[ch->rx_ring.tail];
 	ch->rx_ring.buf[ch->rx_ring.tail] = NULL;
@@ -914,58 +941,10 @@ static int riocm_ch_receive(struct rio_channel *ch, void **buf, int *len,
 		rxmsg = NULL;
 	}
 
-out_wait:
 	spin_unlock_bh(&ch->lock);
 out:
 	*buf = rxmsg;
 	return ret;
-}
-
-/*
- * riocm_wait_for_connect_resp - waits for connect response (ACK/NACK) from
- *                               a remote device
- * @ch: channel object
- * @timeo: timeout value in jiffies
- *
- * ATTN: THIS FUNCTION MUST BE CALLED WITH CHANNEL SPINLOCK HELD BY CALLER.
- *
- * Returns: 0 if success (accept queue is not empty), or
- *          -EINTR if wait was interrupted by signal,
- *          -ETIME if wait timeout expired.
- */
-static int riocm_wait_for_connect_resp(struct rio_channel *ch, long timeo)
-__releases(ch->lock)
-__acquires(ch->lock)
-{
-	int err;
-	DEFINE_WAIT(wait);
-
-	riocm_debug(WAIT, "on %d", ch->id);
-
-	for (;;) {
-		prepare_to_wait_exclusive(&ch->wait_q, &wait,
-					  TASK_INTERRUPTIBLE);
-		spin_unlock_bh(&ch->lock);
-		timeo = schedule_timeout(timeo);
-		spin_lock_bh(&ch->lock);
-
-		if (signal_pending(current)) {
-			err = -EINTR;
-			break;
-		}
-		if (ch->state != RIO_CM_CONNECT) {
-			err = 0;
-			break;
-		}
-		if (!timeo) {
-			err = -ETIME;
-			break;
-		}
-	}
-
-	finish_wait(&ch->wait_q, &wait);
-	riocm_debug(WAIT, "on %d returns %d", ch->id, err);
-	return err;
 }
 
 /*
@@ -978,7 +957,9 @@ __acquires(ch->lock)
  * Returns: 0 if success, or
  *          -ENODEV if cannot find specified channel or mport,
  *          -EINVAL if the channel is not in IDLE state,
- *          -EAGAIN if no connection request available immediately.
+ *          -EAGAIN if no connection request available immediately,
+ *          -ETIME if ACK response timeout expired,
+ *          -EINTR if wait for response was interrupted.
  */
 static int riocm_ch_connect(u16 loc_ch, u8 mport_id, u32 rem_destid, u16 rem_ch)
 {
@@ -988,6 +969,7 @@ static int riocm_ch_connect(u16 loc_ch, u8 mport_id, u32 rem_destid, u16 rem_ch)
 	struct cm_peer *peer;
 	int found = 0;
 	int ret;
+	long wret;
 
 	down_read(&rdev_sem);
 
@@ -1027,7 +1009,7 @@ static int riocm_ch_connect(u16 loc_ch, u8 mport_id, u32 rem_destid, u16 rem_ch)
 	if (!ch)
 		return -ENODEV;
 
-	if (!riocm_comp_exch(ch, RIO_CM_IDLE, RIO_CM_CONNECT)) {
+	if (!riocm_cmp_exch(ch, RIO_CM_IDLE, RIO_CM_CONNECT)) {
 		riocm_put_channel(ch);
 		return -EINVAL;
 	}
@@ -1051,82 +1033,32 @@ static int riocm_ch_connect(u16 loc_ch, u8 mport_id, u32 rem_destid, u16 rem_ch)
 	hdr.dst_ch = htons(rem_ch);
 	hdr.src_ch = htons(loc_ch);
 
-	/* FIXME: the function call below relies on the fact that underlying
-	 * add_outb_message() routine copies TX data into its internal transfer
-	 * buffer. Needs to be reviewed if switched to direct buffer version.
+	/* ATTN: the function call below relies on the fact that underlying
+	 * HW-specific add_outb_message() routine copies TX data into its
+	 * internal transfer buffer. Must be reviewed if mport driver uses
+	 * this buffer directly.
 	 */
 	ret = riocm_post_send(cm, peer->rdev, &hdr, sizeof(hdr), 1);
 
 	if (ret && ret != -EBUSY) {
-		riocm_comp_exch(ch, RIO_CM_CONNECT, RIO_CM_IDLE);
+		riocm_cmp_exch(ch, RIO_CM_CONNECT, RIO_CM_IDLE);
 		goto conn_done;
 	}
 
 	/* Wait for connect response from the remote device */
-	spin_lock_bh(&ch->lock);
+	wret = wait_for_completion_interruptible_timeout(&ch->comp,
+							 RIOCM_CONNECT_TO * HZ);
+	riocm_debug(WAIT, "wait on %d returns %ld", ch->id, wret);
 
-	/* Check if we still in CONNECT state */
-	if (ch->state == RIO_CM_CONNECT) {
-		ret = riocm_wait_for_connect_resp(ch, RIOCM_CONNECT_TO * HZ);
-		if (ret == 0)
-			ret = (ch->state == RIO_CM_CONNECTED) ? 0 : -1;
-	}
-
-	spin_unlock_bh(&ch->lock);
+	if (!wret)
+		ret = -ETIME;
+	else if (wret == -ERESTARTSYS)
+		ret = -EINTR;
+	else
+		ret = riocm_cmp(ch, RIO_CM_CONNECTED) ? 0 : -1;
 conn_done:
 	riocm_put_channel(ch);
 	return ret;
-}
-
-/*
- * riocm_wait_for_connect_req - waits for connect request from a remote device
- * @ch: channel object
- * @timeo: timeout value in jiffies
- *
- * ATTN: THIS FUNCTION MUST BE CALLED WITH CHANNEL SPINLOCK HELD BY CALLER.
- *
- * Returns: 0 if success (accept queue is not empty), or
- *          -EINTR if wait was interrupted by signal,
- *          -ETIME if wait timeout expired.
- */
-static int riocm_wait_for_connect_req(struct rio_channel *ch, long timeo)
-__releases(ch->lock)
-__acquires(ch->lock)
-{
-	int err;
-	DEFINE_WAIT(wait);
-
-	riocm_debug(WAIT, "on %d", ch->id);
-
-	for (;;) {
-		prepare_to_wait_exclusive(&ch->wait_q, &wait,
-					  TASK_INTERRUPTIBLE);
-		spin_unlock_bh(&ch->lock);
-		if (list_empty(&ch->accept_queue) && ch->state == RIO_CM_LISTEN)
-			timeo = schedule_timeout(timeo);
-
-		spin_lock_bh(&ch->lock);
-		if (signal_pending(current)) {
-			err = -EINTR;
-			break;
-		}
-		if (!list_empty(&ch->accept_queue)) {
-			err = 0;
-			break;
-		}
-		if (ch->state != RIO_CM_LISTEN) {
-			err = -ECANCELED;
-			break;
-		}
-		if (!timeo) {
-			err = -ETIME;
-			break;
-		}
-	}
-
-	finish_wait(&ch->wait_q, &wait);
-	riocm_debug(WAIT, "on %d returns %d", ch->id, err);
-	return err;
 }
 
 static int riocm_send_ack(struct rio_channel *ch)
@@ -1143,7 +1075,7 @@ static int riocm_send_ack(struct rio_channel *ch)
 	hdr.bhdr.type = RIO_CM_CHAN;
 	hdr.ch_op = CM_CONN_ACK;
 
-	/* FIXME: the function call below relies on the fact that underlying
+	/* ATTN: the function call below relies on the fact that underlying
 	 * add_outb_message() routine copies TX data into its internal transfer
 	 * buffer. Review if switching to direct buffer version.
 	 */
@@ -1164,9 +1096,12 @@ static int riocm_send_ack(struct rio_channel *ch)
  *           request is not available).
  *
  * Returns: pointer to new channel struct if success, or error-valued pointer:
- *          -ENODEV if cannot find specified channel or mport,
- *          -EINVAL if the channel is not in IDLE state,
- *          -EAGAIN if no connection request available immediately.
+ *          -ENODEV - cannot find specified channel or mport,
+ *          -EINVAL - the channel is not in IDLE state,
+ *          -EAGAIN - no connection request available immediately (timeout=0),
+ *          -ENOMEM - unable to allocate new channel,
+ *          -ETIME - wait timeout expired,
+ *          -EINTR - wait was interrupted.
  */
 static struct rio_channel *riocm_ch_accept(u16 ch_id, u16 *new_ch_id,
 					   long timeout)
@@ -1176,34 +1111,54 @@ static struct rio_channel *riocm_ch_accept(u16 ch_id, u16 *new_ch_id,
 	struct conn_req *req;
 	struct cm_peer *peer;
 	int found = 0;
-	int err;
+	int err = 0;
+	long wret;
 
 	ch = riocm_get_channel(ch_id);
 	if (!ch)
 		return ERR_PTR(-EINVAL);
 
+	if (!riocm_cmp(ch, RIO_CM_LISTEN)) {
+		err = -EINVAL;
+		goto err_put;
+	}
+
+	/* Don't sleep if this is a non blocking call */
+	if (!timeout) {
+		if (!try_wait_for_completion(&ch->comp)) {
+			err = -EAGAIN;
+			goto err_put;
+		}
+	} else {
+		riocm_debug(WAIT, "on %d", ch->id);
+
+		wret = wait_for_completion_interruptible_timeout(&ch->comp,
+								 timeout);
+		if (!wret) {
+			err = -ETIME;
+			goto err_put;
+		} else if (wret == -ERESTARTSYS) {
+			err = -EINTR;
+			goto err_put;
+		}
+	}
+
 	spin_lock_bh(&ch->lock);
 
 	if (ch->state != RIO_CM_LISTEN) {
-		err = -EINVAL;
-		goto err_out;
+		err = -ECANCELED;
+	} else if (list_empty(&ch->accept_queue)) {
+		riocm_debug(WAIT, "on %d accept_queue is empty on completion",
+			    ch->id);
+		err = -EIO;
 	}
 
-	/* Check if we have pending connection request */
-	if (list_empty(&ch->accept_queue)) {
+	spin_unlock_bh(&ch->lock);
 
-		/* Don't sleep if this is a non blocking call */
-		if (!timeout) {
-			err = -EAGAIN;
-			goto err_out;
-		}
-
-		err = riocm_wait_for_connect_req(ch, timeout);
-		if (err)
-			goto err_out;
+	if (err) {
+		riocm_debug(WAIT, "on %d returns %d", ch->id, err);
+		goto err_put;
 	}
-
-	req = list_first_entry(&ch->accept_queue, struct conn_req, node);
 
 	/* Create new channel for this connection */
 	new_ch = riocm_ch_alloc(RIOCM_CHNUM_AUTO);
@@ -1212,9 +1167,12 @@ static struct rio_channel *riocm_ch_accept(u16 ch_id, u16 *new_ch_id,
 		riocm_error("failed to get channel for new req (%ld)",
 			PTR_ERR(new_ch));
 		err = -ENOMEM;
-		goto err_out;
+		goto err_put;
 	}
 
+	spin_lock_bh(&ch->lock);
+
+	req = list_first_entry(&ch->accept_queue, struct conn_req, node);
 	list_del(&req->node);
 	new_ch->cmdev = ch->cmdev;
 	new_ch->loc_destid = ch->loc_destid;
@@ -1238,8 +1196,7 @@ static struct rio_channel *riocm_ch_accept(u16 ch_id, u16 *new_ch_id,
 	up_read(&rdev_sem);
 
 	if (!found) {
-		/* If peer device object not found simply ignore the request */
-		riocm_put_channel(new_ch);
+		/* If peer device object not found, simply ignore the request */
 		err = -ENODEV;
 		goto err_nodev;
 	}
@@ -1253,10 +1210,15 @@ static struct rio_channel *riocm_ch_accept(u16 ch_id, u16 *new_ch_id,
 
 	*new_ch_id = new_ch->id;
 	return new_ch;
-err_out:
-	spin_unlock_bh(&ch->lock);
+err_put:
 	riocm_put_channel(ch);
 err_nodev:
+	if (new_ch) {
+		spin_lock_bh(&idr_lock);
+		idr_remove(&ch_idr, new_ch->id);
+		spin_unlock_bh(&idr_lock);
+		riocm_put_channel(new_ch);
+	}
 	*new_ch_id = 0;
 	return ERR_PTR(err);
 }
@@ -1277,7 +1239,7 @@ static int riocm_ch_listen(u16 ch_id)
 	riocm_debug(CHOP, "(ch_%d)", ch_id);
 
 	ch = riocm_get_channel(ch_id);
-	if (!ch || !riocm_comp_exch(ch, RIO_CM_CHAN_BOUND, RIO_CM_LISTEN))
+	if (!ch || !riocm_cmp_exch(ch, RIO_CM_CHAN_BOUND, RIO_CM_LISTEN))
 		ret = -EINVAL;
 	riocm_put_channel(ch);
 	return ret;
@@ -1287,7 +1249,7 @@ static int riocm_ch_listen(u16 ch_id)
  * riocm_ch_bind - associate a channel object and an mport device
  * @ch_id: channel ID
  * @mport_id: local mport device ID
- * @context: pointer to the additional caller's context (???)
+ * @context: pointer to the additional caller's context
  *
  * Returns: 0 if success, or
  *          -ENODEV if cannot find specified mport,
@@ -1344,7 +1306,8 @@ exit:
  * riocm_ch_alloc - channel object allocation helper routine
  * @ch_num: channel ID (1 ... RIOCM_MAX_CHNUM, 0 = automatic)
  *
- * Return value: pointer to newly created channel object, or error code
+ * Return value: pointer to newly created channel object,
+ *               or error-valued pointer
  */
 static struct rio_channel *riocm_ch_alloc(u16 ch_num)
 {
@@ -1367,7 +1330,7 @@ static struct rio_channel *riocm_ch_alloc(u16 ch_num)
 	}
 
 	spin_lock_bh(&idr_lock);
-	id = idr_alloc(&ch_idr, ch, start, end, GFP_KERNEL);
+	id = idr_alloc(&ch_idr, ch, start, end, GFP_ATOMIC);
 	spin_unlock_bh(&idr_lock);
 
 	if (id < 0) {
@@ -1380,8 +1343,8 @@ static struct rio_channel *riocm_ch_alloc(u16 ch_num)
 	spin_lock_init(&ch->lock);
 	INIT_LIST_HEAD(&ch->accept_queue);
 	INIT_LIST_HEAD(&ch->ch_node);
-	init_waitqueue_head(&ch->wait_q);
 	init_completion(&ch->comp);
+	init_completion(&ch->comp_close);
 	kref_init(&ch->ref);
 	ch->rx_ring.head = 0;
 	ch->rx_ring.tail = 0;
@@ -1404,10 +1367,8 @@ static struct rio_channel *riocm_ch_alloc(u16 ch_num)
  * Available channel numbers are limited by 16-bit size of channel numbers used
  * in the packet header.
  *
- * Return value: 0 if successful (with channel number updated via pointer) or
- *               -1 if error.
  * Return value: PTR to rio_channel structure if successful (with channel number
- *               updated via pointer) or NULL if error.
+ *               updated via pointer) or error-valued pointer if error.
  */
 static struct rio_channel *riocm_ch_create(u16 *ch_num)
 {
@@ -1415,13 +1376,12 @@ static struct rio_channel *riocm_ch_create(u16 *ch_num)
 
 	ch = riocm_ch_alloc(*ch_num);
 
-	if (IS_ERR(ch)) {
-		riocm_error("Failed to allocate channel %d (err=%ld)",
-			 *ch_num, PTR_ERR(ch));
-		return NULL;
-	}
+	if (IS_ERR(ch))
+		riocm_debug(CHOP, "Failed to allocate channel %d (err=%ld)",
+			    *ch_num, PTR_ERR(ch));
+	else
+		*ch_num = ch->id;
 
-	*ch_num = ch->id;
 	return ch;
 }
 
@@ -1448,7 +1408,7 @@ static void riocm_ch_free(struct kref *ref)
 			if (ch->rx_ring.buf[i] != NULL)
 				kfree(ch->rx_ring.buf[i]);
 
-	complete(&ch->comp);
+	complete(&ch->comp_close);
 }
 
 static int riocm_send_close(struct rio_channel *ch)
@@ -1473,9 +1433,9 @@ static int riocm_send_close(struct rio_channel *ch)
 	hdr->dst_ch = htons(ch->rem_channel);
 	hdr->src_ch = htons(ch->id);
 
-	/* FIXME: the function call below relies on the fact that underlying
+	/* ATTN: the function call below relies on the fact that underlying
 	 * add_outb_message() routine copies TX data into its internal transfer
-	 * buffer. Needs to be reviewed if switched to direct buffer version.
+	 * buffer. Needs to be reviewed if switched to direct buffer mode.
 	 */
 	ret = riocm_post_send(ch->cmdev, ch->rdev, hdr, sizeof(*hdr), 1);
 	if (ret == -EBUSY)
@@ -1500,16 +1460,19 @@ static int riocm_ch_close(struct rio_channel *ch)
 	long wret;
 	int ret = 0;
 
-	riocm_debug(CHOP, "(ch_%d)", ch->id);
+	riocm_debug(CHOP, "ch_%d by %s(%d)",
+		    ch->id, current->comm, task_pid_nr(current));
 
 	state = riocm_exch(ch, RIO_CM_DESTROYING);
 	if (state == RIO_CM_CONNECTED)
 		riocm_send_close(ch);
 
-	wake_up_all(&ch->wait_q);
+	complete_all(&ch->comp);
 
 	riocm_put_channel(ch);
-	wret = wait_for_completion_interruptible_timeout(&ch->comp, tmo);
+	wret = wait_for_completion_interruptible_timeout(&ch->comp_close, tmo);
+
+	riocm_debug(WAIT, "wait on %d returns %ld", ch->id, wret);
 
 	if (wret == 0) {
 		/* Timeout on wait occurred */
@@ -1571,12 +1534,12 @@ found:
 }
 
 /*
- * riocm_cdev_open() - Open character device (mport)
+ * riocm_cdev_open() - Open character device
  */
 static int riocm_cdev_open(struct inode *inode, struct file *filp)
 {
-	riocm_debug(INIT, "by filp=%p %s(%d)",
-		   filp, current->comm, task_pid_nr(current));
+	riocm_debug(INIT, "by %s(%d) filp=%p ",
+		    current->comm, task_pid_nr(current), filp);
 
 	if (list_empty(&cm_dev_list))
 		return -ENODEV;
@@ -1593,8 +1556,8 @@ static int riocm_cdev_release(struct inode *inode, struct file *filp)
 	unsigned int i;
 	LIST_HEAD(list);
 
-	riocm_debug(EXIT, "by filp=%p %s(%d)",
-		   filp, current->comm, task_pid_nr(current));
+	riocm_debug(EXIT, "by %s(%d) filp=%p",
+		    current->comm, task_pid_nr(current), filp);
 
 	/* Check if there are channels associated with this file descriptor */
 	spin_lock_bh(&idr_lock);
@@ -1617,15 +1580,6 @@ static int riocm_cdev_release(struct inode *inode, struct file *filp)
 	}
 
 	return 0;
-}
-
-static unsigned int riocm_cdev_poll(struct file *file, poll_table *wait)
-{
-	unsigned int mask = 0;
-#if 0
-	mask |= POLLIN | POLLRDNORM;
-#endif
-	return mask;
 }
 
 /*
@@ -1737,11 +1691,16 @@ static int cm_chan_create(struct file *filp, void __user *arg)
 
 	if (get_user(ch_num, p))
 		return -EFAULT;
+
+	riocm_debug(CHOP, "ch_%d requested by %s(%d)",
+		    ch_num, current->comm, task_pid_nr(current));
 	ch = riocm_ch_create(&ch_num);
-	if (ch == NULL)
-		return -1;
+	if (IS_ERR(ch))
+		return PTR_ERR(ch);
+
 	ch->filp = filp;
-	riocm_debug(CHOP, "ch_%d by %p", ch_num, filp);
+	riocm_debug(CHOP, "ch_%d created by %s(%d)",
+		    ch_num, current->comm, task_pid_nr(current));
 	return put_user(ch_num, p);
 }
 
@@ -1759,7 +1718,8 @@ static int cm_chan_close(struct file *filp, void __user *arg)
 	if (get_user(ch_num, p))
 		return -EFAULT;
 
-	riocm_debug(CHOP, "ch_%d by %p", ch_num, filp);
+	riocm_debug(CHOP, "ch_%d by %s(%d)",
+		    ch_num, current->comm, task_pid_nr(current));
 
 	spin_lock_bh(&idr_lock);
 	ch = idr_find(&ch_idr, ch_num);
@@ -1820,6 +1780,9 @@ static int cm_chan_accept(struct file *filp, void __user *arg)
 	if (copy_from_user(&param, arg, sizeof(struct rio_cm_accept)))
 		return -EFAULT;
 
+	riocm_debug(CHOP, "on ch_%d by %s(%d)",
+		    param.ch_num, current->comm, task_pid_nr(current));
+
 	accept_to = param.wait_to ?
 			msecs_to_jiffies(param.wait_to):MAX_SCHEDULE_TIMEOUT;
 
@@ -1828,7 +1791,9 @@ static int cm_chan_accept(struct file *filp, void __user *arg)
 		return PTR_ERR(ch);
 	ch->filp = filp;
 
-	riocm_debug(CHOP, "new ch_%d for %p", ch->id, filp);
+	riocm_debug(CHOP, "new ch_%d for %s(%d)",
+		    ch->id, current->comm, task_pid_nr(current));
+
 	if (copy_to_user(arg, &param, sizeof(struct rio_cm_accept)))
 		return -EFAULT;
 	return 0;
@@ -1886,9 +1851,8 @@ static int cm_chan_msg_rcv(void __user *arg)
 	struct rio_cm_msg msg;
 	struct rio_channel *ch;
 	void *buf;
-	int msg_len = RIO_MAX_MSG_SIZE;
 	long rxto;
-	int ret = 0;
+	int ret = 0, msg_size;
 
 	if (copy_from_user(&msg, arg, sizeof(struct rio_cm_msg)))
 		return -EFAULT;
@@ -1900,17 +1864,17 @@ static int cm_chan_msg_rcv(void __user *arg)
 	if (!ch)
 		return -ENODEV;
 
-	rxto = msg.rxto?msecs_to_jiffies(msg.rxto):MAX_SCHEDULE_TIMEOUT;
+	rxto = msg.rxto ? msecs_to_jiffies(msg.rxto) : MAX_SCHEDULE_TIMEOUT;
 
-	ret = riocm_ch_receive(ch, &buf, &msg_len, rxto);
+	ret = riocm_ch_receive(ch, &buf, rxto);
 	if (ret)
 		goto out;
 
-	 /* check msg.size for max allowed copy size ??? */
-	if (copy_to_user(msg.msg, buf, RIO_MAX_MSG_SIZE))
+	msg_size = min(msg.size, (u16)(RIO_MAX_MSG_SIZE));
+
+	if (copy_to_user(msg.msg, buf, msg_size))
 		ret = -EFAULT;
 
-	/* msg.size = RIO_MAX_MSG_SIZE;	*/
 	riocm_ch_free_rxbuf(ch, buf);
 out:
 	riocm_put_channel(ch);
@@ -1957,7 +1921,6 @@ static const struct file_operations riocm_cdev_fops = {
 	.owner		= THIS_MODULE,
 	.open		= riocm_cdev_open,
 	.release	= riocm_cdev_release,
-	.poll		= riocm_cdev_poll,
 	.unlocked_ioctl = riocm_cdev_ioctl,
 };
 
@@ -2104,7 +2067,6 @@ static int riocm_remove_dev(struct device *dev, struct subsys_interface *sif)
 #endif
 }
 
-
 /*
  * riocm_cdev_add() - Create rio_cm char device
  * @devno: device number assigned to device (MAJ + MIN)
@@ -2239,7 +2201,6 @@ static void riocm_remove_mport(struct device *dev,
 		return;
 
 	tasklet_kill(&cm->rx_tasklet);
-	tasklet_kill(&cm->tx_tasklet);
 	flush_workqueue(riocm_wq);
 
 	/* Release channels bound to this mport */
