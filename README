@@ -2,13 +2,15 @@ RapidIO Linux Driver Package
 
 ================================================================================
 
-January 29, 2016 v0.9
+March 24, 2016 v0.91
 
 ================================================================================
 
 
 Package Revision History
 ------------------------
+
+v0.91 - Added automatic installation of RIONET driver into "make install".
 
 v0.9 - Preliminary release (2016.01.29). Precedes patches submission to the
        upstream mainline code tree.
