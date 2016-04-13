@@ -100,6 +100,7 @@ MODULE_VERSION(DRV_VERSION);
 
 #define RIOCM_MAX_CHNUM		0xffff /* Use full range of u16 field */
 #define RIOCM_CHNUM_AUTO	0
+#define RIOCM_MAX_EP_COUNT	0x10000 /* Max number of endpoints */
 
 enum rio_cm_state {
 	RIO_CM_IDLE,
@@ -154,17 +155,19 @@ struct cm_dev {
 	struct rio_mport	*mport;
 	void			*rx_buf[RIOCM_RX_RING_SIZE];
 	int			rx_slots;
+	spinlock_t		rx_lock;
 
 	void			*tx_buf[RIOCM_TX_RING_SIZE];
 	int			tx_slot;
 	int			tx_cnt;
 	int			tx_ack_slot;
 	struct list_head	tx_reqs;
-
 	spinlock_t		tx_lock;
+
 	struct list_head	peers;
 	int			npeers;
 	struct tasklet_struct	rx_tasklet;
+	struct work_struct	rx_refill_work;
 };
 
 struct chan_rx_ring {
@@ -229,7 +232,7 @@ struct channel_dev {
 static struct rio_channel *riocm_ch_alloc(u16 ch_num);
 static void riocm_ch_free(struct kref *ref);
 static int riocm_post_send(struct cm_dev *cm, struct rio_dev *rdev,
-			   void *buffer, size_t len, int req);
+			   void *buffer, size_t len);
 static int riocm_ch_close(struct rio_channel *ch);
 
 static DEFINE_SPINLOCK(idr_lock);
@@ -310,6 +313,7 @@ static void *riocm_rx_get_msg(struct cm_dev *cm)
 
 	msg = rio_get_inb_message(cm->mport, cmbox);
 	if (msg) {
+		spin_lock(&cm->rx_lock);
 		for (i = 0; i < RIOCM_RX_RING_SIZE; i++) {
 			if (cm->rx_buf[i] == msg) {
 				cm->rx_buf[i] = NULL;
@@ -317,6 +321,7 @@ static void *riocm_rx_get_msg(struct cm_dev *cm)
 				break;
 			}
 		}
+		spin_unlock(&cm->rx_lock);
 
 		if (i == RIOCM_RX_RING_SIZE)
 			riocm_warn("no record for buffer 0x%p", msg);
@@ -332,23 +337,40 @@ static void *riocm_rx_get_msg(struct cm_dev *cm)
  *
  * Returns: none
  */
-static void riocm_rx_fill(struct cm_dev *cm, int nent)
+static int riocm_rx_fill(struct cm_dev *cm, int nent)
 {
-	int i;
+	int i = 0;
+	void *buf;
 
-	if (cm->rx_slots == 0)
-		return;
+	while (nent) {
+		buf = kmalloc(RIO_MAX_MSG_SIZE, GFP_KERNEL);
+		if (!buf)
+			break;
 
-	for (i = 0; i < RIOCM_RX_RING_SIZE && cm->rx_slots && nent; i++) {
-		if (cm->rx_buf[i] == NULL) {
-			cm->rx_buf[i] = kmalloc(RIO_MAX_MSG_SIZE, GFP_ATOMIC);
-			if (cm->rx_buf[i] == NULL)
+		spin_lock_bh(&cm->rx_lock);
+
+		if (!cm->rx_slots)
+			i = RIOCM_RX_RING_SIZE;
+
+		for (; i < RIOCM_RX_RING_SIZE; i++) {
+			if (cm->rx_buf[i] == NULL) {
+				cm->rx_buf[i] = buf;
+				rio_add_inb_buffer(cm->mport, cmbox, buf);
+				cm->rx_slots--;
+				nent--;
 				break;
-			rio_add_inb_buffer(cm->mport, cmbox, cm->rx_buf[i]);
-			cm->rx_slots--;
-			nent--;
+			}
+		}
+
+		spin_unlock_bh(&cm->rx_lock);
+
+		if (i == RIOCM_RX_RING_SIZE) {
+			kfree(buf);
+			break;
 		}
 	}
+
+	return cm->rx_slots;
 }
 
 /*
@@ -399,7 +421,7 @@ static int riocm_req_handler(struct cm_dev *cm, void *req_data)
 		return -EINVAL;
 	}
 
-	req = kzalloc(sizeof(struct conn_req), GFP_KERNEL);
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req) {
 		riocm_put_channel(ch);
 		return -ENOMEM;
@@ -490,36 +512,34 @@ static int riocm_close_handler(void *data)
 static void rio_cm_handler(struct work_struct *_work)
 {
 	struct rio_cm_work *work;
-	void *data;
 	struct rio_ch_chan_hdr *hdr;
 
 	work = container_of(_work, struct rio_cm_work, work);
-	data = work->data;
 
 	if (!rio_mport_is_running(work->cm->mport))
 		goto out;
 
-	hdr = (struct rio_ch_chan_hdr *)data;
+	hdr = work->data;
 
 	riocm_debug(RX_CMD, "OP=%x for ch=%d from %d",
 		    hdr->ch_op, ntohs(hdr->dst_ch), ntohs(hdr->src_ch));
 
 	switch (hdr->ch_op) {
 	case CM_CONN_REQ:
-		riocm_req_handler(work->cm, data);
+		riocm_req_handler(work->cm, work->data);
 		break;
 	case CM_CONN_ACK:
-		riocm_resp_handler(data);
+		riocm_resp_handler(work->data);
 		break;
 	case CM_CONN_CLOSE:
-		riocm_close_handler(data);
+		riocm_close_handler(work->data);
 		break;
 	default:
 		riocm_error("Invalid packet header");
 		break;
 	}
 out:
-	kfree(data);
+	kfree(work->data);
 	kfree(work);
 }
 
@@ -538,7 +558,7 @@ static int rio_rx_data_handler(struct cm_dev *cm, void *buf)
 	struct rio_ch_chan_hdr *hdr;
 	struct rio_channel *ch;
 
-	hdr = (struct rio_ch_chan_hdr *)buf;
+	hdr = buf;
 
 	riocm_debug(RX_DATA, "for ch=%d", ntohs(hdr->dst_ch));
 
@@ -584,6 +604,17 @@ static int rio_rx_data_handler(struct cm_dev *cm, void *buf)
 	return 0;
 }
 
+static void rio_rx_refill_work(struct work_struct *work)
+{
+	struct cm_dev *cm = container_of(work, struct cm_dev, rx_refill_work);
+	int slots;
+
+	slots = riocm_rx_fill(cm, RIOCM_RX_RING_SIZE/4);
+
+	if (slots)
+		queue_work(riocm_wq, &cm->rx_refill_work);
+}
+
 /*
  * rio_ibmsg_handler - inbound message packet handler (tasklet)
  */
@@ -599,13 +630,13 @@ static void rio_ibmsg_handler(unsigned long context)
 
 	for (i = 0; i < 8; i++) {
 		data = riocm_rx_get_msg(cm);
-		if (data)
-			riocm_rx_fill(cm, 1);
+//		if (data)
+//			riocm_rx_fill(cm, 1);
 
 		if (data == NULL)
 			break;
 
-		hdr = (struct rio_ch_chan_hdr *)data;
+		hdr = data;
 
 		if (hdr->bhdr.type != RIO_CM_CHAN) {
 			/* For now simply discard packets other than channel */
@@ -636,6 +667,9 @@ static void rio_ibmsg_handler(unsigned long context)
 		}
 	}
 
+	if (i)
+		queue_work(riocm_wq, &cm->rx_refill_work);
+
 	if (i == 8)
 		tasklet_schedule(&cm->rx_tasklet);
 }
@@ -643,7 +677,7 @@ static void rio_ibmsg_handler(unsigned long context)
 static void riocm_inb_msg_event(struct rio_mport *mport, void *dev_id,
 				int mbox, int slot)
 {
-	struct cm_dev *cm = (struct cm_dev *)dev_id;
+	struct cm_dev *cm = dev_id;
 
 	if (rio_mport_is_running(cm->mport))
 		tasklet_schedule(&cm->rx_tasklet);
@@ -720,10 +754,30 @@ static void rio_txcq_handler(struct cm_dev *cm, int slot)
 static void riocm_outb_msg_event(struct rio_mport *mport, void *dev_id,
 				 int mbox, int slot)
 {
-	struct cm_dev *cm = (struct cm_dev *)dev_id;
+	struct cm_dev *cm = dev_id;
 
 	if (cm && rio_mport_is_running(cm->mport))
 		rio_txcq_handler(cm, slot);
+}
+
+static int riocm_queue_req(struct cm_dev *cm, struct rio_dev *rdev,
+			   void *buffer, size_t len)
+{
+	unsigned long flags;
+	struct tx_req *treq;
+
+	treq = kzalloc(sizeof(*treq), GFP_KERNEL);
+	if (treq == NULL)
+		return -ENOMEM;
+
+	treq->rdev = rdev;
+	treq->buffer = buffer;
+	treq->len = len;
+
+	spin_lock_irqsave(&cm->tx_lock, flags);
+	list_add_tail(&treq->node, &cm->tx_reqs);
+	spin_unlock_irqrestore(&cm->tx_lock, flags);
+	return 0;
 }
 
 /*
@@ -737,8 +791,39 @@ static void riocm_outb_msg_event(struct rio_mport *mport, void *dev_id,
  * Returns: 0 if success, or error code otherwise.
  */
 static int riocm_post_send(struct cm_dev *cm, struct rio_dev *rdev,
-			   void *buffer, size_t len, int req)
+			   void *buffer, size_t len)
 {
+#if (1)
+	int rc;
+	unsigned long flags;
+
+	spin_lock_irqsave(&cm->tx_lock, flags);
+
+	if (cm->mport == NULL) {
+		rc = -ENODEV;
+		goto err_out;
+	}
+
+	if (cm->tx_cnt == RIOCM_TX_RING_SIZE) {
+		riocm_debug(TX, "Tx Queue is full");
+		rc = -EBUSY;
+		goto err_out;
+	}
+
+	cm->tx_buf[cm->tx_slot] = buffer;
+	rc = rio_add_outb_message(cm->mport, rdev, cmbox, buffer, len);
+
+	riocm_debug(TX, "Add buf@%p destid=%x tx_slot=%d tx_cnt=%d",
+		 buffer, rdev->destid, cm->tx_slot, cm->tx_cnt);
+
+	++cm->tx_cnt;
+	++cm->tx_slot;
+	cm->tx_slot &= (RIOCM_TX_RING_SIZE - 1);
+
+err_out:
+	spin_unlock_irqrestore(&cm->tx_lock, flags);
+	return rc;
+#else
 	int rc;
 	unsigned long flags;
 
@@ -753,7 +838,7 @@ static int riocm_post_send(struct cm_dev *cm, struct rio_dev *rdev,
 		if (req) {
 			struct tx_req *treq;
 
-			treq = kzalloc(sizeof(struct tx_req), GFP_ATOMIC);
+			treq = kzalloc(sizeof(*treq), GFP_ATOMIC);
 			if (treq == NULL) {
 				rc = -ENOMEM;
 				goto err_out;
@@ -781,6 +866,7 @@ static int riocm_post_send(struct cm_dev *cm, struct rio_dev *rdev,
 err_out:
 	spin_unlock_irqrestore(&cm->tx_lock, flags);
 	return rc;
+#endif
 }
 
 /*
@@ -821,7 +907,7 @@ static int riocm_ch_send(u16 ch_id, void *buf, int len)
 	/*
 	 * Fill buffer header section with corresponding channel data
 	 */
-	hdr = (struct rio_ch_chan_hdr *)buf;
+	hdr = buf;
 
 	hdr->bhdr.src_id = htonl(ch->loc_destid);
 	hdr->bhdr.dst_id = htonl(ch->rem_destid);
@@ -839,7 +925,7 @@ static int riocm_ch_send(u16 ch_id, void *buf, int len)
 	 * drivers). Must be reviewed if mport driver uses the buffer directly.
 	 */
 
-	ret = riocm_post_send(ch->cmdev, ch->rdev, buf, len, 0);
+	ret = riocm_post_send(ch->cmdev, ch->rdev, buf, len);
 	if (ret)
 		riocm_debug(TX, "ch %d send_err=%d", ch->id, ret);
 err_out:
@@ -950,68 +1036,30 @@ out:
 /*
  * riocm_ch_connect - sends a connect request to a remote device
  * @loc_ch: local channel ID
- * @mport_id:  corresponding RapidIO mport device
- * @rem_destid: destination ID of target RapidIO device
+ * @cm: CM device to send connect request
+ * @peer: target RapidIO device
  * @rem_ch: remote channel ID
  *
  * Returns: 0 if success, or
- *          -ENODEV if cannot find specified channel or mport,
  *          -EINVAL if the channel is not in IDLE state,
  *          -EAGAIN if no connection request available immediately,
  *          -ETIME if ACK response timeout expired,
  *          -EINTR if wait for response was interrupted.
  */
-static int riocm_ch_connect(u16 loc_ch, u8 mport_id, u32 rem_destid, u16 rem_ch)
+static int riocm_ch_connect(u16 loc_ch, struct cm_dev *cm, struct cm_peer *peer, u16 rem_ch)
 {
 	struct rio_channel *ch = NULL;
-	struct rio_ch_chan_hdr hdr;
-	struct cm_dev *cm;
-	struct cm_peer *peer;
-	int found = 0;
+	struct rio_ch_chan_hdr *hdr;
 	int ret;
 	long wret;
-
-	down_read(&rdev_sem);
-
-	/* Find matching cm_dev object */
-	list_for_each_entry(cm, &cm_dev_list, list) {
-		if (cm->mport->id == mport_id) {
-			found++;
-			break;
-		}
-	}
-
-	if (!found) {
-		up_read(&rdev_sem);
-		riocm_error("cm_dev not found");
-		return -ENODEV;
-	}
-
-	/* Find corresponding RapidIO endpoint device object */
-
-	found = 0;
-
-	list_for_each_entry(peer, &cm->peers, node) {
-		if (peer->rdev->destid == rem_destid) {
-			found++;
-			break;
-		}
-	}
-
-	up_read(&rdev_sem);
-
-	if (!found) {
-		riocm_error("Target RapidIO device not found");
-		return -ENODEV;
-	}
 
 	ch = riocm_get_channel(loc_ch);
 	if (!ch)
 		return -ENODEV;
 
 	if (!riocm_cmp_exch(ch, RIO_CM_IDLE, RIO_CM_CONNECT)) {
-		riocm_put_channel(ch);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto conn_done;
 	}
 
 	ch->cmdev = cm;
@@ -1024,23 +1072,37 @@ static int riocm_ch_connect(u16 loc_ch, u8 mport_id, u32 rem_destid, u16 rem_ch)
 	 * Send connect request to the remote RapidIO device
 	 */
 
-	hdr.bhdr.src_id = htonl(ch->loc_destid);
-	hdr.bhdr.dst_id = htonl(rem_destid);
-	hdr.bhdr.src_mbox = cmbox;
-	hdr.bhdr.dst_mbox = cmbox;
-	hdr.bhdr.type = RIO_CM_CHAN;
-	hdr.ch_op = CM_CONN_REQ;
-	hdr.dst_ch = htons(rem_ch);
-	hdr.src_ch = htons(loc_ch);
+	hdr = kzalloc(sizeof(*hdr), GFP_KERNEL);
+	if (hdr == NULL) {
+		ret = -ENOMEM;
+		goto conn_done;
+	}
+
+	hdr->bhdr.src_id = htonl(ch->loc_destid);
+	hdr->bhdr.dst_id = htonl(peer->rdev->destid);
+	hdr->bhdr.src_mbox = cmbox;
+	hdr->bhdr.dst_mbox = cmbox;
+	hdr->bhdr.type = RIO_CM_CHAN;
+	hdr->ch_op = CM_CONN_REQ;
+	hdr->dst_ch = htons(rem_ch);
+	hdr->src_ch = htons(loc_ch);
 
 	/* ATTN: the function call below relies on the fact that underlying
 	 * HW-specific add_outb_message() routine copies TX data into its
 	 * internal transfer buffer. Must be reviewed if mport driver uses
 	 * this buffer directly.
 	 */
-	ret = riocm_post_send(cm, peer->rdev, &hdr, sizeof(hdr), 1);
+	ret = riocm_post_send(cm, peer->rdev, hdr, sizeof(*hdr));
 
-	if (ret && ret != -EBUSY) {
+	if (ret != -EBUSY) {
+		kfree(hdr);
+	} else {
+		ret = riocm_queue_req(cm, peer->rdev, hdr, sizeof(*hdr));
+		if (ret)
+			kfree(hdr);
+	}
+
+	if (ret) {
 		riocm_cmp_exch(ch, RIO_CM_CONNECT, RIO_CM_IDLE);
 		goto conn_done;
 	}
@@ -1056,6 +1118,7 @@ static int riocm_ch_connect(u16 loc_ch, u8 mport_id, u32 rem_destid, u16 rem_ch)
 		ret = -EINTR;
 	else
 		ret = riocm_cmp(ch, RIO_CM_CONNECTED) ? 0 : -1;
+
 conn_done:
 	riocm_put_channel(ch);
 	return ret;
@@ -1063,25 +1126,33 @@ conn_done:
 
 static int riocm_send_ack(struct rio_channel *ch)
 {
-	struct rio_ch_chan_hdr hdr;
+	struct rio_ch_chan_hdr *hdr;
 	int ret;
 
-	hdr.bhdr.src_id = htonl(ch->loc_destid);
-	hdr.bhdr.dst_id = htonl(ch->rem_destid);
-	hdr.dst_ch = htons(ch->rem_channel);
-	hdr.src_ch = htons(ch->id);
-	hdr.bhdr.src_mbox = cmbox;
-	hdr.bhdr.dst_mbox = cmbox;
-	hdr.bhdr.type = RIO_CM_CHAN;
-	hdr.ch_op = CM_CONN_ACK;
+	hdr = kzalloc(sizeof(*hdr), GFP_KERNEL);
+	if (hdr == NULL)
+		return -ENOMEM;
+
+	hdr->bhdr.src_id = htonl(ch->loc_destid);
+	hdr->bhdr.dst_id = htonl(ch->rem_destid);
+	hdr->dst_ch = htons(ch->rem_channel);
+	hdr->src_ch = htons(ch->id);
+	hdr->bhdr.src_mbox = cmbox;
+	hdr->bhdr.dst_mbox = cmbox;
+	hdr->bhdr.type = RIO_CM_CHAN;
+	hdr->ch_op = CM_CONN_ACK;
 
 	/* ATTN: the function call below relies on the fact that underlying
 	 * add_outb_message() routine copies TX data into its internal transfer
 	 * buffer. Review if switching to direct buffer version.
 	 */
-	ret = riocm_post_send(ch->cmdev, ch->rdev, &hdr, sizeof(hdr), 1);
-	if (ret == -EBUSY)
-		ret = 0;
+	ret = riocm_post_send(ch->cmdev, ch->rdev, hdr, sizeof(*hdr));
+
+	if (ret == -EBUSY &&
+	    !riocm_queue_req(ch->cmdev, ch->rdev, hdr, sizeof(*hdr)))
+			return 0;
+	kfree(hdr);
+
 	if (ret)
 		riocm_error("send ACK to ch_%d on %s failed (ret=%d)",
 			    ch->id, rio_name(ch->rdev), ret);
@@ -1315,7 +1386,7 @@ static struct rio_channel *riocm_ch_alloc(u16 ch_num)
 	int start, end;
 	struct rio_channel *ch;
 
-	ch = kzalloc(sizeof(struct rio_channel), GFP_KERNEL);
+	ch = kzalloc(sizeof(*ch), GFP_KERNEL);
 	if (!ch)
 		return ERR_PTR(-ENOMEM);
 
@@ -1329,9 +1400,11 @@ static struct rio_channel *riocm_ch_alloc(u16 ch_num)
 		end = RIOCM_MAX_CHNUM + 1;
 	}
 
+	idr_preload(GFP_KERNEL);
 	spin_lock_bh(&idr_lock);
-	id = idr_alloc(&ch_idr, ch, start, end, GFP_ATOMIC);
+	id = idr_alloc(&ch_idr, ch, start, end, GFP_NOWAIT);
 	spin_unlock_bh(&idr_lock);
+	idr_preload_end();
 
 	if (id < 0) {
 		kfree(ch);
@@ -1397,16 +1470,22 @@ static void riocm_ch_free(struct kref *ref)
 	riocm_debug(CHOP, "(ch_%d)", ch->id);
 
 	if (ch->rx_ring.inuse_cnt) {
-		for (i = 0; i < RIOCM_RX_RING_SIZE; i++) {
-			if (ch->rx_ring.inuse[i] != NULL)
+		for (i = 0;
+		     i < RIOCM_RX_RING_SIZE && ch->rx_ring.inuse_cnt; i++) {
+			if (ch->rx_ring.inuse[i] != NULL) {
 				kfree(ch->rx_ring.inuse[i]);
+				ch->rx_ring.inuse_cnt--;
+			}
 		}
 	}
 
 	if (ch->rx_ring.count)
-		for (i = 0; i < RIOCM_RX_RING_SIZE; i++)
-			if (ch->rx_ring.buf[i] != NULL)
+		for (i = 0; i < RIOCM_RX_RING_SIZE && ch->rx_ring.count; i++) {
+			if (ch->rx_ring.buf[i] != NULL) {
 				kfree(ch->rx_ring.buf[i]);
+				ch->rx_ring.count--;
+			}
+		}
 
 	complete(&ch->comp_close);
 }
@@ -1420,7 +1499,7 @@ static int riocm_send_close(struct rio_channel *ch)
 	 * Send CH_CLOSE notification to the remote RapidIO device
 	 */
 
-	hdr = kzalloc(sizeof(struct rio_ch_chan_hdr), GFP_KERNEL);
+	hdr = kzalloc(sizeof(*hdr), GFP_KERNEL);
 	if (hdr == NULL)
 		return -ENOMEM;
 
@@ -1437,11 +1516,12 @@ static int riocm_send_close(struct rio_channel *ch)
 	 * add_outb_message() routine copies TX data into its internal transfer
 	 * buffer. Needs to be reviewed if switched to direct buffer mode.
 	 */
-	ret = riocm_post_send(ch->cmdev, ch->rdev, hdr, sizeof(*hdr), 1);
-	if (ret == -EBUSY)
-		ret = 0;
-	else
-		kfree(hdr);
+	ret = riocm_post_send(ch->cmdev, ch->rdev, hdr, sizeof(*hdr));
+
+	if (ret == -EBUSY &&
+	    !riocm_queue_req(ch->cmdev, ch->rdev, hdr, sizeof(*hdr)))
+			return 0;
+	kfree(hdr);
 
 	if (ret)
 		riocm_error("ch(%d) send CLOSE failed (ret=%d)", ch->id, ret);
@@ -1494,43 +1574,6 @@ static int riocm_ch_close(struct rio_channel *ch)
 	}
 
 	return ret;
-}
-
-/*
- * riocm_get_peer_list - report number of remote peer endpoints connected
- *                        to the specified mport device
- * @mport_id: mport device ID
- * @buf: peer list buffer
- * @nent: number of 32-bit entries in the buffer
- */
-static int riocm_get_peer_list(u8 mport_id, void *buf, u32 *nent)
-{
-	struct cm_dev *cm;
-	struct cm_peer *peer;
-	u32 *entry_ptr = buf;
-	int i = 0;
-
-	/* Find a matching cm_dev object */
-	down_read(&rdev_sem);
-	list_for_each_entry(cm, &cm_dev_list, list)
-		if (cm->mport->id == mport_id)
-			goto found;
-
-	up_read(&rdev_sem);
-	*nent = 0;
-	return -ENODEV;
-
-found:
-	list_for_each_entry(peer, &cm->peers, node) {
-		*entry_ptr = (u32)peer->rdev->destid;
-		entry_ptr++;
-		if (++i >= *nent)
-			break;
-	}
-	up_read(&rdev_sem);
-
-	*nent = i;
-	return 0;
 }
 
 /*
@@ -1587,13 +1630,15 @@ static int riocm_cdev_release(struct inode *inode, struct file *filp)
  */
 static int cm_ep_get_list_size(void __user *arg)
 {
-	u16 __user *p = arg;
+	u32 __user *p = arg;
 	u32 mport_id;
 	u32 count = 0;
 	struct cm_dev *cm;
 
 	if (get_user(mport_id, p))
 		return -EFAULT;
+	if (mport_id >= RIO_MAX_MPORTS)
+		return -EINVAL;
 
 	/* Find a matching cm_dev object */
 	down_read(&rdev_sem);
@@ -1601,7 +1646,7 @@ static int cm_ep_get_list_size(void __user *arg)
 		if (cm->mport->id == mport_id) {
 			count = cm->npeers;
 			up_read(&rdev_sem);
-			if (copy_to_user(arg, &count, sizeof(count)))
+			if (copy_to_user(arg, &count, sizeof(u32)))
 				return -EFAULT;
 			return 0;
 		}
@@ -1616,26 +1661,53 @@ static int cm_ep_get_list_size(void __user *arg)
  */
 static int cm_ep_get_list(void __user *arg)
 {
-	int ret = 0;
-	uint32_t info[2];
+	struct cm_dev *cm;
+	struct cm_peer *peer;
+	u32 info[2];
 	void *buf;
+	u32 nent;
+	u32 *entry_ptr;
+	u32 i = 0;
+	int ret = 0;
 
 	if (copy_from_user(&info, arg, sizeof(info)))
 		return -EFAULT;
 
-	buf = kcalloc(info[0] + 2, sizeof(u32), GFP_KERNEL);
-	if (!buf)
+	if (info[1] >= RIO_MAX_MPORTS || info[0] > RIOCM_MAX_EP_COUNT)
+		return -EINVAL;
+
+	/* Find a matching cm_dev object */
+	down_read(&rdev_sem);
+	list_for_each_entry(cm, &cm_dev_list, list)
+		if (cm->mport->id == (u8)info[1])
+			goto found;
+
+	up_read(&rdev_sem);
+	return -ENODEV;
+
+found:
+	nent = min(info[0], (u32)cm->npeers);
+	buf = kcalloc(nent + 2, sizeof(u32), GFP_KERNEL);
+	if (!buf) {
+		up_read(&rdev_sem);
 		return -ENOMEM;
+	}
 
-	ret = riocm_get_peer_list(info[1], (u8 *)buf + 2*sizeof(u32), &info[0]);
-	if (ret)
-		goto out;
+	entry_ptr = (u32 *)((uintptr_t)buf + 2*sizeof(u32));
 
-	((u32 *)buf)[0] = info[0]; /* report an updated number of entries */
+	list_for_each_entry(peer, &cm->peers, node) {
+		*entry_ptr = (u32)peer->rdev->destid;
+		entry_ptr++;
+		if (++i == nent)
+			break;
+	}
+	up_read(&rdev_sem);
+
+	((u32 *)buf)[0] = i; /* report an updated number of entries */
 	((u32 *)buf)[1] = info[1]; /* put back an mport ID */
 	if (copy_to_user(arg, buf, sizeof(u32) * (info[0] + 2)))
 		ret = -EFAULT;
-out:
+
 	kfree(buf);
 	return ret;
 }
@@ -1646,7 +1718,7 @@ out:
 static int cm_mport_get_list(void __user *arg)
 {
 	int ret = 0;
-	uint32_t entries;
+	u32 entries;
 	void *buf;
 	struct cm_dev *cm;
 	u32 *entry_ptr;
@@ -1654,14 +1726,14 @@ static int cm_mport_get_list(void __user *arg)
 
 	if (copy_from_user(&entries, arg, sizeof(entries)))
 		return -EFAULT;
-	if (entries == 0)
-		return -ENOMEM;
+	if (entries == 0 || entries > RIO_MAX_MPORTS)
+		return -EINVAL;
 	buf = kcalloc(entries + 1, sizeof(u32), GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
 	/* Scan all registered cm_dev objects */
-	entry_ptr = (u32 *)((u8 *)buf + sizeof(u32));
+	entry_ptr = (u32 *)((uintptr_t)buf + sizeof(u32));
 	down_read(&rdev_sem);
 	list_for_each_entry(cm, &cm_dev_list, list) {
 		if (count++ < entries) {
@@ -1745,8 +1817,10 @@ static int cm_chan_bind(void __user *arg)
 {
 	struct rio_cm_channel chan;
 
-	if (copy_from_user(&chan, arg, sizeof(struct rio_cm_channel)))
+	if (copy_from_user(&chan, arg, sizeof(chan)))
 		return -EFAULT;
+	if (chan.mport_id >= RIO_MAX_MPORTS)
+		return -EINVAL;
 
 	return riocm_ch_bind(chan.id, chan.mport_id, NULL);
 }
@@ -1777,7 +1851,7 @@ static int cm_chan_accept(struct file *filp, void __user *arg)
 	long accept_to;
 	struct rio_channel *ch;
 
-	if (copy_from_user(&param, arg, sizeof(struct rio_cm_accept)))
+	if (copy_from_user(&param, arg, sizeof(param)))
 		return -EFAULT;
 
 	riocm_debug(CHOP, "on ch_%d by %s(%d)",
@@ -1794,7 +1868,7 @@ static int cm_chan_accept(struct file *filp, void __user *arg)
 	riocm_debug(CHOP, "new ch_%d for %s(%d)",
 		    ch->id, current->comm, task_pid_nr(current));
 
-	if (copy_to_user(arg, &param, sizeof(struct rio_cm_accept)))
+	if (copy_to_user(arg, &param, sizeof(param)))
 		return -EFAULT;
 	return 0;
 }
@@ -1806,16 +1880,56 @@ static int cm_chan_accept(struct file *filp, void __user *arg)
 static int cm_chan_connect(void __user *arg)
 {
 	struct rio_cm_channel chan;
+	struct cm_dev *cm;
+	struct cm_peer *peer;
+	int ret = -ENODEV;
 
-	if (copy_from_user(&chan, arg, sizeof(struct rio_cm_channel)))
+	if (copy_from_user(&chan, arg, sizeof(chan)))
 		return -EFAULT;
+	if (chan.mport_id >= RIO_MAX_MPORTS)
+		return -EINVAL;
 
-	return riocm_ch_connect(chan.id, chan.mport_id,
-				chan.remote_destid, chan.remote_channel);
+	down_read(&rdev_sem);
+
+	/* Find matching cm_dev object */
+	list_for_each_entry(cm, &cm_dev_list, list) {
+		if (cm->mport->id == chan.mport_id) {
+			ret = 0;
+			break;
+		}
+	}
+
+	if (ret)
+		goto err_out;
+
+	if (chan.remote_destid >= RIO_ANY_DESTID(cm->mport->sys_size)) {
+		ret = -EINVAL;
+		goto err_out;
+	}
+
+	/* Find corresponding RapidIO endpoint device object */
+	ret = -ENODEV;
+
+	list_for_each_entry(peer, &cm->peers, node) {
+		if (peer->rdev->destid == chan.remote_destid) {
+			ret = 0;
+			break;
+		}
+	}
+
+	if (ret)
+		goto err_out;
+
+	up_read(&rdev_sem);
+
+	return riocm_ch_connect(chan.id, cm, peer, chan.remote_channel);
+err_out:
+	up_read(&rdev_sem);
+	return ret;
 }
 
 /*
- * cm_chan_msg_send() - Connect on channel
+ * cm_chan_msg_send() - Send a message through channel
  * @arg:	Outbound message information
  */
 static int cm_chan_msg_send(void __user *arg)
@@ -1824,14 +1938,16 @@ static int cm_chan_msg_send(void __user *arg)
 	void *buf;
 	int ret = 0;
 
-	if (copy_from_user(&msg, arg, sizeof(struct rio_cm_msg)))
+	if (copy_from_user(&msg, arg, sizeof(msg)))
 		return -EFAULT;
+	if (msg.size > RIO_MAX_MSG_SIZE)
+		return -EINVAL;
 
-	buf = kmalloc(RIO_MAX_MSG_SIZE, GFP_KERNEL);
+	buf = kmalloc(msg.size, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
-	if (copy_from_user(buf, msg.msg, msg.size)) {
+	if (copy_from_user(buf, (void __user *)(uintptr_t)msg.msg, msg.size)) {
 		ret = -EFAULT;
 		goto out;
 	}
@@ -1843,7 +1959,7 @@ out:
 }
 
 /*
- * cm_chan_msg_rcv() - Connect on channel
+ * cm_chan_msg_rcv() - Receive a message through channel
  * @arg:	Inbound message information
  */
 static int cm_chan_msg_rcv(void __user *arg)
@@ -1854,10 +1970,10 @@ static int cm_chan_msg_rcv(void __user *arg)
 	long rxto;
 	int ret = 0, msg_size;
 
-	if (copy_from_user(&msg, arg, sizeof(struct rio_cm_msg)))
+	if (copy_from_user(&msg, arg, sizeof(msg)))
 		return -EFAULT;
 
-	if (msg.ch_num == 0)
+	if (msg.ch_num == 0 || msg.size == 0)
 		return -EINVAL;
 
 	ch = riocm_get_channel(msg.ch_num);
@@ -1872,7 +1988,7 @@ static int cm_chan_msg_rcv(void __user *arg)
 
 	msg_size = min(msg.size, (u16)(RIO_MAX_MSG_SIZE));
 
-	if (copy_to_user(msg.msg, buf, msg_size))
+	if (copy_to_user((void __user *)(uintptr_t)msg.msg, buf, msg_size))
 		ret = -EFAULT;
 
 	riocm_ch_free_rxbuf(ch, buf);
@@ -1944,7 +2060,7 @@ static int riocm_add_dev(struct device *dev, struct subsys_interface *sif)
 
 	riocm_debug(RDEV, "(%s)", rio_name(rdev));
 
-	peer = kmalloc(sizeof(struct cm_peer), GFP_KERNEL);
+	peer = kmalloc(sizeof(*peer), GFP_KERNEL);
 	if (!peer)
 		return -ENOMEM;
 
@@ -2119,7 +2235,7 @@ static int riocm_add_mport(struct device *dev,
 
 	cm->mport = mport;
 
-	rc = rio_request_outb_mbox(mport, (void *)cm, cmbox,
+	rc = rio_request_outb_mbox(mport, cm, cmbox,
 				   RIOCM_TX_RING_SIZE, riocm_outb_msg_event);
 	if (rc) {
 		riocm_error("failed to allocate OBMBOX_%d on %s",
@@ -2128,7 +2244,7 @@ static int riocm_add_mport(struct device *dev,
 		return -ENODEV;
 	}
 
-	rc = rio_request_inb_mbox(mport, (void *)cm, cmbox,
+	rc = rio_request_inb_mbox(mport, cm, cmbox,
 				  RIOCM_RX_RING_SIZE, riocm_inb_msg_event);
 	if (rc) {
 		riocm_error("failed to allocate IBMBOX_%d on %s",
@@ -2146,7 +2262,9 @@ static int riocm_add_mport(struct device *dev,
 		cm->rx_buf[i] = NULL;
 
 	cm->rx_slots = RIOCM_RX_RING_SIZE;
+	spin_lock_init(&cm->rx_lock);
 	riocm_rx_fill(cm, RIOCM_RX_RING_SIZE);
+	INIT_WORK(&cm->rx_refill_work, rio_rx_refill_work);
 
 	cm->tx_slot = 0;
 	cm->tx_cnt = 0;
