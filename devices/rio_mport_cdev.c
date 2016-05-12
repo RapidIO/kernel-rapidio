@@ -895,7 +895,11 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 		}
 
 		down_read(&current->mm->mmap_sem);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4,6,0))
 		pinned = get_user_pages(current, current->mm,
+#else
+		pinned = get_user_pages(
+#endif
 				(unsigned long)xfer->loc_addr & PAGE_MASK,
 				nr_pages, dir == DMA_FROM_DEVICE, 0,
 				page_list, NULL);
