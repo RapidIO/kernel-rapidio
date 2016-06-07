@@ -1348,7 +1348,7 @@ static struct rio_channel *riocm_ch_alloc(u16 ch_num)
 
 	idr_preload(GFP_KERNEL);
 	spin_lock_bh(&idr_lock);
-	id = idr_alloc(&ch_idr, ch, start, end, GFP_NOWAIT);
+	id = idr_alloc_cyclic(&ch_idr, ch, start, end, GFP_NOWAIT);
 	spin_unlock_bh(&idr_lock);
 	idr_preload_end();
 
