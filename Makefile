@@ -62,7 +62,7 @@ instcom:
 	find /lib/modules/$(KERNEL_VERSION) -name rio_mport_cdev.ko -exec rm -f {} \; || true
 	find /lib/modules/$(KERNEL_VERSION) -name rio-scan.ko -exec rm -f {} \; || true
 	find /lib/modules/$(KERNEL_VERSION) -name rio_cm.ko -exec rm -f {} \; || true
-#	find /lib/modules/$(KERNEL_VERSION) -name rionet.ko -exec rm -f {} \; || true
+	find /lib/modules/$(KERNEL_VERSION) -name rionet.ko -exec rm -f {} \; || true
 
 	install -D -m 644 $(KERNEL)/rapidio.ko $(INSTDIR)/rapidio.ko
 	install -D -m 644 $(KERNEL)/idtcps.ko $(INSTDIR)/idtcps.ko
