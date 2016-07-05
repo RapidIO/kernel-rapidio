@@ -29,11 +29,12 @@ endif
 
 obj-m := rapidio.o
 rapidio-objs :=  rio.o rio-access.o	\
-  		rio-driver.o rio-sysfs.o 
+		rio-driver.o rio-sysfs.o
 obj-m += rio-scan.o
 obj-m += rio_cm.o
 obj-m += switches/idtcps.o
-obj-m += switches/idt_gen2.o 
+obj-m += switches/idt_gen2.o
+obj-m += switches/idt_gen3.o
 obj-m += switches/tsi568.o
 obj-m += switches/tsi57x.o
 obj-m += tsi721_mport.o
@@ -56,6 +57,7 @@ instcom:
 	find /lib/modules/$(KERNEL_VERSION) -name rapidio.ko -exec rm -f {} \; || true
 	find /lib/modules/$(KERNEL_VERSION) -name idtcps.ko -exec rm -f {} \; || true
 	find /lib/modules/$(KERNEL_VERSION) -name idt_gen2.ko -exec rm -f {} \; || true
+	find /lib/modules/$(KERNEL_VERSION) -name idt_gen3.ko -exec rm -f {} \; || true
 	find /lib/modules/$(KERNEL_VERSION) -name tsi568.ko -exec rm -f {} \; || true
 	find /lib/modules/$(KERNEL_VERSION) -name tsi57x.ko -exec rm -f {} \; || true
 	find /lib/modules/$(KERNEL_VERSION) -name tsi721_mport.ko -exec rm -f {} \; || true
@@ -67,6 +69,7 @@ instcom:
 	install -D -m 644 $(KERNEL)/rapidio.ko $(INSTDIR)/rapidio.ko
 	install -D -m 644 $(KERNEL)/idtcps.ko $(INSTDIR)/idtcps.ko
 	install -D -m 644 $(KERNEL)/idt_gen2.ko $(INSTDIR)/idt_gen2.ko
+	install -D -m 644 $(KERNEL)/idt_gen3.ko $(INSTDIR)/idt_gen3.ko
 	install -D -m 644 $(KERNEL)/tsi568.ko $(INSTDIR)/tsi568.ko
 	install -D -m 644 $(KERNEL)/tsi57x.ko $(INSTDIR)/tsi57x.ko
 	install -D -m 644 $(KERNEL)/tsi721_mport.ko $(INSTDIR)/tsi721_mport.ko
