@@ -30,7 +30,7 @@ fully compatible with RIONET driver (Ethernet over RapidIO messaging services).
         Its default value is 128.
 
 - 'dma_txqueue_sz' - DMA transactions queue size. Defines number of pending
-        transaction requests that can be accepted by eacg DMA channel.
+        transaction requests that can be accepted by each DMA channel.
         Default value is 16.
 
 - 'dma_sel' - DMA channel selection mask. Bitmask that defines which hardware

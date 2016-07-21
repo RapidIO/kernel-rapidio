@@ -174,7 +174,8 @@ idtg3_em_init(struct rio_dev *rdev)
 	rio_write_config_32(rdev, RIO_EM_DEV_INT_EN, 0);
 
 	/* Disable port-write event notifications during initialization */
-	rio_write_config_32(rdev, rdev->em_efptr + RIO_EM_PW_TX_CTRL, RIO_EM_PW_TX_CTRL_PW_DIS);
+	rio_write_config_32(rdev, rdev->em_efptr + RIO_EM_PW_TX_CTRL,
+			    RIO_EM_PW_TX_CTRL_PW_DIS);
 
 	/* Configure Port-Write notifications for hot-swap events */
 	tmp = RIO_GET_TOTAL_PORTS(rdev->swpinfo);
@@ -256,7 +257,7 @@ idtg3_em_handler(struct rio_dev *rdev, u8 pnum)
 				    rval | RIO_PLM_SPx_IMP_SPEC_CTL_SOFT_RST);
 		udelay(10);
 		rio_write_config_32(rdev, RIO_PLM_SPx_IMP_SPEC_CTL(pnum), rval);
-		mdelay(500);
+		msleep(500);
 	}
 
 	return 0;

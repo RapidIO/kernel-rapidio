@@ -1005,7 +1005,7 @@ int tsi721_register_dma(struct tsi721_device *priv)
 	for (i = 0; i < TSI721_DMA_MAXCH; i++) {
 		struct tsi721_bdma_chan *bdma_chan = &priv->bdma[i];
 
-		if ((i == TSI721_DMACH_MAINT) || (dma_sel & (1 << i)) == 0 )
+		if ((i == TSI721_DMACH_MAINT) || (dma_sel & (1 << i)) == 0)
 			continue;
 
 		bdma_chan->regs = priv->regs + TSI721_DMAC_BASE(i);

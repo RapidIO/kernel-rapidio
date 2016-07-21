@@ -376,8 +376,9 @@ static struct rio_dev *rio_setup_device(struct rio_net *net,
 	if (rdev->pef & RIO_PEF_EXT_FEATURES) {
 		rdev->efptr = result & 0xffff;
 		rdev->phys_efptr = rio_mport_get_physefb(port, 0, destid,
-							 hopcount, &rdev->phys_rmap);
-		pr_debug("RIO: %s Register Map %d device\n", __func__, rdev->phys_rmap);
+						hopcount, &rdev->phys_rmap);
+		pr_debug("RIO: %s Register Map %d device\n",
+			 __func__, rdev->phys_rmap);
 
 		rdev->em_efptr = rio_mport_get_feature(port, 0, destid,
 						hopcount, RIO_EFB_ERR_MGMNT);
@@ -809,7 +810,8 @@ static int rio_mport_is_active(struct rio_mport *port)
 	u32 result = 0;
 
 	rio_local_read_config_32(port,
-		port->phys_efptr + RIO_PORT_N_ERR_STS_CSR(port->index, port->phys_rmap),
+		port->phys_efptr +
+			RIO_PORT_N_ERR_STS_CSR(port->index, port->phys_rmap),
 		&result);
 	return result & RIO_PORT_N_ERR_STS_PORT_OK;
 }

@@ -1111,7 +1111,7 @@ static int tsi721_rio_map_inb_mem(struct rio_mport *mport, dma_addr_t lstart,
 	int ret = -EBUSY;
 
 	/* Max IBW size supported by HW is 16GB */
-	if (size > 0x400000000)
+	if (size > 0x400000000UL)
 		return -EINVAL;
 
 	if (direct) {
@@ -1121,14 +1121,14 @@ static int tsi721_rio_map_inb_mem(struct rio_mport *mport, dma_addr_t lstart,
 		ibw_start = lstart & ~(ibw_size - 1);
 
 		tsi_debug(IBW, &priv->pdev->dev,
-			"Direct (RIO_0x%llx -> PCIe_0x%pad), size=0x%llx, ibw_start = 0x%llx",
+			"Direct (RIO_0x%llx -> PCIe_%pad), size=0x%llx, ibw_start = 0x%llx",
 			rstart, &lstart, size, ibw_start);
 
 		while ((lstart + size) > (ibw_start + ibw_size)) {
 			ibw_size *= 2;
 			ibw_start = lstart & ~(ibw_size - 1);
 			/* Check for crossing IBW max size 16GB */
-			if (ibw_size > 0x400000000)
+			if (ibw_size > 0x400000000UL)
 				return -EBUSY;
 		}
 
@@ -1140,7 +1140,7 @@ static int tsi721_rio_map_inb_mem(struct rio_mport *mport, dma_addr_t lstart,
 
 	} else {
 		tsi_debug(IBW, &priv->pdev->dev,
-			"Translated (RIO_0x%llx -> PCIe_0x%pad), size=0x%llx",
+			"Translated (RIO_0x%llx -> PCIe_%pad), size=0x%llx",
 			rstart, &lstart, size);
 
 		if (!is_power_of_2(size) || size < 0x1000 ||
@@ -1235,7 +1235,7 @@ static int tsi721_rio_map_inb_mem(struct rio_mport *mport, dma_addr_t lstart,
 	priv->ibwin_cnt--;
 
 	tsi_debug(IBW, &priv->pdev->dev,
-		"Configured IBWIN%d (RIO_0x%llx -> PCIe_0x%pad), size=0x%llx",
+		"Configured IBWIN%d (RIO_0x%llx -> PCIe_%pad), size=0x%llx",
 		i, ibw_start, &loc_start, ibw_size);
 
 	return 0;

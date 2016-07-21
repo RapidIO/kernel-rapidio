@@ -258,7 +258,8 @@ tsi57x_em_handler(struct rio_dev *rdev, u8 portnum)
 			while (checkcount--) {
 				udelay(50);
 				rio_read_config_32(rdev,
-					RIO_DEV_PORT_N_MNT_RSP_CSR(rdev, portnum),
+					RIO_DEV_PORT_N_MNT_RSP_CSR(rdev,
+								   portnum),
 					&regval);
 				if (regval & RIO_PORT_N_MNT_RSP_RVAL)
 					goto exit_es;

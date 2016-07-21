@@ -789,6 +789,7 @@ EXPORT_SYMBOL_GPL(rio_unmap_outb_region);
  * @local: Indicate a local master port or remote device access
  * @destid: Destination ID of the device
  * @hopcount: Number of switch hops to the device
+ * @rmap: pointer to location to store register map type info
  */
 u32
 rio_mport_get_physefb(struct rio_mport *port, int local,
@@ -924,7 +925,8 @@ int rio_enable_rx_tx_port(struct rio_mport *port,
 	pr_debug("rio_enable_rx_tx_port(local = %d, destid = %d, hopcount = "
 		 "%d, port_num = %d)\n", local, destid, hopcount, port_num);
 
-	ext_ftr_ptr = rio_mport_get_physefb(port, local, destid, hopcount, &rmap);
+	ext_ftr_ptr = rio_mport_get_physefb(port, local, destid,
+					    hopcount, &rmap);
 
 	if (local) {
 		rio_local_read_config_32(port,
@@ -932,7 +934,8 @@ int rio_enable_rx_tx_port(struct rio_mport *port,
 				&regval);
 	} else {
 		if (rio_mport_read_config_32(port, destid, hopcount,
-			ext_ftr_ptr + RIO_PORT_N_CTL_CSR(port_num, rmap), &regval) < 0)
+			ext_ftr_ptr + RIO_PORT_N_CTL_CSR(port_num, rmap),
+				&regval) < 0)
 			return -EIO;
 	}
 
@@ -943,7 +946,8 @@ int rio_enable_rx_tx_port(struct rio_mport *port,
 			ext_ftr_ptr + RIO_PORT_N_CTL_CSR(0, rmap), regval);
 	} else {
 		if (rio_mport_write_config_32(port, destid, hopcount,
-			ext_ftr_ptr + RIO_PORT_N_CTL_CSR(port_num, rmap), regval) < 0)
+			ext_ftr_ptr + RIO_PORT_N_CTL_CSR(port_num, rmap),
+				regval) < 0)
 			return -EIO;
 	}
 #endif
@@ -1138,14 +1142,16 @@ static int rio_clr_err_stopped(struct rio_dev *rdev, u32 pnum, u32 err_status)
 			 * near inbound.
 			 */
 			far_ackid++;
-			if (nextdev)
-				rio_write_config_32(nextdev,
-					RIO_DEV_PORT_N_ACK_STS_CSR(nextdev,
-						RIO_GET_PORT_NUM(nextdev->swpinfo)),
-					(far_ackid << 24) |
-					(near_ackid << 8) | near_ackid);
-			else
-				pr_debug("RIO_EM: Invalid nextdev pointer (NULL)\n");
+			if (!nextdev) {
+				pr_debug("RIO_EM: nextdev pointer == NULL\n");
+				goto rd_err;
+			}
+
+			rio_write_config_32(nextdev,
+				RIO_DEV_PORT_N_ACK_STS_CSR(nextdev,
+					RIO_GET_PORT_NUM(nextdev->swpinfo)),
+				(far_ackid << 24) |
+				(near_ackid << 8) | near_ackid);
 		}
 rd_err:
 		rio_read_config_32(rdev, RIO_DEV_PORT_N_ERR_STS_CSR(rdev, pnum),
