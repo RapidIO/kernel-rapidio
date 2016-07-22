@@ -2309,9 +2309,9 @@ static int __init riocm_init(void)
 
 	/* Create device class needed by udev */
 	dev_class = class_create(THIS_MODULE, DRV_NAME);
-	if (!dev_class) {
+	if (IS_ERR(dev_class)) {
 		riocm_error("Cannot create " DRV_NAME " class");
-		return -EINVAL;
+		return PTR_ERR(dev_class);
 	}
 
 	ret = alloc_chrdev_region(&dev_number, 0, 1, DRV_NAME);
