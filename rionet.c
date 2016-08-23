@@ -27,6 +27,7 @@
 #include <linux/crc32.h>
 #include <linux/ethtool.h>
 #include <linux/reboot.h>
+#include <linux/version.h>
 
 #define DRV_NAME        "rionet"
 #define DRV_VERSION     "0.3"
@@ -181,11 +182,15 @@ static int rionet_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	unsigned long flags;
 	int add_num = 1;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4,7,0))
 	local_irq_save(flags);
 	if (!spin_trylock(&rnet->tx_lock)) {
 		local_irq_restore(flags);
 		return NETDEV_TX_LOCKED;
 	}
+#else
+	spin_lock_irqsave(&rnet->tx_lock, flags);
+#endif
 
 	if (is_multicast_ether_addr(eth->h_dest))
 		add_num = nets[rnet->mport->id].nact;
