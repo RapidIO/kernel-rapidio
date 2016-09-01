@@ -1,0 +1,2 @@
+SUBSYSTEM=="rio_mport", GROUP="rapidio" 
+SUBSYSTEM=="rio_cm", GROUP="rapidio" 

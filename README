@@ -1,0 +1,106 @@
+RapidIO Linux Driver Package
+
+================================================================================
+
+January 29, 2016 v0.9
+
+================================================================================
+
+
+Package Revision History
+------------------------
+
+v0.9 - Preliminary release (2016.01.29). Precedes patches submission to the
+       upstream mainline code tree.
+
+
+I. Overview
+-----------
+
+This Linux RapidIO driver package is "out-of-tree" variant of existing mainline
+Linux kernel RapidIO subsystem including the most recent updates that may be not
+available in stable kernel releases.
+
+Primary purpose of this driver package is to bring up-to-date RapidIO solutions
+to users of popular Linux OS distributions without forcing them to backport
+RapidIO updates available in the most recent versions of mainline kernel.
+
+See 'Documentation/rapidio' directory for detailed description of Linux RapidIO
+subsystem.
+
+This package should be used with Linux kernel versions 3.10 or newer.
+It was tested on following Linux distributions:
+- CentOS 7.2.1511 (kernel v3.10)
+- Fedora 20 (kernel v3.16.7)
+- Fedora 23 (kernel v4.3 and mainline v4.4)
+
+II. Building and Installation
+-----------------------------
+
+1: Install a Linux OS distribution with kernel version 3.10 or newer.
+
+1a: Check for (and install if missing) packages for "out-of-tree" modules
+   development as required for your Linux distribution: usually 'gcc'
+   and 'kernel-devel'. 
+
+2: Unpack this RapidIO Driver Package into your working directory
+
+3: Enter the package base directory and issue the following commands:
+   - make clean
+   - make all
+   - make install (requires root privileges)
+      NOTE: The install script does not overwrite existing configuration files
+	  named as ones in the 'config' directory to preserve user settings.
+	  If fresh installation of any of these files is required, the previous
+	  version must be deleted manually.
+
+4: On *enumerating* node, edit /etc/modprobe.d/rapidio.conf file uncomment
+   options line for rapidio module and assign RIO host destination ID
+   (parameter hdid=). See Section 4 in Documentation/rapidio/rapidio.txt
+   for more information about setting this parameter.
+   
+5: (OPTIONAL) The UDEV configuration file '70-rapidio-access.rules' assumes that
+   char device drivers from this package will be accessed by users who are
+   members of 'rapidio' user group (without asking for root privileges).
+   To enable this option, on all nodes where this driver package is installed
+   create 'rapidio' user group by using command "groupadd rapidio" or GUI
+   utility provided with your Linux distribution.
+
+6: (OPTIONAL) Add node users to group 'rapidio' as required.
+
+7: Power cycle the entire cluster
+
+8: As described in 'Documentation/rapidio/rapidio.txt' there are several methods
+   to initialize RapidIO network numeration/discovery process. When configuring
+   RapidIO initialization adjust module loading sequence controlled
+   by /etc/modeprobe.d/rapidio.conf as required.
+   Starting with the enumerating node, initiate enumeration/discovery process on
+   each node (see command examples in comments for specific module loading
+   options in rapidio.conf).
+
+9: Confirm that RapidIO nodes have been enumerated (or discovered) by listing
+   known devices in following path on each node:
+
+   ls /sys/bus/rapidio/devices
+
+
+III. Include Files
+------------------
+
+Include files that define user-space interface of RIO_CM (rio_cm_cdev.h)
+and RIO_MPORT (rio_mport_cdev.h) device drivers are copied by the installation
+script into two predefined locations common for all users:
+- /lib/modules/`uname -r`/build/include/linux
+- /usr/src/rapidio/linux
+
+Include files will be updated every time when RapidIO drivers are installed.
+
+IV. Synchronization with Upstream Mainline Linux Kernel Code Tree
+-----------------------------------------------------------------
+
+This package contains features and updates that are not committed to
+the mainline repository but are planned for submission or have been submitted
+but not accepted yet.
+
+As the new code passes submission stages this package will be updated
+accordingly to follow mainline as close as possible.
