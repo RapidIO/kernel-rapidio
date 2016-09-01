@@ -2229,7 +2229,7 @@ static void mport_mm_open(struct vm_area_struct *vma)
 {
 	struct rio_mport_mapping *map = vma->vm_private_data;
 
-rmcd_debug(MMAP, "0x%llx", map->phys_addr);
+rmcd_debug(MMAP, "0x%pad", &map->phys_addr);
 	kref_get(&map->ref);
 }
 
@@ -2237,7 +2237,7 @@ static void mport_mm_close(struct vm_area_struct *vma)
 {
 	struct rio_mport_mapping *map = vma->vm_private_data;
 
-rmcd_debug(MMAP, "0x%llx", map->phys_addr);
+rmcd_debug(MMAP, "0x%pad", &map->phys_addr);
 	mutex_lock(&map->md->buf_mutex);
 	kref_put(&map->ref, mport_release_mapping);
 	mutex_unlock(&map->md->buf_mutex);
