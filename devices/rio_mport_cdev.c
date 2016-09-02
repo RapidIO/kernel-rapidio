@@ -102,6 +102,14 @@ module_param(dbg_level, uint, S_IWUSR | S_IWGRP | S_IRUGO);
 MODULE_PARM_DESC(dbg_level, "Debugging output level (default 0 = none)");
 #endif
 
+static unsigned long rio_res_mem;
+module_param(rio_res_mem, ulong, S_IRUGO);
+MODULE_PARM_DESC(rio_res_mem, "Base address of reserved memory space");
+
+static unsigned long rio_res_size;
+module_param(rio_res_size, ulong, S_IRUGO);
+MODULE_PARM_DESC(rio_res_size, "Size of reserved memory space");
+
 /*
  * An internal DMA coherent buffer
  */
@@ -130,6 +138,7 @@ struct rio_mport_mapping {
 	u16 rioid;
 	u64 rio_addr;
 	dma_addr_t phys_addr; /* for mmap */
+	dma_addr_t dma_addr;
 	void *virt_addr; /* kernel address, for dma_free_coherent */
 	u64 size;
 	struct kref ref; /* refcount of vmas sharing the mapping */
@@ -858,6 +867,7 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 	struct dma_chan *chan;
 	int i, ret;
 	int nents;
+	struct rio_mport_mapping *map = NULL;
 
 	if (xfer->length == 0)
 		return -EINVAL;
@@ -927,14 +937,13 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 		req->nr_pages = nr_pages;
 	} else {
 		dma_addr_t baddr;
-		struct rio_mport_mapping *map;
 
 		baddr = (dma_addr_t)xfer->handle;
 
 		mutex_lock(&md->buf_mutex);
 		list_for_each_entry(map, &md->mappings, node) {
-			if (baddr >= map->phys_addr &&
-			    baddr < (map->phys_addr + map->size)) {
+			if (baddr >= map->dma_addr &&
+			    baddr < (map->dma_addr + map->size)) {
 				kref_get(&map->ref);
 				req->map = map;
 				break;
@@ -958,9 +967,15 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 			goto err_req;
 		}
 
-		sg_set_buf(req->sgt.sgl,
-			   map->virt_addr + (baddr - map->phys_addr) +
-				xfer->offset, xfer->length);
+		if (map->virt_addr)
+			sg_set_buf(req->sgt.sgl,
+				   map->virt_addr + (baddr - map->dma_addr) +
+				   xfer->offset, xfer->length);
+		else {
+			rmcd_debug(DMA, "set SG entry for reserved memory");
+			req->sgt.sgl->dma_address = baddr + xfer->offset;
+			sg_dma_len(req->sgt.sgl) = xfer->length;
+		}
 	}
 
 	req->dir = dir;
@@ -968,12 +983,15 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 	req->priv = priv;
 	chan = priv->dmach;
 
-	nents = dma_map_sg(chan->device->dev,
-			   req->sgt.sgl, req->sgt.nents, dir);
-	if (nents == -EFAULT) {
-		rmcd_error("Failed to map SG list");
-		return -EFAULT;
-	}
+	if (!(map && !map->virt_addr)) {
+		nents = dma_map_sg(chan->device->dev,
+				   req->sgt.sgl, req->sgt.nents, dir);
+		if (nents == -EFAULT) {
+			rmcd_error("Failed to map SG list");
+			return -EFAULT;
+		}
+	} else
+		nents = req->sgt.nents;
 
 	ret = do_dma_request(req, xfer, sync, nents);
 
@@ -1148,7 +1166,8 @@ err_tmo:
 }
 
 static int rio_mport_create_dma_mapping(struct mport_dev *md, struct file *filp,
-			u64 size, struct rio_mport_mapping **mapping)
+			struct rio_dma_mem *dm,
+			struct rio_mport_mapping **mapping)
 {
 	struct rio_mport_mapping *map;
 
@@ -1156,15 +1175,44 @@ static int rio_mport_create_dma_mapping(struct mport_dev *md, struct file *filp,
 	if (map == NULL)
 		return -ENOMEM;
 
-	map->virt_addr = dma_alloc_coherent(md->mport->dev.parent, size,
-					    &map->phys_addr, GFP_KERNEL);
-	if (map->virt_addr == NULL) {
-		kfree(map);
-		return -ENOMEM;
+	if (dm->address == RIO_MAP_ANY_ADDR) {
+		map->virt_addr = dma_alloc_coherent(md->mport->dev.parent,
+						    dm->length, &map->dma_addr,
+						    GFP_KERNEL);
+		if (!map->virt_addr) {
+			kfree(map);
+			return -ENOMEM;
+		}
+	} else {
+		struct page *page;
+
+		/* Use buffer in reserved memory space */
+		rmcd_debug(MMAP, "Requesting reserved mem: 0x%llx 0x%llx",
+			   dm->address, dm->length);
+
+		if (!rio_res_size || dm->address < rio_res_mem ||
+		    (dm->address + dm->length) > (rio_res_mem + rio_res_size)) {
+			rmcd_debug(MMAP, "Requested memory block is outside of reserved memory");
+			kfree(map);
+			return -EINVAL;
+		}
+
+		map->virt_addr = NULL;
+		map->phys_addr = dm->address;
+
+		page = pfn_to_page(PFN_DOWN(dm->address));
+		map->dma_addr = dma_map_page(md->mport->dev.parent, page,
+				      0, dm->length,
+				      DMA_BIDIRECTIONAL);
+		if (dma_mapping_error(md->mport->dev.parent, map->dma_addr)) {
+			rmcd_warn("failed to map page");
+			kfree(map);
+			return -EIO;
+		}
 	}
 
 	map->dir = MAP_DMA;
-	map->size = size;
+	map->size = dm->length;
 	map->filp = filp;
 	map->md = md;
 	kref_init(&map->ref);
@@ -1174,6 +1222,31 @@ static int rio_mport_create_dma_mapping(struct mport_dev *md, struct file *filp,
 	*mapping = map;
 
 	return 0;
+}
+
+static int
+rio_mport_check_dma_mapping(struct mport_dev *md, struct rio_dma_mem *dm)
+{
+	struct rio_mport_mapping *map;
+	int err = 0;
+	u64 size;
+
+	size = dm->length;
+
+	mutex_lock(&md->buf_mutex);
+	list_for_each_entry(map, &md->mappings, node) {
+		if (map->dir != MAP_DMA)
+			continue;
+
+		if (dm->address < (map->phys_addr + map->size) &&
+		    (dm->address + dm->length) > map->phys_addr) {
+			err = -EBUSY;
+			break;
+		}
+	}
+	mutex_unlock(&md->buf_mutex);
+
+	return err;
 }
 
 static int rio_mport_alloc_dma(struct file *filp, void __user *arg)
@@ -1187,11 +1260,17 @@ static int rio_mport_alloc_dma(struct file *filp, void __user *arg)
 	if (unlikely(copy_from_user(&map, arg, sizeof(map))))
 		return -EFAULT;
 
-	ret = rio_mport_create_dma_mapping(md, filp, map.length, &mapping);
+	if (map.address != RIO_MAP_ANY_ADDR) {
+		ret = rio_mport_check_dma_mapping(md, &map);
+		if (ret)
+			return ret;
+	}
+
+	ret = rio_mport_create_dma_mapping(md, filp, &map, &mapping);
 	if (ret)
 		return ret;
 
-	map.dma_handle = mapping->phys_addr;
+	map.dma_handle = mapping->dma_addr;
 
 	if (unlikely(copy_to_user(arg, &map, sizeof(map)))) {
 		mutex_lock(&md->buf_mutex);
@@ -1217,7 +1296,7 @@ static int rio_mport_free_dma(struct file *filp, void __user *arg)
 
 	mutex_lock(&md->buf_mutex);
 	list_for_each_entry_safe(map, _map, &md->mappings, node) {
-		if (map->dir == MAP_DMA && map->phys_addr == handle &&
+		if (map->dir == MAP_DMA && map->dma_addr == handle &&
 		    map->filp == filp) {
 			kref_put(&map->ref, mport_release_mapping);
 			ret = 0;
@@ -1261,12 +1340,16 @@ static int rio_mport_free_dma(struct file *filp, void __user *arg)
 
 static int
 rio_mport_create_inbound_mapping(struct mport_dev *md, struct file *filp,
-				u64 raddr, u64 size,
+				struct rio_mmap *ib,
 				struct rio_mport_mapping **mapping)
 {
 	struct rio_mport *mport = md->mport;
 	struct rio_mport_mapping *map;
+	u64 raddr, size;
 	int ret;
+
+	raddr = ib->rio_addr;
+	size = ib->length;
 
 	/* rio_map_inb_region() accepts u32 size */
 	if (size > 0xffffffff)
@@ -1276,16 +1359,44 @@ rio_mport_create_inbound_mapping(struct mport_dev *md, struct file *filp,
 	if (map == NULL)
 		return -ENOMEM;
 
-	map->virt_addr = dma_alloc_coherent(mport->dev.parent, size,
-					    &map->phys_addr, GFP_KERNEL);
-	if (map->virt_addr == NULL) {
-		ret = -ENOMEM;
-		goto err_dma_alloc;
+	if (ib->address == RIO_MAP_ANY_ADDR) {
+		/* Allocate DMA coherent buffer */
+		map->virt_addr = dma_alloc_coherent(mport->dev.parent, size,
+						&map->dma_addr, GFP_KERNEL);
+		if (map->virt_addr == NULL) {
+			ret = -ENOMEM;
+			goto err_dma_alloc;
+		}
+	} else {
+		struct page *page;
+
+		/* Use buffer in reserved memory space */
+		rmcd_debug(IBW, "Rsvd mem: 0x%llx 0x%llx", ib->address, size);
+
+		if (!rio_res_size || ib->address < rio_res_mem ||
+		    (rio_res_mem + rio_res_size) < (ib->address + size)) {
+			ret = -EINVAL;
+			goto err_dma_alloc;
+		}
+
+		map->virt_addr = NULL;
+		map->phys_addr = ib->address;
+
+		page = pfn_to_page(PFN_DOWN(ib->address));
+		map->dma_addr = dma_map_page(mport->dev.parent, page,
+				      0, size,
+				      DMA_BIDIRECTIONAL);
+		if (dma_mapping_error(mport->dev.parent, map->dma_addr)) {
+			rmcd_warn("failed to map page");
+			ret = -EIO;
+			goto err_dma_alloc;
+		}
 	}
 
 	if (raddr == RIO_MAP_ANY_ADDR)
-		raddr = map->phys_addr;
-	ret = rio_map_inb_region(mport, map->phys_addr, raddr, (u32)size, 0);
+		raddr = map->dma_addr;
+
+	ret = rio_map_inb_region(mport, map->dma_addr, raddr, (u32)size, 0);
 	if (ret < 0)
 		goto err_map_inb;
 
@@ -1302,8 +1413,13 @@ rio_mport_create_inbound_mapping(struct mport_dev *md, struct file *filp,
 	return 0;
 
 err_map_inb:
-	dma_free_coherent(mport->dev.parent, size,
-			  map->virt_addr, map->phys_addr);
+	if (map->virt_addr)
+		dma_free_coherent(mport->dev.parent, size,
+				  map->virt_addr, map->dma_addr);
+	else
+		dma_unmap_page(mport->dev.parent, map->dma_addr,
+			       size, DMA_BIDIRECTIONAL);
+
 err_dma_alloc:
 	kfree(map);
 	return ret;
@@ -1311,11 +1427,15 @@ err_dma_alloc:
 
 static int
 rio_mport_get_inbound_mapping(struct mport_dev *md, struct file *filp,
-			      u64 raddr, u64 size,
+			      struct rio_mmap *ib,
 			      struct rio_mport_mapping **mapping)
 {
 	struct rio_mport_mapping *map;
 	int err = -ENOMEM;
+	u64 raddr, size;
+
+	raddr = ib->rio_addr;
+	size = ib->length;
 
 	if (raddr == RIO_MAP_ANY_ADDR)
 		goto get_new;
@@ -1326,8 +1446,12 @@ rio_mport_get_inbound_mapping(struct mport_dev *md, struct file *filp,
 			continue;
 		if (raddr == map->rio_addr && size == map->size) {
 			/* allow exact match only */
-			*mapping = map;
-			err = 0;
+			if (ib->address == RIO_MAP_ANY_ADDR ||
+			    ib->address == map->phys_addr) {
+				*mapping = map;
+				err = 0;
+			} else
+				err = -EBUSY;
 			break;
 		} else if (raddr < (map->rio_addr + map->size - 1) &&
 			   (raddr + size) > map->rio_addr) {
@@ -1341,7 +1465,7 @@ rio_mport_get_inbound_mapping(struct mport_dev *md, struct file *filp,
 		return err;
 get_new:
 	/* not found, create new */
-	return rio_mport_create_inbound_mapping(md, filp, raddr, size, mapping);
+	return rio_mport_create_inbound_mapping(md, filp, ib, mapping);
 }
 
 static int rio_mport_map_inbound(struct file *filp, void __user *arg)
@@ -1359,12 +1483,11 @@ static int rio_mport_map_inbound(struct file *filp, void __user *arg)
 
 	rmcd_debug(IBW, "%s filp=%p", dev_name(&priv->md->dev), filp);
 
-	ret = rio_mport_get_inbound_mapping(md, filp, map.rio_addr,
-					    map.length, &mapping);
+	ret = rio_mport_get_inbound_mapping(md, filp, &map, &mapping);
 	if (ret)
 		return ret;
 
-	map.handle = mapping->phys_addr;
+	map.handle = mapping->dma_addr;
 	map.rio_addr = mapping->rio_addr;
 
 	if (unlikely(copy_to_user(arg, &map, sizeof(map)))) {
@@ -1403,7 +1526,7 @@ static int rio_mport_inbound_free(struct file *filp, void __user *arg)
 
 	mutex_lock(&md->buf_mutex);
 	list_for_each_entry_safe(map, _map, &md->mappings, node) {
-		if (map->dir == MAP_INBOUND && map->phys_addr == handle) {
+		if (map->dir == MAP_INBOUND && map->dma_addr == handle) {
 			if (map->filp == filp) {
 				map->filp = NULL;
 				kref_put(&map->ref, mport_release_mapping);
@@ -2231,18 +2354,22 @@ static void mport_release_mapping(struct kref *ref)
 			container_of(ref, struct rio_mport_mapping, ref);
 	struct rio_mport *mport = map->md->mport;
 
-	rmcd_debug(MMAP, "type %d mapping @ %p (phys = %pad) for %s",
+	rmcd_debug(MMAP, "type %d mapping @ %p (handle = %pad) for %s",
 		   map->dir, map->virt_addr,
-		   &map->phys_addr, mport->name);
+		   &map->dma_addr, mport->name);
 
 	list_del(&map->node);
 
 	switch (map->dir) {
 	case MAP_INBOUND:
-		rio_unmap_inb_region(mport, map->phys_addr);
+		rio_unmap_inb_region(mport, map->dma_addr);
 	case MAP_DMA:
-		dma_free_coherent(mport->dev.parent, map->size,
-				  map->virt_addr, map->phys_addr);
+		if (map->virt_addr)
+			dma_free_coherent(mport->dev.parent, map->size,
+					  map->virt_addr, map->dma_addr);
+		else
+			dma_unmap_page(mport->dev.parent, map->dma_addr,
+				       map->size, DMA_BIDIRECTIONAL);
 		break;
 	case MAP_OUTBOUND:
 		rio_unmap_outb_region(mport, map->rioid, map->rio_addr);
@@ -2255,7 +2382,7 @@ static void mport_mm_open(struct vm_area_struct *vma)
 {
 	struct rio_mport_mapping *map = vma->vm_private_data;
 
-	rmcd_debug(MMAP, "%pad", &map->phys_addr);
+	rmcd_debug(MMAP, "%pad", &map->dma_addr);
 	kref_get(&map->ref);
 }
 
@@ -2263,7 +2390,7 @@ static void mport_mm_close(struct vm_area_struct *vma)
 {
 	struct rio_mport_mapping *map = vma->vm_private_data;
 
-	rmcd_debug(MMAP, "%pad", &map->phys_addr);
+	rmcd_debug(MMAP, "%pad", &map->dma_addr);
 	mutex_lock(&map->md->buf_mutex);
 	kref_put(&map->ref, mport_release_mapping);
 	mutex_unlock(&map->md->buf_mutex);
@@ -2292,8 +2419,8 @@ static int mport_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
 
 	mutex_lock(&md->buf_mutex);
 	list_for_each_entry(map, &md->mappings, node) {
-		if (baddr >= map->phys_addr &&
-		    baddr < (map->phys_addr + map->size)) {
+		if (baddr >= map->dma_addr &&
+		    baddr < (map->dma_addr + map->size)) {
 			found = 1;
 			break;
 		}
@@ -2303,7 +2430,7 @@ static int mport_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
 	if (!found)
 		return -ENOMEM;
 
-	offset = baddr - map->phys_addr;
+	offset = baddr - map->dma_addr;
 
 	if (size + offset > map->size)
 		return -EINVAL;
@@ -2311,10 +2438,16 @@ static int mport_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
 	vma->vm_pgoff = offset >> PAGE_SHIFT;
 	rmcd_debug(MMAP, "MMAP adjusted offset = 0x%lx", vma->vm_pgoff);
 
-	if (map->dir == MAP_INBOUND || map->dir == MAP_DMA)
-		ret = dma_mmap_coherent(md->mport->dev.parent, vma,
-				map->virt_addr, map->phys_addr, map->size);
-	else if (map->dir == MAP_OUTBOUND) {
+	if (map->dir == MAP_INBOUND || map->dir == MAP_DMA) {
+		if (map->virt_addr)
+			ret = dma_mmap_coherent(md->mport->dev.parent, vma,
+				map->virt_addr, map->dma_addr, map->size);
+		else {
+			ret = remap_pfn_range(vma, vma->vm_start,
+					      PFN_DOWN(map->phys_addr + offset),
+					      size, vma->vm_page_prot);
+		}
+	} else if (map->dir == MAP_OUTBOUND) {
 		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 		ret = vm_iomap_memory(vma, map->phys_addr, map->size);
 	} else {

@@ -91,6 +91,16 @@ III. Module parameters
         This parameter can be changed dynamically.
         Use CONFIG_RAPIDIO_DEBUG=y to enable debug output at the top level.
 
+- 'rio_res_mem' - This parameter specifies start of reserved memory block that
+        is assigned for large memory buffers used for DMA data transfers and
+        inbound RapidIO windows mapping. Reserved region of memory should be
+        specified using "memmap=nn[KMG]$ss[KMG]" or "mem=nn[KMG]" kernel boot
+        command line parameter. See "Documentation/kernel-parameters.txt" for
+        more details.
+
+- 'rio_res_size' - Size of reserved memory block. If 0, reserved memory block
+        is not available.
+
 IV. Known problems
 
   None.
