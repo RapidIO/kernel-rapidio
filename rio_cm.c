@@ -2,6 +2,8 @@
  * rio_cm - RapidIO Channelized Messaging Driver
  *
  * Copyright 2013-2016 Integrated Device Technology, Inc.
+ * Copyright (c) 2015, Prodrive Technologies
+ * Copyright (c) 2015, RapidIO Trade Association
  *
  * This program is free software; you can redistribute  it and/or modify it
  * under  the terms of  the GNU General  Public License as published by the
@@ -165,7 +167,7 @@ struct cm_dev {
 	spinlock_t		tx_lock;
 
 	struct list_head	peers;
-	int			npeers;
+	u32			npeers;
 	struct workqueue_struct *rx_wq;
 	struct work_struct	rx_work;
 };
@@ -488,6 +490,8 @@ static int riocm_close_handler(void *data)
 
 /*
  * rio_cm_handler - function that services request (non-data) packets
+ * @cm: cm_dev object
+ * @data: pointer to the packet
  */
 static void rio_cm_handler(struct cm_dev *cm, void *data)
 {
@@ -739,7 +743,6 @@ static int riocm_queue_req(struct cm_dev *cm, struct rio_dev *rdev,
 static int riocm_post_send(struct cm_dev *cm, struct rio_dev *rdev,
 			   void *buffer, size_t len)
 {
-#if (1)
 	int rc;
 	unsigned long flags;
 
@@ -769,50 +772,6 @@ static int riocm_post_send(struct cm_dev *cm, struct rio_dev *rdev,
 err_out:
 	spin_unlock_irqrestore(&cm->tx_lock, flags);
 	return rc;
-#else
-	int rc;
-	unsigned long flags;
-
-	spin_lock_irqsave(&cm->tx_lock, flags);
-
-	if (cm->mport == NULL) {
-		rc = -ENODEV;
-		goto err_out;
-	}
-
-	if (cm->tx_cnt == RIOCM_TX_RING_SIZE) {
-		if (req) {
-			struct tx_req *treq;
-
-			treq = kzalloc(sizeof(*treq), GFP_ATOMIC);
-			if (treq == NULL) {
-				rc = -ENOMEM;
-				goto err_out;
-			}
-			treq->rdev = rdev;
-			treq->buffer = buffer;
-			treq->len = len;
-			list_add_tail(&treq->node, &cm->tx_reqs);
-		}
-		riocm_debug(TX, "Tx Queue is full");
-		rc = -EBUSY;
-		goto err_out;
-	}
-
-	cm->tx_buf[cm->tx_slot] = buffer;
-	rc = rio_add_outb_message(cm->mport, rdev, cmbox, buffer, len);
-
-	riocm_debug(TX, "Add buf@%p destid=%x tx_slot=%d tx_cnt=%d",
-		 buffer, rdev->destid, cm->tx_slot, cm->tx_cnt);
-
-	++cm->tx_cnt;
-	++cm->tx_slot;
-	cm->tx_slot &= (RIOCM_TX_RING_SIZE - 1);
-
-err_out:
-	spin_unlock_irqrestore(&cm->tx_lock, flags);
-	return rc;
-#endif
 }
 
 /*
@@ -904,11 +863,9 @@ static int riocm_ch_free_rxbuf(struct rio_channel *ch, void *buf)
 
 /*
  * riocm_ch_receive - fetch a data packet received for the specified channel
- * @ch_id: local channel ID
- * @buf: pointer to a data buffer to send (including CM header)
+ * @ch: local channel ID
+ * @buf: pointer to a packet buffer
  * @timeout: timeout to wait for incoming packet (in jiffies)
- *
- * ATTN: ASSUMES THAT THE HEADER SPACE IS RESERVED PART OF THE DATA PACKET
  *
  * Returns: 0 and valid buffer pointer if success, or NULL pointer and one of:
  *          -EAGAIN if a channel is not in CONNECTED state,
@@ -992,7 +949,8 @@ out:
  *          -ETIME if ACK response timeout expired,
  *          -EINTR if wait for response was interrupted.
  */
-static int riocm_ch_connect(u16 loc_ch, struct cm_dev *cm, struct cm_peer *peer, u16 rem_ch)
+static int riocm_ch_connect(u16 loc_ch, struct cm_dev *cm,
+			    struct cm_peer *peer, u16 rem_ch)
 {
 	struct rio_channel *ch = NULL;
 	struct rio_ch_chan_hdr *hdr;
@@ -1094,9 +1052,9 @@ static int riocm_send_ack(struct rio_channel *ch)
 	 */
 	ret = riocm_post_send(ch->cmdev, ch->rdev, hdr, sizeof(*hdr));
 
-	if (ret == -EBUSY &&
-	    !riocm_queue_req(ch->cmdev, ch->rdev, hdr, sizeof(*hdr)))
-			return 0;
+	if (ret == -EBUSY && !riocm_queue_req(ch->cmdev,
+					      ch->rdev, hdr, sizeof(*hdr)))
+		return 0;
 	kfree(hdr);
 
 	if (ret)
@@ -1106,7 +1064,7 @@ static int riocm_send_ack(struct rio_channel *ch)
 }
 
 /*
- * riocm_ch_accept - associate a channel object and an mport device
+ * riocm_ch_accept - accept incoming connection request
  * @ch_id: channel ID
  * @new_ch_id: local mport device
  * @timeout: wait timeout (if 0 non-blocking call, do not wait if connection
@@ -1464,9 +1422,9 @@ static int riocm_send_close(struct rio_channel *ch)
 	 */
 	ret = riocm_post_send(ch->cmdev, ch->rdev, hdr, sizeof(*hdr));
 
-	if (ret == -EBUSY &&
-	    !riocm_queue_req(ch->cmdev, ch->rdev, hdr, sizeof(*hdr)))
-			return 0;
+	if (ret == -EBUSY && !riocm_queue_req(ch->cmdev, ch->rdev,
+					      hdr, sizeof(*hdr)))
+		return 0;
 	kfree(hdr);
 
 	if (ret)
@@ -1632,7 +1590,7 @@ static int cm_ep_get_list(void __user *arg)
 	return -ENODEV;
 
 found:
-	nent = min(info[0], (u32)cm->npeers);
+	nent = min(info[0], cm->npeers);
 	buf = kcalloc(nent + 2, sizeof(u32), GFP_KERNEL);
 	if (!buf) {
 		up_read(&rdev_sem);
@@ -1659,7 +1617,7 @@ found:
 }
 
 /*
- * cm_mport_get_list() - Returns list of attached endpoints
+ * cm_mport_get_list() - Returns list of available local mport devices
  */
 static int cm_mport_get_list(void __user *arg)
 {
@@ -1804,7 +1762,7 @@ static int cm_chan_accept(struct file *filp, void __user *arg)
 		    param.ch_num, current->comm, task_pid_nr(current));
 
 	accept_to = param.wait_to ?
-			msecs_to_jiffies(param.wait_to):MAX_SCHEDULE_TIMEOUT;
+			msecs_to_jiffies(param.wait_to) : 0;
 
 	ch = riocm_ch_accept(param.ch_num, &param.ch_num, accept_to);
 	if (IS_ERR(ch))
@@ -1944,7 +1902,7 @@ out:
 }
 
 /*
- * riocm_cdev_ioctl() - IOCTLs for character device
+ * riocm_cdev_ioctl() - IOCTL requests handler
  */
 static long
 riocm_cdev_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
