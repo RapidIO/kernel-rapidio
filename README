@@ -1,20 +1,24 @@
-RapidIO Linux Driver Package
+####################################
+#                                  #
+#   RapidIO Linux Driver Package   #
+#                                  #
+####################################
 
 ================================================================================
 
-March 24, 2016 v0.91
+September 2, 2016 v1.0.0
 
 ================================================================================
-
 
 Package Revision History
 ------------------------
+v1.0.0 - Aligned with RapidIO subsystem code in mainline Linux kernel v4.8.
+         New functionality: support for data buffers in reserved memory space.
 
 v0.91 - Added automatic installation of RIONET driver into "make install".
 
 v0.9 - Preliminary release (2016.01.29). Precedes patches submission to the
        upstream mainline code tree.
-
 
 I. Overview
 -----------
@@ -32,12 +36,18 @@ subsystem.
 
 This package should be used with Linux kernel versions 3.10 or newer.
 It was tested on following Linux distributions:
-- CentOS 7.2.1511 (kernel v3.10)
+- CentOS 7.2.1511 (kernel v3.10) (x86_64 and PowerPC POWER8)
 - Fedora 20 (kernel v3.16.7)
 - Fedora 23 (kernel v4.3 and mainline v4.4)
 
 II. Building and Installation
 -----------------------------
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ATTN: Remove configuration file /etc/modprobe.d/rapidio.conf if upgrading
+drivers from any preliminary version (< 1.0.0). Edit new configuration files
+as required after driver package is installed.
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 1: Install a Linux OS distribution with kernel version 3.10 or newer.
 
@@ -52,9 +62,9 @@ II. Building and Installation
    - make all
    - make install (requires root privileges)
       NOTE: The install script does not overwrite existing configuration files
-	  named as ones in the 'config' directory to preserve user settings.
-	  If fresh installation of any of these files is required, the previous
-	  version must be deleted manually.
+      named as ones in the 'config' directory to preserve user settings.
+      If fresh installation of any of these files is required, the previous
+      version must be deleted manually.
 
 4: On *enumerating* node, edit /etc/modprobe.d/rapidio.conf file uncomment
    options line for rapidio module and assign RIO host destination ID
@@ -70,9 +80,15 @@ II. Building and Installation
 
 6: (OPTIONAL) Add node users to group 'rapidio' as required.
 
-7: Power cycle the entire cluster
+7: (OPTIONAL) If reserved memory region will be used to allocate large DMA and
+   inbound memory buffers, edit kernel boot command line to add parameter
+   "memmap=" or "mem=" as required. Edit options line for rio_mport_cdev device
+    driver according to your memory reservations. See example options setting
+    in /etc/modprobe.d/rapidio.conf file.
 
-8: As described in 'Documentation/rapidio/rapidio.txt' there are several methods
+8: Power cycle the entire cluster
+
+9: As described in 'Documentation/rapidio/rapidio.txt' there are several methods
    to initialize RapidIO network numeration/discovery process. When configuring
    RapidIO initialization adjust module loading sequence controlled
    by /etc/modeprobe.d/rapidio.conf as required.
@@ -80,7 +96,7 @@ II. Building and Installation
    each node (see command examples in comments for specific module loading
    options in rapidio.conf).
 
-9: Confirm that RapidIO nodes have been enumerated (or discovered) by listing
+10: Confirm that RapidIO nodes have been enumerated (or discovered) by listing
    known devices in following path on each node:
 
    ls /sys/bus/rapidio/devices
