@@ -353,7 +353,7 @@ tsi721_desc_fill_init(struct tsi721_tx_desc *desc,
 		return -EINVAL;
 
 	/* Initialize DMA descriptor */
-	bd_ptr->type_id = cpu_to_le32((DTYPE1 << 29) |
+	bd_ptr->type_id = cpu_to_le32((DTYPE1 << 29) | (desc->prio_lvl << 16) |
 				      (desc->rtype << 19) | desc->destid);
 	bd_ptr->bcount = cpu_to_le32(((desc->rio_addr & 0x3) << 30) |
 				     (sys_size << 26));
@@ -897,6 +897,7 @@ struct dma_async_tx_descriptor *tsi721_prep_rio_sg(struct dma_chan *dchan,
 		desc->rio_addr = rext->rio_addr;
 		desc->rio_addr_u = 0;
 		desc->rtype = rtype;
+		desc->prio_lvl	= rext->prio_lvl;
 		desc->sg_len	= sg_len;
 		desc->sg	= sgl;
 		txd		= &desc->txd;

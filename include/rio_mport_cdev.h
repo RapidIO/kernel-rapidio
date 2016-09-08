@@ -196,6 +196,8 @@ struct rio_transfer_io {
 	__u16 rioid;	/* Target destID */
 	__u16 method;	/* Data exchange method, one of rio_exchange enum */
 	__u32 completion_code;	/* Completion code for this transfer */
+	__u8  prio_lvl;	/* RapidIO packet priority level 0 - 7 */
+	__u8  pad0[7];
 };
 
 struct rio_transaction {

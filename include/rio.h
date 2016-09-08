@@ -33,6 +33,8 @@
 #define RIO_MAX_DEV_RESOURCES	16
 #define RIO_MAX_MPORT_NAME	40
 
+#define RIO_MAX_PRIO_LVL 7
+
 #define RIO_GLOBAL_TABLE	0xff	/* Indicates access of a switch's
 					   global routing table if it
 					   has multiple (or per port)
@@ -505,6 +507,7 @@ struct rio_dma_ext {
 	u64 rio_addr;	/* low 64-bits of 66-bit RapidIO address */
 	u8  rio_addr_u;  /* upper 2-bits of 66-bit RapidIO address */
 	enum rio_write_type wr_type; /* preferred RIO write operation type */
+	u8  prio_lvl;	/* priority level 0 - 7 */
 };
 
 struct rio_dma_data {
@@ -514,6 +517,7 @@ struct rio_dma_data {
 	/* Remote device address (flat buffer) */
 	u64 rio_addr;	/* low 64-bits of 66-bit RapidIO address */
 	u8  rio_addr_u;  /* upper 2-bits of 66-bit RapidIO address */
+	u8  prio_lvl;	 /* priority level 0 - 7 */
 	enum rio_write_type wr_type; /* preferred RIO write operation type */
 };
 

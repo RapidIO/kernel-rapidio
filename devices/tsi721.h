@@ -691,6 +691,8 @@ struct tsi721_tx_desc {
 	u64				rio_addr;
 	/* upper 2-bits of 66-bit RIO address */
 	u8				rio_addr_u;
+	/* RIO priority level 0 - 7. Will be converted to PRIO/CRF */
+	u8				prio_lvl;
 	enum dma_rtype			rtype;
 	struct list_head		desc_node;
 	struct scatterlist		*sg;

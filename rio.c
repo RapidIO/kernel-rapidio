@@ -1900,10 +1900,24 @@ struct dma_async_tx_descriptor *rio_dma_prep_xfer(struct dma_chan *dchan,
 		return NULL;
 	}
 
+	/*
+	 * Check for safe RapidIO request priority level:
+	 * Priority level value is formed from values for RapidIO packet "prio"
+	 * and "CRF" fields (with CRF used as least significant bit).
+	 * Highest priority levels 6 and 7 (0b110 + CRF{0|1}) are reserved for
+	 * responses, but can be used for NWRITE packets that do not generate
+	 * response.
+	 */
+	if (data->prio_lvl > RIO_MAX_PRIO_LVL ||
+	    (direction == DMA_MEM_TO_DEV && data->prio_lvl >= 6 &&
+					data->wr_type != RDW_ALL_NWRITE))
+		return ERR_PTR(-EINVAL);
+
 	rio_ext.destid = destid;
 	rio_ext.rio_addr_u = data->rio_addr_u;
 	rio_ext.rio_addr = data->rio_addr;
 	rio_ext.wr_type = data->wr_type;
+	rio_ext.prio_lvl = data->prio_lvl;
 
 	return dmaengine_prep_rio_sg(dchan, data->sg, data->sg_len,
 				     direction, flags, &rio_ext);

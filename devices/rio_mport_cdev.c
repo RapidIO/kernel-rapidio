@@ -665,6 +665,7 @@ static struct dma_async_tx_descriptor
 	tx_data.sg_len = nents;
 	tx_data.rio_addr_u = 0;
 	tx_data.rio_addr = transfer->rio_addr;
+	tx_data.prio_lvl = transfer->prio_lvl;
 	if (dir == DMA_MEM_TO_DEV) {
 		switch (transfer->method) {
 		case RIO_EXCHANGE_NWRITE:
