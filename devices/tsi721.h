@@ -113,6 +113,13 @@ extern u32 dbg_level;
 #define TSI721_PCIECFG_EPCTL	0x400
 
 /*
+ * PLM Control Registers
+ */
+
+#define TSI721_RIO_PLM_IMP_SPEC_CTL	0x10080
+#define TSI721_RIO_PLM_IMP_SPEC_CTL_FREINIT	0x04000000
+
+/*
  * Event Management Registers
  */
 

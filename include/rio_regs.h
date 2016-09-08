@@ -239,6 +239,14 @@
 #define  RIO_PORT_N_ACK_OUTBOUND	0x0000003f
 #define RIO_PORT_N_CTL2_CSR(n, m)	(0x54 + (n) * (0x20 * (m)))
 #define  RIO_PORT_N_CTL2_SEL_BAUD	0xf0000000
+#define   RIO_LINK_SPEED_NO_SEL		0 /* no rate selected */
+#define   RIO_LINK_SPEED_125		1 /* 1.25 Gbaud */
+#define   RIO_LINK_SPEED_25		2 /* 2.5 Gbaud */
+#define   RIO_LINK_SPEED_312		3 /* 3.125 Gbaud */
+#define   RIO_LINK_SPEED_50		4 /* 5.0 Gbaud */
+#define   RIO_LINK_SPEED_625		5 /* 6.25 Gbaud */
+#define   RIO_LINK_SPEED_1031		6 /* 10.3125 Gbaud */
+
 #define RIO_PORT_N_ERR_STS_CSR(n, m)	(0x58 + (n) * (0x20 * (m)))
 #define  RIO_PORT_N_ERR_STS_OUT_ES	0x00010000 /* Output Error-stopped */
 #define  RIO_PORT_N_ERR_STS_INP_ES	0x00000100 /* Input Error-stopped */

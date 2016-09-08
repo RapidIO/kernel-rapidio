@@ -2749,6 +2749,7 @@ static int tsi721_probe(struct pci_dev *pdev,
 {
 	struct tsi721_device *priv;
 	int err;
+	u32 rval;
 
 	priv = kzalloc(sizeof(struct tsi721_device), GFP_KERNEL);
 	if (!priv) {
@@ -2892,6 +2893,62 @@ static int tsi721_probe(struct pci_dev *pdev,
 	pci_write_config_dword(pdev, TSI721_PCIECFG_MSIXPBA,
 						TSI721_MSIXPBA_OFFSET);
 	pci_write_config_dword(pdev, TSI721_PCIECFG_EPCTL, 0);
+	/* End of FIXUP */
+
+	/*
+	 * FIXUP:
+	 * Implement workaround for Errata "RapidIO 5Gb Initialization Failure".
+	 * This workaround is needed for all Tsi721 revisions (unless it is
+	 * applied using register updates from I2C).
+	 */
+	rval = ioread32(priv->regs + 0x100 + RIO_PORT_N_CTL2_CSR(0, 0));
+	rval = (rval & RIO_PORT_N_CTL2_SEL_BAUD) >> 28;
+
+	if (!rval && rval > RIO_LINK_SPEED_625) {
+		tsi_info(&pdev->dev, "SRIO Link Speed UNDEFINED (%d)", rval);
+		rval = 0;
+	} else {
+		static char *speed[] = {"0", "1.25", "2.5",
+					 "3.125", "5.0", "6.25"};
+		tsi_info(&pdev->dev, "SRIO Link Speed %s Gbaud", speed[rval]);
+	}
+
+	if (rval >= RIO_LINK_SPEED_50) {
+		/* Check if 5Gb workaround was applied using I2C */
+		rval = ioread32(priv->regs + 0x4f054);
+		if ((rval & 0x7f) != 0x6f) {
+			/* Apply errata workaround */
+			tsi_debug(INIT, &pdev->dev,
+				  "Apply 5Gb Errata workaround");
+			iowrite32(0x6f, priv->regs + 0x4f054);
+			iowrite32(0x6f, priv->regs + 0x4f454);
+			iowrite32(0x6f, priv->regs + 0x4f854);
+			iowrite32(0x6f, priv->regs + 0x4fc54);
+
+			iowrite32(0, priv->regs + 0x4f04c);
+			iowrite32(0, priv->regs + 0x4f44c);
+			iowrite32(0, priv->regs + 0x4f84c);
+			iowrite32(0, priv->regs + 0x4fc4c);
+
+			rval = ioread32(priv->regs +
+					TSI721_RIO_PLM_IMP_SPEC_CTL);
+			rval |= TSI721_RIO_PLM_IMP_SPEC_CTL_FREINIT;
+			iowrite32(rval,
+				  priv->regs + TSI721_RIO_PLM_IMP_SPEC_CTL);
+		}
+	} else if (rval) { /* All other speeds below 5Gb */
+		/* Check if 5Gb workaround was applied using I2C */
+		rval = ioread32(priv->regs + 0x4f054);
+		if ((rval & 0x7f) == 0x6f) {
+			/* Remove errata workaround */
+			tsi_debug(INIT, &pdev->dev,
+				  "Remove 5Gb Errata workaround");
+			iowrite32(0x0f, priv->regs + 0x4f054);
+			iowrite32(0x0f, priv->regs + 0x4f454);
+			iowrite32(0x0f, priv->regs + 0x4f854);
+			iowrite32(0x0f, priv->regs + 0x4fc54);
+		}
+	}
 	/* End of FIXUP */
 
 	tsi721_disable_ints(priv);
