@@ -507,7 +507,8 @@ struct rio_dma_ext {
 	u64 rio_addr;	/* low 64-bits of 66-bit RapidIO address */
 	u8  rio_addr_u;  /* upper 2-bits of 66-bit RapidIO address */
 	enum rio_write_type wr_type; /* preferred RIO write operation type */
-	u8  prio_lvl;	/* priority level 0 - 7 */
+	u8  prio_lvl;	/* RIO packet priority level 0 - 7 */
+	u8  queue_prio;	/* queue priority level 0 - 7 */
 };
 
 struct rio_dma_data {
@@ -517,7 +518,8 @@ struct rio_dma_data {
 	/* Remote device address (flat buffer) */
 	u64 rio_addr;	/* low 64-bits of 66-bit RapidIO address */
 	u8  rio_addr_u;  /* upper 2-bits of 66-bit RapidIO address */
-	u8  prio_lvl;	 /* priority level 0 - 7 */
+	u8  prio_lvl;	 /* RIO packet priority level 0 - 7 */
+	u8  queue_prio;	 /* queue priority level 0 - 7 */
 	enum rio_write_type wr_type; /* preferred RIO write operation type */
 };
 

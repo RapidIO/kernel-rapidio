@@ -693,6 +693,8 @@ struct tsi721_tx_desc {
 	u8				rio_addr_u;
 	/* RIO priority level 0 - 7. Will be converted to PRIO/CRF */
 	u8				prio_lvl;
+	/* driver request queue priority level 0 - 7 */
+	u8				queue_prio;
 	enum dma_rtype			rtype;
 	struct list_head		desc_node;
 	struct scatterlist		*sg;
@@ -717,7 +719,7 @@ struct tsi721_bdma_chan {
 	struct tsi721_tx_desc	*tx_desc;
 	spinlock_t		lock;
 	struct tsi721_tx_desc	*active_tx;
-	struct list_head	queue;
+	struct list_head	queue[8];
 	struct list_head	free_list;
 	struct tasklet_struct	tasklet;
 	bool			active;

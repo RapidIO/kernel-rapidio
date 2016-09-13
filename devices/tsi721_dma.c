@@ -548,6 +548,7 @@ static void tsi721_advance_work(struct tsi721_bdma_chan *bdma_chan,
 				struct tsi721_tx_desc *desc)
 {
 	int err;
+	int i;
 
 	tsi_debug(DMA, &bdma_chan->dchan.dev->device, "DMAC%d", bdma_chan->id);
 
@@ -556,15 +557,19 @@ static void tsi721_advance_work(struct tsi721_bdma_chan *bdma_chan,
 
 	/*
 	 * If there is no data transfer in progress, fetch new descriptor from
-	 * the pending queue.
+	 * the pending queue with highest priority.
 	*/
 
-	if (desc == NULL && bdma_chan->active_tx == NULL &&
-					!list_empty(&bdma_chan->queue)) {
-		desc = list_first_entry(&bdma_chan->queue,
+	if (desc == NULL && bdma_chan->active_tx == NULL) {
+		for (i = RIO_MAX_PRIO_LVL; i >= 0; i--) {
+			if (list_empty(&bdma_chan->queue[i]))
+				continue;
+			desc = list_first_entry(&bdma_chan->queue[i],
 					struct tsi721_tx_desc, desc_node);
-		list_del_init((&desc->desc_node));
-		bdma_chan->active_tx = desc;
+			list_del_init((&desc->desc_node));
+			bdma_chan->active_tx = desc;
+			break;
+		}
 	}
 
 	if (desc) {
@@ -732,7 +737,7 @@ static dma_cookie_t tsi721_tx_submit(struct dma_async_tx_descriptor *txd)
 
 	cookie = dma_cookie_assign(txd);
 	desc->status = DMA_IN_PROGRESS;
-	list_add_tail(&desc->desc_node, &bdma_chan->queue);
+	list_add_tail(&desc->desc_node, &bdma_chan->queue[desc->queue_prio]);
 	tsi721_advance_work(bdma_chan, NULL);
 
 	spin_unlock_bh(&bdma_chan->lock);
@@ -898,6 +903,7 @@ struct dma_async_tx_descriptor *tsi721_prep_rio_sg(struct dma_chan *dchan,
 		desc->rio_addr_u = 0;
 		desc->rtype = rtype;
 		desc->prio_lvl	= rext->prio_lvl;
+		desc->queue_prio = rext->queue_prio;
 		desc->sg_len	= sg_len;
 		desc->sg	= sgl;
 		txd		= &desc->txd;
@@ -925,6 +931,7 @@ static int tsi721_device_control(struct dma_chan *dchan, enum dma_ctrl_cmd cmd,
 	struct tsi721_bdma_chan *bdma_chan = to_tsi721_chan(dchan);
 	struct tsi721_tx_desc *desc, *_d;
 	LIST_HEAD(list);
+	int i;
 
 	tsi_debug(DMA, &dchan->dev->device, "DMAC%d", bdma_chan->id);
 
@@ -954,7 +961,8 @@ static int tsi721_device_control(struct dma_chan *dchan, enum dma_ctrl_cmd cmd,
 
 	if (bdma_chan->active_tx)
 		list_add(&bdma_chan->active_tx->desc_node, &list);
-	list_splice_init(&bdma_chan->queue, &list);
+	for (i = 0; i <= RIO_MAX_PRIO_LVL; i++)
+		list_splice_init(&bdma_chan->queue[i], &list);
 
 	list_for_each_entry_safe(desc, _d, &list, desc_node)
 		tsi721_dma_tx_err(bdma_chan, desc);
@@ -1005,6 +1013,7 @@ int tsi721_register_dma(struct tsi721_device *priv)
 
 	for (i = 0; i < TSI721_DMA_MAXCH; i++) {
 		struct tsi721_bdma_chan *bdma_chan = &priv->bdma[i];
+		int k;
 
 		if ((i == TSI721_DMACH_MAINT) || (dma_sel & (1 << i)) == 0)
 			continue;
@@ -1020,7 +1029,8 @@ int tsi721_register_dma(struct tsi721_device *priv)
 		spin_lock_init(&bdma_chan->lock);
 
 		bdma_chan->active_tx = NULL;
-		INIT_LIST_HEAD(&bdma_chan->queue);
+		for (k = 0; k <= RIO_MAX_PRIO_LVL; k++)
+			INIT_LIST_HEAD(&bdma_chan->queue[k]);
 		INIT_LIST_HEAD(&bdma_chan->free_list);
 
 		tasklet_init(&bdma_chan->tasklet, tsi721_dma_tasklet,

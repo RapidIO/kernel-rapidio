@@ -1909,6 +1909,7 @@ struct dma_async_tx_descriptor *rio_dma_prep_xfer(struct dma_chan *dchan,
 	 * response.
 	 */
 	if (data->prio_lvl > RIO_MAX_PRIO_LVL ||
+	    data->queue_prio > RIO_MAX_PRIO_LVL ||
 	    (direction == DMA_MEM_TO_DEV && data->prio_lvl >= 6 &&
 					data->wr_type != RDW_ALL_NWRITE))
 		return ERR_PTR(-EINVAL);
@@ -1918,6 +1919,7 @@ struct dma_async_tx_descriptor *rio_dma_prep_xfer(struct dma_chan *dchan,
 	rio_ext.rio_addr = data->rio_addr;
 	rio_ext.wr_type = data->wr_type;
 	rio_ext.prio_lvl = data->prio_lvl;
+	rio_ext.queue_prio = data->queue_prio;
 
 	return dmaengine_prep_rio_sg(dchan, data->sg, data->sg_len,
 				     direction, flags, &rio_ext);
