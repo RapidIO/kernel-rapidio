@@ -502,8 +502,9 @@ static void rio_cm_handler(struct cm_dev *cm, void *data)
 
 	hdr = data;
 
-	riocm_debug(RX_CMD, "OP=%x for ch=%d from %d",
-		    hdr->ch_op, ntohs(hdr->dst_ch), ntohs(hdr->src_ch));
+	riocm_debug(RX_CMD, "OP=%x for ch=%d from %d(%d)",
+		    hdr->ch_op, ntohs(hdr->dst_ch), ntohl(hdr->bhdr.src_id),
+		    ntohs(hdr->src_ch));
 
 	switch (hdr->ch_op) {
 	case CM_CONN_REQ:
@@ -894,7 +895,7 @@ static int riocm_ch_receive(struct rio_channel *ch, void **buf, long timeout)
 
 	wret = wait_for_completion_interruptible_timeout(&ch->comp, timeout);
 
-	riocm_debug(WAIT, "wait on %d returned %ld", ch->id, wret);
+	riocm_debug(RX_DATA, "wait on %d returned %ld", ch->id, wret);
 
 	if (!wret)
 		ret = -ETIME;
@@ -990,6 +991,8 @@ static int riocm_ch_connect(u16 loc_ch, struct cm_dev *cm,
 	hdr->ch_op = CM_CONN_REQ;
 	hdr->dst_ch = htons(rem_ch);
 	hdr->src_ch = htons(loc_ch);
+	riocm_debug(CHOP, "ch_%d sending CONN_REQ to did_%d(%d)",
+		    loc_ch, peer->rdev->destid, rem_ch);
 
 	/* ATTN: the function call below relies on the fact that underlying
 	 * HW-specific add_outb_message() routine copies TX data into its
@@ -1014,7 +1017,7 @@ static int riocm_ch_connect(u16 loc_ch, struct cm_dev *cm,
 	/* Wait for connect response from the remote device */
 	wret = wait_for_completion_interruptible_timeout(&ch->comp,
 							 RIOCM_CONNECT_TO * HZ);
-	riocm_debug(WAIT, "wait on %d returns %ld", ch->id, wret);
+	riocm_debug(CHOP, "wait on %d returns %ld", ch->id, wret);
 
 	if (!wret)
 		ret = -ETIME;
@@ -1045,6 +1048,8 @@ static int riocm_send_ack(struct rio_channel *ch)
 	hdr->bhdr.dst_mbox = cmbox;
 	hdr->bhdr.type = RIO_CM_CHAN;
 	hdr->ch_op = CM_CONN_ACK;
+	riocm_debug(CHOP, "ch_%d sending CONN_ACK to did_%d(%d)",
+		    ch->id, ch->rem_destid, ch->rem_channel);
 
 	/* ATTN: the function call below relies on the fact that underlying
 	 * add_outb_message() routine copies TX data into its internal transfer
