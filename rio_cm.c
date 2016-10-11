@@ -124,6 +124,7 @@ enum rio_cm_chop {
 	CM_CONN_ACK,
 	CM_CONN_CLOSE,
 	CM_DATA_MSG,
+	CM_CONN_NACK,
 };
 
 struct rio_ch_base_bhdr {
@@ -236,6 +237,8 @@ static void riocm_ch_free(struct kref *ref);
 static int riocm_post_send(struct cm_dev *cm, struct rio_dev *rdev,
 			   void *buffer, size_t len);
 static int riocm_ch_close(struct rio_channel *ch);
+static int riocm_queue_req(struct cm_dev *cm, struct rio_dev *rdev,
+			   void *buffer, size_t len);
 
 static DEFINE_SPINLOCK(idr_lock);
 static DEFINE_IDR(ch_idr);
@@ -373,6 +376,61 @@ static void riocm_rx_free(struct cm_dev *cm)
 	}
 }
 
+static int riocm_send_nack(struct cm_dev *cm, u32 rdestid, u16 rchan, u16 lchan)
+{
+	struct rio_ch_chan_hdr *hdr;
+	struct cm_peer *peer;
+	int found = 0;
+	int ret;
+
+	down_read(&rdev_sem);
+	/* Find requester's device object */
+	list_for_each_entry(peer, &cm->peers, node) {
+		if (peer->rdev->destid == rdestid) {
+			riocm_debug(RX_CMD, "found matching device(%s)",
+				    rio_name(peer->rdev));
+			found = 1;
+			break;
+		}
+	}
+	up_read(&rdev_sem);
+
+	if (!found)
+		return -ENODEV;
+
+	hdr = kzalloc(sizeof(*hdr), GFP_KERNEL);
+	if (hdr == NULL)
+		return -ENOMEM;
+
+	hdr->bhdr.src_id = htonl(cm->mport->host_deviceid);
+	hdr->bhdr.dst_id = htonl(rdestid);
+	hdr->dst_ch = htons(rchan);
+	hdr->src_ch = htons(lchan);
+	hdr->bhdr.src_mbox = cmbox;
+	hdr->bhdr.dst_mbox = cmbox;
+	hdr->bhdr.type = RIO_CM_CHAN;
+	hdr->ch_op = CM_CONN_NACK;
+	riocm_debug(CHOP, "ch_%d sending CONN_NACK to did_%d(%d)",
+		    lchan, rdestid, rchan);
+
+	/* ATTN: the function call below relies on the fact that underlying
+	 * add_outb_message() routine copies TX data into its internal transfer
+	 * buffer unless this message is placed into priority request queue.
+	 * Review if switching to direct buffer version.
+	 */
+	ret = riocm_post_send(cm, peer->rdev, hdr, sizeof(*hdr));
+
+	if (ret == -EBUSY && !riocm_queue_req(cm, peer->rdev,
+					      hdr, sizeof(*hdr)))
+		return 0;
+	kfree(hdr);
+
+	if (ret)
+		riocm_error("send NACK to ch_%d on did_%d failed (ret=%d)",
+			    rchan, rdestid, ret);
+	return ret;
+}
+
 /*
  * riocm_req_handler - connection request handler
  * @cm: cm_dev object
@@ -389,24 +447,30 @@ static int riocm_req_handler(struct cm_dev *cm, void *req_data)
 	struct conn_req *req;
 	struct rio_ch_chan_hdr *hh = req_data;
 	u16 chnum;
+	int ret;
 
 	chnum = ntohs(hh->dst_ch);
 
 	ch = riocm_get_channel(chnum);
 
-	if (!ch)
-		return -ENODEV;
+	if (!ch) {
+		riocm_debug(RX_CMD, "channel %d is not available", chnum);
+		ret = -ENODEV;
+		goto send_nack;
+	}
 
 	if (ch->state != RIO_CM_LISTEN) {
 		riocm_debug(RX_CMD, "channel %d is not in listen state", chnum);
 		riocm_put_channel(ch);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto send_nack;
 	}
 
 	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req) {
 		riocm_put_channel(ch);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto send_nack;
 	}
 
 	req->destid = ntohl(hh->bhdr.src_id);
@@ -420,6 +484,11 @@ static int riocm_req_handler(struct cm_dev *cm, void *req_data)
 	riocm_put_channel(ch);
 
 	return 0;
+
+send_nack:
+	riocm_send_nack(cm, ntohl(hh->bhdr.src_id), ntohs(hh->src_ch), chnum);
+	return ret;
+
 }
 
 /*
@@ -446,8 +515,10 @@ static int riocm_resp_handler(void *resp_data)
 		return -EINVAL;
 	}
 
-	riocm_exch(ch, RIO_CM_CONNECTED);
-	ch->rem_channel = ntohs(hh->src_ch);
+	if (hh->ch_op == CM_CONN_ACK) {
+		riocm_exch(ch, RIO_CM_CONNECTED);
+		ch->rem_channel = ntohs(hh->src_ch);
+	}
 	complete(&ch->comp);
 	riocm_put_channel(ch);
 
@@ -511,6 +582,7 @@ static void rio_cm_handler(struct cm_dev *cm, void *data)
 		riocm_req_handler(cm, data);
 		break;
 	case CM_CONN_ACK:
+	case CM_CONN_NACK:
 		riocm_resp_handler(data);
 		break;
 	case CM_CONN_CLOSE:
@@ -1024,7 +1096,7 @@ static int riocm_ch_connect(u16 loc_ch, struct cm_dev *cm,
 	else if (wret == -ERESTARTSYS)
 		ret = -EINTR;
 	else
-		ret = riocm_cmp(ch, RIO_CM_CONNECTED) ? 0 : -1;
+		ret = riocm_cmp(ch, RIO_CM_CONNECTED) ? 0 : -ECONNREFUSED;
 
 conn_done:
 	riocm_put_channel(ch);
