@@ -170,7 +170,6 @@ struct cm_dev {
 	struct list_head	peers;
 	u32			npeers;
 	struct workqueue_struct *rx_wq;
-	struct work_struct	rx_work;
 };
 
 struct chan_rx_ring {
@@ -662,9 +661,14 @@ static int rio_rx_data_handler(struct cm_dev *cm, void *buf)
  */
 static void rio_ibmsg_handler(struct work_struct *work)
 {
-	struct cm_dev *cm = container_of(work, struct cm_dev, rx_work);
+	struct rio_cm_work *rx_work;
+	struct cm_dev *cm;
 	void *data;
 	struct rio_ch_chan_hdr *hdr;
+
+	rx_work = container_of(work, struct rio_cm_work, work);
+	cm = rx_work->cm;
+	kfree(rx_work);
 
 	if (!rio_mport_is_running(cm->mport))
 		return;
@@ -701,9 +705,16 @@ static void riocm_inb_msg_event(struct rio_mport *mport, void *dev_id,
 				int mbox, int slot)
 {
 	struct cm_dev *cm = dev_id;
+	struct rio_cm_work *rx_work;
 
-	if (rio_mport_is_running(cm->mport) && !work_pending(&cm->rx_work))
-			queue_work(cm->rx_wq, &cm->rx_work);
+	if (!rio_mport_is_running(cm->mport))
+		return;
+	rx_work = kmalloc(sizeof(*rx_work), GFP_ATOMIC);
+	if (!rx_work)
+		return;
+	INIT_WORK(&rx_work->work, rio_ibmsg_handler);
+	rx_work->cm = cm;
+	queue_work(cm->rx_wq, &rx_work->work);
 }
 
 /*
@@ -2242,8 +2253,7 @@ static int riocm_add_mport(struct device *dev,
 	cm->rx_slots = RIOCM_RX_RING_SIZE;
 	mutex_init(&cm->rx_lock);
 	riocm_rx_fill(cm, RIOCM_RX_RING_SIZE);
-	cm->rx_wq = create_workqueue(DRV_NAME "/rxq");
-	INIT_WORK(&cm->rx_work, rio_ibmsg_handler);
+	cm->rx_wq = create_singlethread_workqueue(DRV_NAME "/rxq");
 
 	cm->tx_slot = 0;
 	cm->tx_cnt = 0;
