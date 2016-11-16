@@ -396,6 +396,7 @@ rio_mport_create_outbound_mapping(struct mport_dev *md, struct file *filp,
 	map->rio_addr = raddr;
 	map->size = size;
 	map->phys_addr = *paddr;
+	map->dma_addr = *paddr;
 	map->filp = filp;
 	map->md = md;
 	kref_init(&map->ref);
