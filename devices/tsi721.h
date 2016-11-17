@@ -900,7 +900,6 @@ struct tsi721_device {
 	void __iomem	*odb_base;
 	void		*idb_base;
 	dma_addr_t	idb_dma;
-	struct work_struct idb_work;
 	u32		db_discard_count;
 
 	/* Inbound Port-Write */

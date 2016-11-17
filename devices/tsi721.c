@@ -374,23 +374,6 @@ static int tsi721_dsend(struct rio_mport *mport, int index,
 static int
 tsi721_dbell_handler(struct tsi721_device *priv)
 {
-	u32 regval;
-
-	/* Disable IDB interrupts */
-	regval = ioread32(priv->regs + TSI721_SR_CHINTE(IDB_QUEUE));
-	regval &= ~TSI721_SR_CHINT_IDBQRCV;
-	iowrite32(regval,
-		priv->regs + TSI721_SR_CHINTE(IDB_QUEUE));
-
-	schedule_work(&priv->idb_work);
-
-	return 0;
-}
-
-static void tsi721_db_dpc(struct work_struct *work)
-{
-	struct tsi721_device *priv = container_of(work, struct tsi721_device,
-						    idb_work);
 	struct rio_mport *mport;
 	struct rio_dbell *dbell;
 	int found = 0;
@@ -401,6 +384,12 @@ static void tsi721_db_dpc(struct work_struct *work)
 		u64 msg;
 		u8  bytes[8];
 	} idb;
+
+	/* Disable IDB interrupts */
+	regval = ioread32(priv->regs + TSI721_SR_CHINTE(IDB_QUEUE));
+	regval &= ~TSI721_SR_CHINT_IDBQRCV;
+	iowrite32(regval,
+		priv->regs + TSI721_SR_CHINTE(IDB_QUEUE));
 
 	/*
 	 * Process queued inbound doorbells
@@ -450,9 +439,7 @@ static void tsi721_db_dpc(struct work_struct *work)
 	iowrite32(regval,
 		priv->regs + TSI721_SR_CHINTE(IDB_QUEUE));
 
-	wr_ptr = ioread32(priv->regs + TSI721_IDQ_WP(IDB_QUEUE)) % IDB_QSIZE;
-	if (wr_ptr != rd_ptr)
-		schedule_work(&priv->idb_work);
+	return 0;
 }
 
 /**
@@ -1379,7 +1366,6 @@ static int tsi721_doorbell_init(struct tsi721_device *priv)
 
 	/* Initialize Inbound Doorbell processing DPC and queue */
 	priv->db_discard_count = 0;
-	INIT_WORK(&priv->idb_work, tsi721_db_dpc);
 
 	/* Allocate buffer for inbound doorbells queue */
 	priv->idb_base = dma_zalloc_coherent(&priv->pdev->dev,
