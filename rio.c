@@ -1904,6 +1904,10 @@ struct dma_async_tx_descriptor *rio_dma_prep_xfer(struct dma_chan *dchan,
 	rio_ext.rio_addr_u = data->rio_addr_u;
 	rio_ext.rio_addr = data->rio_addr;
 	rio_ext.wr_type = data->wr_type;
+	rio_ext.ssdist  = data->ssdist;
+	rio_ext.sssize  = data->sssize;
+	rio_ext.dsdist  = data->dsdist;
+	rio_ext.dssize  = data->dssize;
 
 	return dmaengine_prep_rio_sg(dchan, data->sg, data->sg_len,
 				     direction, flags, &rio_ext);

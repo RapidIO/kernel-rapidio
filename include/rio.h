@@ -505,6 +505,10 @@ struct rio_dma_ext {
 	u64 rio_addr;	/* low 64-bits of 66-bit RapidIO address */
 	u8  rio_addr_u;  /* upper 2-bits of 66-bit RapidIO address */
 	enum rio_write_type wr_type; /* preferred RIO write operation type */
+	u16 ssdist;		/* source stride distance */
+	u16 sssize;		/* source stride size */
+	u16 dsdist;		/* destination stride distance */
+	u16 dssize;		/* destination stride size */
 };
 
 struct rio_dma_data {
@@ -515,6 +519,10 @@ struct rio_dma_data {
 	u64 rio_addr;	/* low 64-bits of 66-bit RapidIO address */
 	u8  rio_addr_u;  /* upper 2-bits of 66-bit RapidIO address */
 	enum rio_write_type wr_type; /* preferred RIO write operation type */
+	u16 ssdist;		/* source stride distance */
+	u16 sssize;		/* source stride size */
+	u16 dsdist;		/* destination stride distance */
+	u16 dssize;		/* destination stride size */
 };
 
 static inline struct rio_mport *dma_to_mport(struct dma_device *ddev)

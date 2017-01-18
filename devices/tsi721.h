@@ -703,6 +703,10 @@ struct tsi721_tx_desc {
 	struct scatterlist		*sg;
 	unsigned int			sg_len;
 	enum dma_status			status;
+	u16						ssdist;
+	u16						sssize;
+	u16						dsdist;
+	u16						dssize;
 };
 
 struct tsi721_bdma_chan {

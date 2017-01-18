@@ -364,8 +364,10 @@ tsi721_desc_fill_init(struct tsi721_tx_desc *desc,
 	bd_ptr->t1.bufptr_lo = cpu_to_le32(
 					(u64)sg_dma_address(sg) & 0xffffffff);
 	bd_ptr->t1.bufptr_hi = cpu_to_le32((u64)sg_dma_address(sg) >> 32);
-	bd_ptr->t1.s_dist = 0;
-	bd_ptr->t1.s_size = 0;
+	bd_ptr->t1.s_dist = cpu_to_le32(((desc->dsdist & 0xffff) << 16) |
+				(desc->ssdist & 0xffff));
+	bd_ptr->t1.s_size = cpu_to_le32(((desc->dssize & 0x0fff) << 12) |
+				(desc->sssize & 0x0fff));
 
 	return 0;
 }
@@ -887,6 +889,13 @@ struct dma_async_tx_descriptor *tsi721_prep_rio_sg(struct dma_chan *dchan,
 		return ERR_PTR(-EINVAL);
 	}
 
+	if (rext->ssdist != 0 || rext->sssize != 0 || rext->dsdist != 0 ||
+			rext->dssize != 0) {
+		tsi_debug(DMA, &dchan->dev->device,
+			  "DMAC%d ssdist %d sssize %d dsdist %d dssize %d",
+			  bdma_chan->id, rext->ssdist, rext->sssize,
+			  rext->dsdist, rext->dssize);
+	}
 	spin_lock_bh(&bdma_chan->lock);
 
 	if (!list_empty(&bdma_chan->free_list)) {
@@ -899,6 +908,10 @@ struct dma_async_tx_descriptor *tsi721_prep_rio_sg(struct dma_chan *dchan,
 		desc->rtype = rtype;
 		desc->sg_len	= sg_len;
 		desc->sg	= sgl;
+		desc->ssdist = rext->ssdist;
+		desc->sssize = rext->sssize;
+		desc->dsdist = rext->dsdist;
+		desc->dssize = rext->dssize;
 		txd		= &desc->txd;
 		txd->flags	= flags;
 	}
