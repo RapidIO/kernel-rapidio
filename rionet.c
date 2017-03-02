@@ -218,6 +218,10 @@ static int rionet_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 					atomic_inc(&skb->users);
 				count++;
 			}
+
+		if (!count)
+			dev_kfree_skb_any(skb);
+
 	} else if (RIONET_MAC_MATCH(eth->h_dest)) {
 		destid = RIONET_GET_DESTID(eth->h_dest);
 		if (nets[rnet->mport->id].active[destid])
@@ -310,7 +314,7 @@ static void rionet_outb_msg_event(struct rio_mport *mport, void *dev_id, int mbo
 
 	while (rnet->tx_cnt && (rnet->ack_slot != slot)) {
 		/* dma unmap single */
-		dev_kfree_skb_irq(rnet->tx_skb[rnet->ack_slot]);
+		dev_consume_skb_irq(rnet->tx_skb[rnet->ack_slot]);
 		rnet->tx_skb[rnet->ack_slot] = NULL;
 		++rnet->ack_slot;
 		rnet->ack_slot &= (RIONET_TX_RING_SIZE - 1);
