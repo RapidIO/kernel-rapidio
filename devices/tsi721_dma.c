@@ -294,6 +294,8 @@ void tsi721_bdma_handler(struct tsi721_bdma_chan *bdma_chan)
 	iowrite32(0, bdma_chan->regs + TSI721_DMAC_INTE);
 	if (bdma_chan->active)
 		tasklet_hi_schedule(&bdma_chan->tasklet);
+	/* Re-Enable BDMA channel interrupts */
+	iowrite32(TSI721_DMAC_INT_ALL, bdma_chan->regs + TSI721_DMAC_INTE);
 }
 
 #ifdef CONFIG_PCI_MSI
@@ -707,8 +709,7 @@ static void tsi721_dma_tasklet(unsigned long data)
 		}
 	}
 err_out:
-	/* Re-Enable BDMA channel interrupts */
-	iowrite32(TSI721_DMAC_INT_ALL, bdma_chan->regs + TSI721_DMAC_INTE);
+	return;
 }
 
 static dma_cookie_t tsi721_tx_submit(struct dma_async_tx_descriptor *txd)
