@@ -427,19 +427,20 @@ tsi721_dbell_handler(struct tsi721_device *priv)
 		u8  bytes[8];
 	} idb;
 
-	/* Disable IDB interrupts */
-	regval = ioread32(priv->regs + TSI721_SR_CHINTE(IDB_QUEUE));
-	regval &= ~TSI721_SR_CHINT_IDBQRCV;
-	iowrite32(regval,
-		priv->regs + TSI721_SR_CHINTE(IDB_QUEUE));
-
 	/*
 	 * Process queued inbound doorbells
 	 */
 	mport = &priv->mport;
+	rd_ptr = ioread32(priv->regs + TSI721_IDQ_RP(IDB_QUEUE)) % IDB_QSIZE;
+repeat:
+	/* Clear interrupt */
+	iowrite32(TSI721_SR_CHINT_IDBQRCV,
+		  priv->regs + TSI721_SR_CHINT(IDB_QUEUE));
 
 	wr_ptr = ioread32(priv->regs + TSI721_IDQ_WP(IDB_QUEUE)) % IDB_QSIZE;
-	rd_ptr = ioread32(priv->regs + TSI721_IDQ_RP(IDB_QUEUE)) % IDB_QSIZE;
+
+	if (wr_ptr == rd_ptr)
+		return 0;
 
 	while (wr_ptr != rd_ptr) {
 		idb_entry = (u64 *)(priv->idb_base +
@@ -467,19 +468,13 @@ tsi721_dbell_handler(struct tsi721_device *priv)
 				  DBELL_SID(idb.bytes), DBELL_TID(idb.bytes),
 				  DBELL_INF(idb.bytes));
 		}
-
-		wr_ptr = ioread32(priv->regs +
-				  TSI721_IDQ_WP(IDB_QUEUE)) % IDB_QSIZE;
 	}
 
-	iowrite32(rd_ptr & (IDB_QSIZE - 1),
-		priv->regs + TSI721_IDQ_RP(IDB_QUEUE));
+	iowrite32(rd_ptr, priv->regs + TSI721_IDQ_RP(IDB_QUEUE));
 
-	/* Re-enable IDB interrupts */
-	regval = ioread32(priv->regs + TSI721_SR_CHINTE(IDB_QUEUE));
-	regval |= TSI721_SR_CHINT_IDBQRCV;
-	iowrite32(regval,
-		priv->regs + TSI721_SR_CHINTE(IDB_QUEUE));
+	regval = ioread32(priv->regs + TSI721_SR_CHINT(IDB_QUEUE));
+	if (regval & TSI721_SR_CHINT_IDBQRCV)
+		goto repeat;
 
 	return 0;
 }
@@ -520,12 +515,7 @@ static irqreturn_t tsi721_irqhandler(int irq, void *ptr)
 				tsi721_dbell_handler(priv);
 			else
 				tsi_info(&priv->pdev->dev,
-					"Unsupported SR_CH_INT %x", intval);
-
-			/* Clear interrupts */
-			iowrite32(intval,
-				priv->regs + TSI721_SR_CHINT(IDB_QUEUE));
-			ioread32(priv->regs + TSI721_SR_CHINT(IDB_QUEUE));
+					"Unexpected SR_CH_INT %x", intval);
 		}
 	}
 
@@ -694,29 +684,22 @@ static irqreturn_t tsi721_srio_msix(int irq, void *ptr)
 }
 
 /**
- * tsi721_sr2pc_ch_msix - Tsi721 MSI-X SR2PC Channel interrupt handler
+ * tsi721_sr2pc_ch_idb_msix - Tsi721 MSI-X SR2PC Channel IDB interrupt handler
  * @irq: Linux interrupt number
  * @ptr: Pointer to interrupt-specific data (tsi721_device structure)
  *
- * Handles Tsi721 interrupts from SR2PC Channel.
- * NOTE: At this moment services only one SR2PC channel associated with inbound
- * doorbells.
+ * Handles Tsi721 Inbound Doorbell interrupts from SR2PC Channel.
+ * NOTE: Services only one SR2PC channel 0 associated with inbound doorbells.
  */
-static irqreturn_t tsi721_sr2pc_ch_msix(int irq, void *ptr)
+static irqreturn_t tsi721_sr2pc_ch_idb_msix(int irq, void *ptr)
 {
 	struct tsi721_device *priv = (struct tsi721_device *)ptr;
-	u32 sr_ch_int;
 
-	/* Service Inbound DB interrupt from SR2PC channel */
-	sr_ch_int = ioread32(priv->regs + TSI721_SR_CHINT(IDB_QUEUE));
-	if (sr_ch_int & TSI721_SR_CHINT_IDBQRCV)
-		tsi721_dbell_handler(priv);
-
-	/* Clear interrupts */
-	iowrite32(sr_ch_int, priv->regs + TSI721_SR_CHINT(IDB_QUEUE));
-	/* Read back to ensure that interrupt was cleared */
-	sr_ch_int = ioread32(priv->regs + TSI721_SR_CHINT(IDB_QUEUE));
-
+	/*
+	 * We do not need to check for IDBQRCV bit set because it has
+	 * own MSI-X vector for each channel.
+	 */
+	tsi721_dbell_handler(priv);
 	return IRQ_HANDLED;
 }
 
@@ -733,7 +716,7 @@ static int tsi721_request_msix(struct tsi721_device *priv)
 	int err = 0;
 
 	err = request_irq(priv->msix[TSI721_VECT_IDB].vector,
-			tsi721_sr2pc_ch_msix, 0,
+			tsi721_sr2pc_ch_idb_msix, 0,
 			priv->msix[TSI721_VECT_IDB].irq_name, (void *)priv);
 	if (err)
 		return err;
