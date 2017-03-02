@@ -557,6 +557,11 @@ static irqreturn_t tsi721_irqhandler(int irq, void *ptr)
 					continue;
 				tsi721_omsg_handler(priv, ch);
 			}
+
+			/* Re-enable OB MSG channel interrupts */
+			ch_inte = ioread32(priv->regs + TSI721_DEV_CHAN_INTE);
+			ch_inte |= (dev_ch_int & TSI721_INT_OMSG_CHAN_M);
+			iowrite32(ch_inte, priv->regs + TSI721_DEV_CHAN_INTE);
 		}
 	}
 
@@ -1743,7 +1748,6 @@ tsi721_add_outb_message(struct rio_mport *mport, struct rio_dev *rdev, int mbox,
 	/* Set new write count value */
 	iowrite32(priv->omsg_ring[mbox].wr_count,
 		priv->regs + TSI721_OBDMAC_DWRCNT(mbox));
-	ioread32(priv->regs + TSI721_OBDMAC_DWRCNT(mbox));
 
 	spin_unlock_irqrestore(&priv->omsg_ring[mbox].lock, flags);
 
@@ -1764,17 +1768,20 @@ static void tsi721_omsg_handler(struct tsi721_device *priv, int ch)
 	void *dev_id = NULL;
 	u32 tx_slot = 0xffffffff;
 	int do_callback = 0;
+	u32 srd_ptr = 0xffffffff;
 
 	spin_lock(&priv->omsg_ring[ch].lock);
 
 	omsg_int = ioread32(priv->regs + TSI721_OBDMAC_INT(ch));
+
+	/* Clear signaled channel interrupts */
+	iowrite32(omsg_int, priv->regs + TSI721_OBDMAC_INT(ch));
 
 	if (omsg_int & TSI721_OBDMAC_INT_ST_FULL)
 		tsi_info(&priv->pdev->dev,
 			"OB MBOX%d: Status FIFO is full", ch);
 
 	if (omsg_int & (TSI721_OBDMAC_INT_DONE | TSI721_OBDMAC_INT_IOF_DONE)) {
-		u32 srd_ptr;
 		u64 *sts_ptr, last_ptr = 0, prev_ptr = 0;
 		int i, j;
 
@@ -1849,7 +1856,7 @@ no_sts_update:
 		* reinitialize OB MSG channel
 		*/
 
-		tsi_debug(OMSG, &priv->pdev->dev, "OB MSG ABORT ch_stat=%x",
+		tsi_info(&priv->pdev->dev, "OB MSG ABORT ch_stat=%x",
 			  ioread32(priv->regs + TSI721_OBDMAC_STS(ch)));
 
 		iowrite32(TSI721_OBDMAC_INT_ERROR,
@@ -1871,22 +1878,31 @@ no_sts_update:
 		priv->omsg_ring[ch].sts_rdptr = 0;
 	}
 
-	/* Clear channel interrupts */
-	iowrite32(omsg_int, priv->regs + TSI721_OBDMAC_INT(ch));
-
-	if (!(priv->flags & TSI721_USING_MSIX)) {
-		u32 ch_inte;
-
-		/* Re-enable channel interrupts */
-		ch_inte = ioread32(priv->regs + TSI721_DEV_CHAN_INTE);
-		ch_inte |= TSI721_INT_OMSG_CHAN(ch);
-		iowrite32(ch_inte, priv->regs + TSI721_DEV_CHAN_INTE);
-	}
-
 	spin_unlock(&priv->omsg_ring[ch].lock);
 
 	if (mport->outb_msg[ch].mcback && do_callback)
 		mport->outb_msg[ch].mcback(mport, dev_id, ch, tx_slot);
+
+#ifdef CONFIG_PCI_MSI
+	if (!(priv->flags & TSI721_USING_MSIX))
+		return;
+
+	omsg_int = ioread32(priv->regs + TSI721_OBDMAC_INT(ch));
+	if (!(omsg_int & TSI721_OBDMAC_INT_DONE)) {
+		u32 swr_ptr;
+
+		swr_ptr = ioread32(priv->regs + TSI721_OBDMAC_DSWP(ch));
+		swr_ptr %= priv->omsg_ring[ch].sts_size;
+
+		if (srd_ptr != swr_ptr) {
+			tsi_debug(OMSG, &priv->pdev->dev,
+				  "OB MBOX%d: srd_ptr(%x) != swr_ptr(%x)",
+				  ch, srd_ptr, swr_ptr);
+			iowrite32(TSI721_OBDMAC_INT_DONE,
+				  priv->regs + TSI721_OBDMAC_INTSET(ch));
+		}
+	}
+#endif /* CONFIG_PCI_MSI */
 }
 
 /**
