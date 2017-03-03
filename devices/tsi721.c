@@ -2437,10 +2437,12 @@ out:
  * tsi721_get_inb_message - Fetch inbound message from the Tsi721 MSG Queue
  * @mport: Master port implementing the Inbound Messaging Engine
  * @mbox: Inbound mailbox number
+ * @msize: Pointer to store inbound message size
  *
  * Returns pointer to the message on success or NULL on failure.
  */
-static void *tsi721_get_inb_message(struct rio_mport *mport, int mbox)
+static void *tsi721_get_inb_message(struct rio_mport *mport, int mbox,
+				    int *msize)
 {
 	struct tsi721_device *priv = mport->priv;
 	struct tsi721_imsg_desc *desc;
@@ -2497,6 +2499,8 @@ static void *tsi721_get_inb_message(struct rio_mport *mport, int mbox)
 
 	iowrite32(priv->imsg_ring[mbox].fq_wrptr,
 		priv->regs + TSI721_IBDMAC_FQWP(ch));
+	if (msize)
+		*msize = msg_size;
 out:
 	return buf;
 }

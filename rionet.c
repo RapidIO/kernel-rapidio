@@ -102,6 +102,7 @@ static int rionet_rx_clean(struct net_device *ndev)
 	int error = 0;
 	struct rionet_private *rnet = netdev_priv(ndev);
 	void *data;
+	int msg_sz;
 
 	i = rnet->rx_slot;
 
@@ -109,11 +110,13 @@ static int rionet_rx_clean(struct net_device *ndev)
 		if (!rnet->rx_skb[i])
 			continue;
 
-		if (!(data = rio_get_inb_message(rnet->mport, RIONET_MAILBOX)))
+		data = rio_get_inb_message(rnet->mport,
+					   RIONET_MAILBOX, &msg_sz);
+		if (!data)
 			break;
 
 		rnet->rx_skb[i]->data = data;
-		skb_put(rnet->rx_skb[i], RIO_MAX_MSG_SIZE);
+		skb_put(rnet->rx_skb[i], msg_sz);
 		rnet->rx_skb[i]->protocol =
 		    eth_type_trans(rnet->rx_skb[i], ndev);
 		error = netif_rx(rnet->rx_skb[i]);
@@ -122,7 +125,7 @@ static int rionet_rx_clean(struct net_device *ndev)
 			ndev->stats.rx_dropped++;
 		} else {
 			ndev->stats.rx_packets++;
-			ndev->stats.rx_bytes += RIO_MAX_MSG_SIZE;
+			ndev->stats.rx_bytes += msg_sz;
 		}
 
 	} while ((i = (i + 1) % RIONET_RX_RING_SIZE) != rnet->rx_slot);

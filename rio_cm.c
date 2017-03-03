@@ -313,8 +313,9 @@ static void *riocm_rx_get_msg(struct cm_dev *cm)
 {
 	void *msg;
 	int i;
+	int msg_sz;
 
-	msg = rio_get_inb_message(cm->mport, cmbox);
+	msg = rio_get_inb_message(cm->mport, cmbox, &msg_sz);
 	if (msg) {
 		for (i = 0; i < RIOCM_RX_RING_SIZE; i++) {
 			if (cm->rx_buf[i] == msg) {

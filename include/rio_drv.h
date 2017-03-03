@@ -365,12 +365,14 @@ static inline int rio_add_inb_buffer(struct rio_mport *mport, int mbox,
  * rio_get_inb_message - Get A RIO message from an inbound mailbox queue
  * @mport: Master port containing the inbound mailbox
  * @mbox: The inbound mailbox number
+ * @msize: Pointer to variable to report size of received message (in bytes)
  *
  * Get a RIO message from an inbound mailbox queue. Returns 0 on success.
  */
-static inline void *rio_get_inb_message(struct rio_mport *mport, int mbox)
+static inline void *rio_get_inb_message(struct rio_mport *mport, int mbox,
+					int *msize)
 {
-	return mport->ops->get_inb_message(mport, mbox);
+	return mport->ops->get_inb_message(mport, mbox, msize);
 }
 
 /* Doorbell management */

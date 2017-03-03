@@ -420,7 +420,7 @@ struct rio_ops {
 	int  (*add_outb_message)(struct rio_mport *mport, struct rio_dev *rdev,
 				 int mbox, void *buffer, size_t len);
 	int (*add_inb_buffer)(struct rio_mport *mport, int mbox, void *buf);
-	void *(*get_inb_message)(struct rio_mport *mport, int mbox);
+	void *(*get_inb_message)(struct rio_mport *mport, int mbox, int *msize);
 	int (*map_inb)(struct rio_mport *mport, dma_addr_t lstart,
 			u64 rstart, u64 size, u32 flags);
 	void (*unmap_inb)(struct rio_mport *mport, dma_addr_t lstart);
