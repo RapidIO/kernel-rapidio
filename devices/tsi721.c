@@ -2853,6 +2853,75 @@ static int tsi721_probe(struct pci_dev *pdev,
 
 	BUG_ON(!pci_is_pcie(pdev));
 
+#ifdef CONFIG_TSI721_PCIE_GEN3_WORKAROUND
+	/*
+	 * On some platforms with PCIe Gen3 root ports or switches Tsi721 may
+	 * fail 5.0 Gb link training and step down to 2.5 Gb.
+	 * This workaround initiates PCIe link retraining if link speed 2.5Gb
+	 * is detected when 5.0Gb link can be used.
+	 */
+	{
+
+	struct pci_dev *parent;
+	u16 lstat;
+	u32 linkcap;
+
+	parent = pdev->bus->self;
+
+	if (pci_pcie_type(parent) != PCI_EXP_TYPE_DOWNSTREAM &&
+	    pci_pcie_type(parent) != PCI_EXP_TYPE_ROOT_PORT)
+		tsi_info(&pdev->dev, "ERR: Unexpected parent type %d",
+			 pci_pcie_type(parent));
+
+	pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lstat);
+	pcie_capability_read_dword(parent, PCI_EXP_LNKCAP, &linkcap);
+
+	if ((lstat & PCI_EXP_LNKSTA_CLS) == PCI_EXP_LNKSTA_CLS_2_5GB &&
+	    (linkcap & PCI_EXP_LNKCAP_SLS) != PCI_EXP_LNKCAP_SLS_2_5GB) {
+
+		unsigned long timeout;
+		int i, ret;
+
+		tsi_info(&pdev->dev, "PCIe@2.5Gb initiate link retrain");
+
+		for (i = 0; i < 10; i++) {
+			ret = pcie_capability_set_word(parent, PCI_EXP_LNKCTL,
+						       PCI_EXP_LNKCTL_RL);
+			if (ret) {
+				tsi_info(&pdev->dev,
+					 "Error %d when toggling link retrain",
+					 ret);
+				break;
+			}
+
+			timeout = jiffies + HZ;
+			for (;;) {
+				pcie_capability_read_word(pdev, PCI_EXP_LNKSTA,
+							  &lstat);
+				if (!(lstat & PCI_EXP_LNKSTA_LT) ||
+				    time_after(jiffies, timeout))
+					break;
+				msleep(1);
+			}
+
+			if (lstat & PCI_EXP_LNKSTA_LT) {
+				tsi_info(&pdev->dev,
+					 "TO exit: Link Retrain not finished");
+				break;
+			}
+		}
+
+		if ((lstat & PCI_EXP_LNKSTA_CLS) == PCI_EXP_LNKSTA_CLS_5_0GB)
+			tsi_info(&pdev->dev,
+				 "PCIe Link speed after retrain is 5.0Gb");
+		else
+			tsi_info(&pdev->dev,
+				 "Link Retrain failed to initiate 5.0Gb speed");
+	}
+
+	}
+#endif
+
 	/* Clear "no snoop" and "relaxed ordering" bits. */
 	pcie_capability_clear_and_set_word(pdev, PCI_EXP_DEVCTL,
 		PCI_EXP_DEVCTL_RELAX_EN | PCI_EXP_DEVCTL_NOSNOOP_EN, 0);
