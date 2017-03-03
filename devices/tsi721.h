@@ -33,9 +33,10 @@ enum {
 	DBG_IBW		= BIT(6), /* inbound window */
 	DBG_EVENT	= BIT(7), /* event handling messages */
 	DBG_OBW		= BIT(8), /* outbound window messages */
-	DBG_DBELL	= BIT(9), /* doorbell messages */
-	DBG_OMSG	= BIT(10), /* doorbell messages */
-	DBG_IMSG	= BIT(11), /* doorbell messages */
+	DBG_DBELL	= BIT(9), /* inbound doorbell messages */
+	DBG_OMSG	= BIT(10), /* outbound MBOX messages */
+	DBG_IMSG	= BIT(11), /* inbound MBOX messages */
+	DBG_ODBELL	= BIT(12), /* outbound doorbell messages */
 	DBG_ALL		= ~0,
 };
 
@@ -198,6 +199,10 @@ extern u32 dbg_level;
 #define TSI721_SR_CHINT_ODBRTRY	0x00000002
 #define TSI721_SR_CHINT_ODBERR	0x00000001
 #define TSI721_SR_CHINT_ALL	0x0000003f
+
+#define TSI721_ODB_CNT(x)	(0x20100 + (x) * 0x1000)
+#define TSI721_ODB_CNT_TOT	0xffff0000
+#define TSI721_ODB_CNT_OK	0x0000ffff
 
 #define TSI721_IBWIN_NUM	8
 

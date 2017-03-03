@@ -345,22 +345,64 @@ static int tsi721_pw_enable(struct rio_mport *mport, int enable)
  * @destid: Destination ID of target device
  * @data: 16-bit info field of RapidIO doorbell
  *
- * Sends a RapidIO doorbell message. Always returns %0.
+ * Sends a RapidIO doorbell message.
  */
 static int tsi721_dsend(struct rio_mport *mport, int index,
 			u16 destid, u16 data)
 {
 	struct tsi721_device *priv = mport->priv;
-	u32 offset;
+	u32 offset, rval = 0;
+	int i, rtry_cnt = 100;
+	u32 odb_count = 0;
+
+	/* This function uses only Tsi721 ODB channel 0 */
+
+	/* Clear ODB interrupts from previous request */
+	iowrite32(TSI721_SR_CHINT_ODBOK | TSI721_SR_CHINT_ODBTO |
+		  TSI721_SR_CHINT_ODBRTRY | TSI721_SR_CHINT_ODBERR,
+		  priv->regs + TSI721_SR_CHINT(0));
 
 	offset = (((mport->sys_size) ? RIO_TT_CODE_16 : RIO_TT_CODE_8) << 18) |
 		 (destid << 2);
 
-	tsi_debug(DBELL, &priv->pdev->dev,
+	tsi_debug(ODBELL, &priv->pdev->dev,
 		  "Send Doorbell 0x%04x to destID 0x%x", data, destid);
+retry:
 	iowrite16be(data, priv->odb_base + offset);
 
-	return 0;
+	/* Wait until ODB counters have been updated */
+	for (i = 0; !(odb_count & TSI721_ODB_CNT_OK) && i < 1000; i++) {
+		udelay(1);
+		odb_count = ioread32(priv->regs + TSI721_ODB_CNT(0));
+	}
+
+	if (!odb_count) {
+		tsi_err(&priv->pdev->dev,
+			"Send Doorbell 0x%04x to destID 0x%x error, CNT=0x%08x",
+			data, destid, odb_count);
+		return -ETIME;
+	}
+
+	if (odb_count & TSI721_ODB_CNT_OK)
+		return 0;
+
+	rval = ioread32(priv->regs + TSI721_SR_CHINT(0));
+
+	tsi_err(&priv->pdev->dev,
+		 "Send Doorbell 0x%04x to destID 0x%x failed, STS=0x%x CNT=0x%08x",
+		 data, destid, rval, odb_count);
+
+	if (rval & TSI721_SR_CHINT_ODBTO)
+		return -EIO;
+	if (rval & TSI721_SR_CHINT_ODBERR)
+		return -EIO;
+
+	if ((rval & TSI721_SR_CHINT_ODBRTRY) && rtry_cnt) {
+		rtry_cnt--;
+		goto retry;
+	}
+
+	return -EAGAIN;
 }
 
 /**
@@ -1362,7 +1404,9 @@ static int tsi721_doorbell_init(struct tsi721_device *priv)
 	/* Outbound Doorbells do not require any setup.
 	 * Tsi721 uses dedicated PCI BAR1 to generate doorbells.
 	 * That BAR1 was mapped during the probe routine.
+	 * Simply read counters register to ensure that it is cleared.
 	 */
+	ioread32(priv->regs + TSI721_ODB_CNT(0));
 
 	/* Initialize Inbound Doorbell processing DPC and queue */
 	priv->db_discard_count = 0;
