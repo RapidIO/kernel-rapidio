@@ -2562,9 +2562,6 @@ static int tsi721_messages_init(struct tsi721_device *priv)
 	iowrite32(0, priv->regs + TSI721_RETRY_GEN_CNT);
 	iowrite32(0, priv->regs + TSI721_RETRY_RX_CNT);
 
-	/* Set SRIO Message Request/Response Timeout */
-	iowrite32(TSI721_RQRPTO_VAL, priv->regs + TSI721_RQRPTO);
-
 	/* Initialize Inbound Messaging Engine Registers */
 	for (ch = 0; ch < TSI721_IMSG_CHNUM; ch++) {
 		/* Clear interrupt bits */
