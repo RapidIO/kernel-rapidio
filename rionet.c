@@ -215,7 +215,11 @@ static int rionet_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 				rionet_queue_tx_msg(skb, ndev,
 					nets[rnet->mport->id].active[i]);
 				if (count)
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4,13,0))
 					atomic_inc(&skb->users);
+#else
+					refcount_inc(&skb->users);
+#endif
 				count++;
 			}
 
