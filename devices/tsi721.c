@@ -2761,6 +2761,12 @@ static int tsi721_setup_mport(struct tsi721_device *priv)
 	else
 		iowrite32(0, priv->regs + (0x100 + RIO_PORT_GEN_CTL_CSR));
 
+	/* Set Port_Link and Port_Response Timeouts (~50uS and ~100mS) */
+	iowrite32((TSI721_DEFAULT_LINK_TO << 8),
+		  priv->regs + (0x100 + RIO_PORT_LINKTO_CTL_CSR));
+	iowrite32(TSI721_DEFAULT_RESP_TO,
+		  priv->regs + (0x100 + RIO_PORT_RSPTO_CTL_CSR));
+
 	err = rio_register_mport(mport);
 	if (err) {
 		tsi721_unregister_dma(priv);
