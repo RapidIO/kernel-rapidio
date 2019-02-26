@@ -718,9 +718,7 @@ static int do_dma_request(struct mport_dma_req *req,
 	struct dma_chan *chan;
 	struct dma_async_tx_descriptor *tx;
 	dma_cookie_t cookie;
-	unsigned long tmo = msecs_to_jiffies(dma_timeout);
 	enum dma_transfer_direction dir;
-	long wret;
 	int ret = 0;
 
 	priv = req->priv;
@@ -782,15 +780,13 @@ static int do_dma_request(struct mport_dma_req *req,
 	} else if (sync == RIO_TRANSFER_FAF)
 		return 0;
 
-	wret = wait_for_completion_interruptible_timeout(&req->req_comp, tmo);
+#ifdef TSI721_DMA_INTERRUPT_WAIT
+	/* FIXME: This option should be reviewed for use after Hot Swap support
+	 * is implemented. Not available now.
+	 */
+	ret = wait_for_completion_interruptible(&req->req_comp);
 
-	if (wret == 0) {
-		/* Timeout on wait occurred */
-		rmcd_error("%s(%d) timed out waiting for DMA_%s %d",
-		       current->comm, task_pid_nr(current),
-		       (dir == DMA_DEV_TO_MEM)?"READ":"WRITE", cookie);
-		return -ETIMEDOUT;
-	} else if (wret == -ERESTARTSYS) {
+	if (ret == -ERESTARTSYS) {
 		/* Wait_for_completion was interrupted by a signal but DMA may
 		 * be in progress
 		 */
@@ -799,6 +795,9 @@ static int do_dma_request(struct mport_dma_req *req,
 			(dir == DMA_DEV_TO_MEM)?"READ":"WRITE", cookie);
 		return -EINTR;
 	}
+#else
+	wait_for_completion(&req->req_comp);
+#endif /* TSI721_DMA_INTERRUPT_WAIT */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,13,0))
 	if (req->status != DMA_COMPLETE) {
