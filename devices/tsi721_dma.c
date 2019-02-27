@@ -591,6 +591,17 @@ static void tsi721_dma_tasklet(unsigned long data)
 {
 	struct tsi721_bdma_chan *bdma_chan = (struct tsi721_bdma_chan *)data;
 	u32 dmac_int, dmac_sts;
+	struct tsi721_tx_desc *desc;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
+	struct dmaengine_desc_callback cb;
+	struct dmaengine_result res;
+
+	memset(&cb, 0, sizeof(cb));
+#else
+	dma_async_tx_callback callback = NULL;
+	void *param = NULL;
+#endif
+
 
 	dmac_int = ioread32(bdma_chan->regs + TSI721_DMAC_INT);
 	tsi_debug(DMA, &bdma_chan->dchan.dev->device, "DMAC%d_INT = 0x%x",
@@ -599,16 +610,11 @@ static void tsi721_dma_tasklet(unsigned long data)
 	iowrite32(dmac_int, bdma_chan->regs + TSI721_DMAC_INT);
 
 	if (dmac_int & TSI721_DMAC_INT_ERR) {
-		int i = 10000;
-		struct tsi721_tx_desc *desc;
-
 		desc = bdma_chan->active_tx;
 		dmac_sts = ioread32(bdma_chan->regs + TSI721_DMAC_STS);
 		tsi_err(&bdma_chan->dchan.dev->device,
 			"DMAC%d_STS = 0x%x did=%d raddr=0x%llx",
 			bdma_chan->id, dmac_sts, desc->destid, desc->rio_addr);
-
-		/* Re-initialize DMA channel if possible */
 
 		if ((dmac_sts & TSI721_DMAC_STS_ABORT) == 0)
 			goto err_out;
@@ -617,54 +623,30 @@ static void tsi721_dma_tasklet(unsigned long data)
 
 		spin_lock(&bdma_chan->lock);
 
-		/* Put DMA channel into init state */
-		iowrite32(TSI721_DMAC_CTL_INIT,
-			  bdma_chan->regs + TSI721_DMAC_CTL);
-		do {
-			udelay(1);
-			dmac_sts = ioread32(bdma_chan->regs + TSI721_DMAC_STS);
-			i--;
-		} while ((dmac_sts & TSI721_DMAC_STS_ABORT) && i);
-
-		if (dmac_sts & TSI721_DMAC_STS_ABORT) {
-			tsi_err(&bdma_chan->dchan.dev->device,
-				"Failed to re-initiate DMAC%d",	bdma_chan->id);
-			spin_unlock(&bdma_chan->lock);
-			goto err_out;
-		}
-
-		/* Setup DMA descriptor pointers */
-		iowrite32(((u64)bdma_chan->bd_phys >> 32),
-			bdma_chan->regs + TSI721_DMAC_DPTRH);
-		iowrite32(((u64)bdma_chan->bd_phys & TSI721_DMAC_DPTRL_MASK),
-			bdma_chan->regs + TSI721_DMAC_DPTRL);
-
-		/* Setup descriptor status FIFO */
-		iowrite32(((u64)bdma_chan->sts_phys >> 32),
-			bdma_chan->regs + TSI721_DMAC_DSBH);
-		iowrite32(((u64)bdma_chan->sts_phys & TSI721_DMAC_DSBL_MASK),
-			bdma_chan->regs + TSI721_DMAC_DSBL);
-		iowrite32(TSI721_DMAC_DSSZ_SIZE(bdma_chan->sts_size),
-			bdma_chan->regs + TSI721_DMAC_DSSZ);
-
-		/* Clear interrupt bits */
-		iowrite32(TSI721_DMAC_INT_ALL,
-			bdma_chan->regs + TSI721_DMAC_INT);
-
-		ioread32(bdma_chan->regs + TSI721_DMAC_INT);
-
-		bdma_chan->wr_count = bdma_chan->wr_count_next = 0;
-		bdma_chan->sts_rdptr = 0;
-		udelay(10);
-
-		desc = bdma_chan->active_tx;
 		desc->status = DMA_ERROR;
 		dma_cookie_complete(&desc->txd);
+
+		if (desc->txd.flags & DMA_PREP_INTERRUPT) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
+			dmaengine_desc_get_callback(&desc->txd, &cb);
+#else
+			callback = desc->txd.callback;
+			param = desc->txd.callback_param;
+#endif
+		}
+
 		list_add(&desc->desc_node, &bdma_chan->free_list);
 		bdma_chan->active_tx = NULL;
-		if (bdma_chan->active)
-			tsi721_advance_work(bdma_chan, NULL);
 		spin_unlock(&bdma_chan->lock);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
+		res.result = (desc->rtype == NREAD) ?
+			DMA_TRANS_READ_FAILED : DMA_TRANS_WRITE_FAILED;
+		dmaengine_desc_callback_invoke(&cb, &res);
+#else
+		if (callback)
+			callback(param);
+#endif
+		goto err_out;
 	}
 
 	if (dmac_int & TSI721_DMAC_INT_STFULL) {
@@ -674,16 +656,11 @@ static void tsi721_dma_tasklet(unsigned long data)
 	}
 
 	if (dmac_int & (TSI721_DMAC_INT_DONE | TSI721_DMAC_INT_IOFDONE)) {
-		struct tsi721_tx_desc *desc;
-
 		tsi721_clr_stat(bdma_chan);
 		spin_lock(&bdma_chan->lock);
 		desc = bdma_chan->active_tx;
 
 		if (desc->sg_len == 0) {
-			dma_async_tx_callback callback = NULL;
-			void *param = NULL;
-
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,13,0))
 			desc->status = DMA_COMPLETE;
 #else
@@ -691,16 +668,25 @@ static void tsi721_dma_tasklet(unsigned long data)
 #endif
 			dma_cookie_complete(&desc->txd);
 			if (desc->txd.flags & DMA_PREP_INTERRUPT) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
+				dmaengine_desc_get_callback(&desc->txd, &cb);
+#else
 				callback = desc->txd.callback;
 				param = desc->txd.callback_param;
+#endif
 			}
 			list_add(&desc->desc_node, &bdma_chan->free_list);
 			bdma_chan->active_tx = NULL;
 			if (bdma_chan->active)
 				tsi721_advance_work(bdma_chan, NULL);
 			spin_unlock(&bdma_chan->lock);
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
+			res.result = DMA_TRANS_NOERROR;
+			dmaengine_desc_callback_invoke(&cb, &res);
+#else
 			if (callback)
 				callback(param);
+#endif
 		} else {
 			if (bdma_chan->active)
 				tsi721_advance_work(bdma_chan,
