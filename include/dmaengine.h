@@ -7,6 +7,7 @@
 
 #include <linux/bug.h>
 #include <linux/dmaengine.h>
+#include <linux/version.h>
 
 /**
  * dma_cookie_init - initialize the cookies for a DMA channel
@@ -85,6 +86,8 @@ static inline void dma_set_residue(struct dma_tx_state *state, u32 residue)
 	if (state)
 		state->residue = residue;
 }
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
 
 struct dmaengine_desc_callback {
 	dma_async_tx_callback callback;
@@ -170,4 +173,5 @@ dmaengine_desc_callback_valid(struct dmaengine_desc_callback *cb)
 	return (cb->callback) ? true : false;
 }
 
+#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0)) */
 #endif
