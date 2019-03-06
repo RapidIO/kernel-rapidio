@@ -609,6 +609,24 @@ static void dma_req_free(struct kref *ref)
 	kfree(req);
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
+static void dma_xfer_callback(void *param,
+			      const struct dmaengine_result *result)
+{
+	struct mport_dma_req *req = (struct mport_dma_req *)param;
+	struct mport_cdev_priv *priv = req->priv;
+
+	if (result->result != DMA_TRANS_NOERROR)
+		req->status = DMA_ERROR;
+	else
+		req->status = dma_async_is_tx_complete(priv->dmach, req->cookie,
+					       NULL, NULL);
+
+	complete(&req->req_comp);
+	kref_put(&req->refcount, dma_req_free);
+
+}
+#else
 static void dma_xfer_callback(void *param)
 {
 	struct mport_dma_req *req = (struct mport_dma_req *)param;
@@ -616,9 +634,11 @@ static void dma_xfer_callback(void *param)
 
 	req->status = dma_async_is_tx_complete(priv->dmach, req->cookie,
 					       NULL, NULL);
+
 	complete(&req->req_comp);
 	kref_put(&req->refcount, dma_req_free);
 }
+#endif
 
 /*
  * prep_dma_xfer() - Configure and send request to DMAengine to prepare DMA
@@ -750,7 +770,11 @@ static int do_dma_request(struct mport_dma_req *req,
 		goto err_out;
 	}
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
+	tx->callback_result = dma_xfer_callback;
+#else
 	tx->callback = dma_xfer_callback;
+#endif
 	tx->callback_param = req;
 
 	req->status = DMA_IN_PROGRESS;
