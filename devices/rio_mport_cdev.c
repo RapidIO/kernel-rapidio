@@ -589,6 +589,8 @@ static void dma_req_free(struct kref *ref)
 	struct mport_cdev_priv *priv = req->priv;
 	unsigned int i;
 
+	rmcd_debug(DMA, "DMA_%d", priv->dmach->chan_id);
+
 	dma_unmap_sg(req->dmach->device->dev,
 		     req->sgt.sgl, req->sgt.nents, req->dir);
 	sg_free_table(&req->sgt);
@@ -1017,10 +1019,12 @@ err_pg:
 	if (!req->page_list) {
 		for (i = 0; i < nr_pages; i++)
 			put_page(page_list[i]);
+		rmcd_debug(DMA, "free page_list");
 		kfree(page_list);
 	}
 err_req:
 	kref_put(&req->refcount, dma_req_free);
+	rmcd_debug(DMA, "exit err=%d", ret);
 	return ret;
 }
 
@@ -2121,13 +2125,11 @@ static void mport_cdev_release_dma(struct file *filp)
 	long wret;
 	LIST_HEAD(list);
 
+	if (!priv->dmach)
+		return;
+
 	rmcd_debug(EXIT, "from filp=%p %s(%d)",
 		   filp, current->comm, task_pid_nr(current));
-
-	if (!priv->dmach) {
-		rmcd_debug(EXIT, "No DMA channel for filp=%p", filp);
-		return;
-	}
 
 	md = priv->md;
 
