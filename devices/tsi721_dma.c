@@ -555,8 +555,11 @@ static void tsi721_advance_work(struct tsi721_bdma_chan *bdma_chan,
 
 	tsi_debug(DMA, &bdma_chan->dchan.dev->device, "DMAC%d", bdma_chan->id);
 
-	if (!tsi721_dma_is_idle(bdma_chan))
+	if (!tsi721_dma_is_idle(bdma_chan)) {
+		tsi_debug(DMA, &bdma_chan->dchan.dev->device,
+			  "ERR: DMAC%d NOT IDLE", bdma_chan->id);
 		return;
+	}
 
 	/*
 	 * If there is no data transfer in progress, fetch new descriptor from
@@ -565,6 +568,8 @@ static void tsi721_advance_work(struct tsi721_bdma_chan *bdma_chan,
 
 	if (desc == NULL && bdma_chan->active_tx == NULL &&
 					!list_empty(&bdma_chan->queue)) {
+		tsi_debug(DMA, &bdma_chan->dchan.dev->device,
+			  "DMAC%d fetch new descriptor", bdma_chan->id);
 		desc = list_first_entry(&bdma_chan->queue,
 					struct tsi721_tx_desc, desc_node);
 		list_del_init((&desc->desc_node));
@@ -572,6 +577,8 @@ static void tsi721_advance_work(struct tsi721_bdma_chan *bdma_chan,
 	}
 
 	if (desc) {
+		tsi_debug(DMA, &bdma_chan->dchan.dev->device,
+			  "DMAC%d process descriptor", bdma_chan->id);
 		err = tsi721_submit_sg(desc);
 		if (!err)
 			tsi721_start_dma(bdma_chan);
