@@ -391,14 +391,21 @@ tsi721_desc_fill_end(struct tsi721_dma_desc *bd_ptr, u32 bcount, bool interrupt)
 static void tsi721_dma_tx_err(struct tsi721_bdma_chan *bdma_chan,
 			      struct tsi721_tx_desc *desc)
 {
-	struct dma_async_tx_descriptor *txd = &desc->txd;
-	dma_async_tx_callback callback = txd->callback;
-	void *param = txd->callback_param;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
+	struct dmaengine_desc_callback cb;
+	struct dmaengine_result res;
 
-	list_move(&desc->desc_node, &bdma_chan->free_list);
-
+	memset(&cb, 0, sizeof(cb));
+	dmaengine_desc_get_callback(&desc->txd, &cb);
+	res.result = DMA_TRANS_ABORTED;
+	dmaengine_desc_callback_invoke(&cb, &res);
+#else
+	dma_async_tx_callback callback = desc->txd.callback;
+	void *param = desc->txd.callback_param;
 	if (callback)
 		callback(param);
+#endif
+	list_move(&desc->desc_node, &bdma_chan->free_list);
 }
 
 static void tsi721_clr_stat(struct tsi721_bdma_chan *bdma_chan)
@@ -613,23 +620,35 @@ static void tsi721_dma_tasklet(unsigned long data)
 	dmac_int = ioread32(bdma_chan->regs + TSI721_DMAC_INT);
 	tsi_debug(DMA, &bdma_chan->dchan.dev->device, "DMAC%d_INT = 0x%x",
 		  bdma_chan->id, dmac_int);
-	/* Clear channel interrupts */
-	iowrite32(dmac_int, bdma_chan->regs + TSI721_DMAC_INT);
 
 	if (dmac_int & TSI721_DMAC_INT_ERR) {
+		u32 rval;
+		LIST_HEAD(list);
+		struct tsi721_tx_desc *_desc, *_d;
+
 		desc = bdma_chan->active_tx;
 		dmac_sts = ioread32(bdma_chan->regs + TSI721_DMAC_STS);
 		tsi_err(&bdma_chan->dchan.dev->device,
 			"DMAC%d_STS = 0x%x did=%d raddr=0x%llx",
 			bdma_chan->id, dmac_sts, desc->destid, desc->rio_addr);
 
-		if ((dmac_sts & TSI721_DMAC_STS_ABORT) == 0)
+		if ((dmac_sts & TSI721_DMAC_STS_ABORT) == 0) {
+			/* Disable BDMA channel ERROR interrupts */
+			rval = ioread32(bdma_chan->regs + TSI721_DMAC_INTE);
+			rval &= ~TSI721_DMAC_INT_ERR;
+			iowrite32(rval, bdma_chan->regs + TSI721_DMAC_INTE);
+			tasklet_schedule(&bdma_chan->tasklet);
 			goto err_out;
+		}
+
+		/* Clear error interrupt */
+		iowrite32(TSI721_DMAC_INT_ERR, bdma_chan->regs + TSI721_DMAC_INT);
 
 		tsi721_clr_stat(bdma_chan);
 
 		spin_lock(&bdma_chan->lock);
 
+		bdma_chan->active = false;
 		desc->status = DMA_ERROR;
 		dma_cookie_complete(&desc->txd);
 
@@ -644,6 +663,8 @@ static void tsi721_dma_tasklet(unsigned long data)
 
 		list_add(&desc->desc_node, &bdma_chan->free_list);
 		bdma_chan->active_tx = NULL;
+		/* Get list of pending requests for this channel */
+		list_splice_init(&bdma_chan->queue, &list);
 		spin_unlock(&bdma_chan->lock);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
 		res.result = (desc->rtype == NREAD) ?
@@ -653,6 +674,9 @@ static void tsi721_dma_tasklet(unsigned long data)
 		if (callback)
 			callback(param);
 #endif
+		/* Notify issuers of pending requesst */
+		list_for_each_entry_safe(_desc, _d, &list, desc_node)
+			tsi721_dma_tx_err(bdma_chan, _desc);
 		goto err_out;
 	}
 
@@ -660,9 +684,14 @@ static void tsi721_dma_tasklet(unsigned long data)
 		tsi_err(&bdma_chan->dchan.dev->device,
 			"DMAC%d descriptor status FIFO is full",
 			bdma_chan->id);
+		/* Clear interrupt */
+		iowrite32(TSI721_DMAC_INT_STFULL, bdma_chan->regs + TSI721_DMAC_INT);
 	}
 
 	if (dmac_int & (TSI721_DMAC_INT_DONE | TSI721_DMAC_INT_IOFDONE)) {
+		/* Clear interrupts */
+		iowrite32(TSI721_DMAC_INT_DONE | TSI721_DMAC_INT_IOFDONE,
+			  bdma_chan->regs + TSI721_DMAC_INT);
 		tsi721_clr_stat(bdma_chan);
 		spin_lock(&bdma_chan->lock);
 		desc = bdma_chan->active_tx;
