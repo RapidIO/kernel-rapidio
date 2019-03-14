@@ -268,6 +268,7 @@ static struct class *dev_class;
 static dev_t dev_number;
 
 static void mport_release_mapping(struct kref *ref);
+static void put_dma_channel(struct mport_cdev_priv *priv);
 
 static int rio_mport_maint_rd(struct mport_cdev_priv *priv, void __user *arg,
 			      int local)
@@ -606,7 +607,7 @@ static void dma_req_free(struct kref *ref)
 		mutex_unlock(&req->map->md->buf_mutex);
 	}
 
-	kref_put(&priv->dma_ref, mport_release_dma);
+	put_dma_channel(priv);
 
 	kfree(req);
 }
@@ -814,7 +815,7 @@ static int do_dma_request(struct mport_dma_req *req,
 
 	if (ret == -ERESTARTSYS) {
 		/* Wait_for_completion was interrupted by a signal but DMA may
-		 * be in progress
+		 * be in progress (req->status = DMA_IN_PROGRESS)
 		 */
 		rmcd_error("%s(%d) wait for DMA_%s %d was interrupted",
 			current->comm, task_pid_nr(current),
@@ -863,7 +864,7 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 	struct mport_dma_req *req;
 	struct mport_dev *md = priv->md;
 	struct dma_chan *chan;
-	int i, ret;
+	int ret;
 	int nents;
 	struct rio_mport_mapping *map = NULL;
 
@@ -1016,12 +1017,6 @@ rio_dma_transfer(struct file *filp, u32 transfer_mode,
 	}
 
 err_pg:
-	if (!req->page_list) {
-		for (i = 0; i < nr_pages; i++)
-			put_page(page_list[i]);
-		rmcd_debug(DMA, "free page_list");
-		kfree(page_list);
-	}
 err_req:
 	kref_put(&req->refcount, dma_req_free);
 	rmcd_debug(DMA, "exit err=%d", ret);
