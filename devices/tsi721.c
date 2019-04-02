@@ -296,6 +296,52 @@ tsi721_pw_handler(struct tsi721_device *priv)
 	return 0;
 }
 
+static int
+tsi721_port_err_handler(struct tsi721_device *priv)
+{
+	/* Tsi721 only has one port, so do not bother checking port status. */
+	union rio_pw_msg pwmsg;
+	u32 plm_en;
+	u32 plm_stat;
+
+	/* compose port write using local register values.
+	 * NOTE: Ignores RCS and LOCALOG bits.
+	 * Tsi721 PORT is 0
+	 */
+	pwmsg.em.comptag = ioread32(priv->regs + RIO_COMPONENT_TAG_CSR);
+	pwmsg.em.errdetect = ioread32(priv->regs + TSI721_SP_ERR_DET);
+	pwmsg.em.ltlerrdet = ioread32(priv->regs + TSI721_ERR_DET);
+	plm_stat = ioread32(priv->regs + TSI721_RIO_PLM_SP_STATUS);
+	plm_en = ioread32(priv->regs + TSI721_RIO_PLM_SP_INT_EN);
+
+	pwmsg.em.is_port = plm_stat & plm_en & TSI721_RIO_PLM_IS_PW_MASK;
+	tsi_info(&priv->pdev->dev,
+		"IRQ from SRIO MAC ED 0x%08x I 0x%08x E 0x%08x",
+		pwmsg.em.errdetect, pwmsg.em.is_port, plm_en);
+
+	/* Queue PW message (if there is room in FIFO),
+	 * otherwise discard it.
+	 */
+
+	spin_lock(&priv->pw_fifo_lock);
+	if (kfifo_avail(&priv->pw_fifo) >= TSI721_RIO_PW_MSG_SIZE)
+		kfifo_in(&priv->pw_fifo, &pwmsg, TSI721_RIO_PW_MSG_SIZE);
+	else
+		priv->pw_discard_count++;
+	spin_unlock(&priv->pw_fifo_lock);
+
+	/* Disable active PLM interrupt sources. */
+	plm_en = plm_en ^ pwmsg.em.is_port;
+	iowrite32(plm_en, priv->regs + TSI721_RIO_PLM_SP_INT_EN);
+
+	/* Clear pending interrupt events. */
+	iowrite32(pwmsg.em.is_port, priv->regs + TSI721_RIO_PLM_SP_STATUS);
+
+	schedule_work(&priv->pw_work);
+
+	return 0;
+}
+
 static void tsi721_pw_dpc(struct work_struct *work)
 {
 	struct tsi721_device *priv = container_of(work, struct tsi721_device,
@@ -570,6 +616,8 @@ static irqreturn_t tsi721_irqhandler(int irq, void *ptr)
 		intval = ioread32(priv->regs + TSI721_RIO_EM_INT_STAT);
 		if (intval & TSI721_RIO_EM_INT_STAT_PW_RX)
 			tsi721_pw_handler(priv);
+		if (intval & TSI721_RIO_EM_INT_STAT_PORT)
+			tsi721_port_err_handler(priv);
 	}
 
 #ifdef CONFIG_RAPIDIO_DMA_ENGINE
@@ -684,6 +732,8 @@ static irqreturn_t tsi721_srio_msix(int irq, void *ptr)
 	srio_int = ioread32(priv->regs + TSI721_RIO_EM_INT_STAT);
 	if (srio_int & TSI721_RIO_EM_INT_STAT_PW_RX)
 		tsi721_pw_handler(priv);
+	if (srio_int & TSI721_RIO_EM_INT_STAT_PORT)
+		tsi721_port_err_handler(priv);
 
 	return IRQ_HANDLED;
 }
@@ -2766,6 +2816,16 @@ static int tsi721_setup_mport(struct tsi721_device *priv)
 		  priv->regs + (0x100 + RIO_PORT_LINKTO_CTL_CSR));
 	iowrite32(TSI721_DEFAULT_RESP_TO,
 		  priv->regs + (0x100 + RIO_PORT_RSPTO_CTL_CSR));
+
+	/* Set default dead link timer threshold */
+	{
+	u32 rval;
+
+	rval = ioread32(priv->regs + TSI721_RIO_PLM_IMP_SPEC_CTL);
+	rval &= ~TSI721_RIO_PLM_IMP_SPEC_CTL_DLT_THR;
+	iowrite32(rval | TSI721_DEFAULT_DLT_TR,
+		priv->regs + TSI721_RIO_PLM_IMP_SPEC_CTL);
+	}
 
 	err = rio_register_mport(mport);
 	if (err) {

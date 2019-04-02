@@ -68,6 +68,7 @@ extern u32 dbg_level;
 #define DEFAULT_DESTID		0xff
 #define TSI721_DEFAULT_LINK_TO	0xa6 /* TO counter value for ~50 uS */
 #define TSI721_DEFAULT_RESP_TO	0x81dca /* TO counter value for ~100 mS */
+#define TSI721_DEFAULT_DLT_TR	0x1f40	/* Threshold for dead link TO ~200 mS */
 
 /* PCI device ID */
 #define PCI_DEVICE_ID_TSI721		0x80ab
@@ -116,17 +117,36 @@ extern u32 dbg_level;
 #define TSI721_PCIECFG_EPCTL	0x400
 
 /*
+ * Error Management Registers
+ */
+
+#define TSI721_ERR_DET		0x1008
+#define TSI721_SP_ERR_DET	0x1040
+
+/*
  * PLM Control Registers
  */
 
 #define TSI721_RIO_PLM_IMP_SPEC_CTL	0x10080
 #define TSI721_RIO_PLM_IMP_SPEC_CTL_FREINIT	0x04000000
+#define TSI721_RIO_PLM_IMP_SPEC_CTL_DLT_THR 0x0000ffff
+
+#define TSI721_RIO_PLM_SP_STATUS 0x10090
+#define TSI721_RIO_PLM_SP_STATUS_LINK_INIT 0x10000000
+#define TSI721_RIO_PLM_SP_STATUS_DLT 0x08000000
+#define TSI721_RIO_PLM_IS_PW_MASK 0xFFFFC000
+
+#define TSI721_RIO_PLM_SP_INT_EN       0x10094
+
+#define TSI721_RIO_PLM_SP_ALL_INT_EN   0x100a0
+#define TSI721_RIO_PLM_SP_ALL_INT_EN_IRQ_EN    0x00000001
 
 /*
  * Event Management Registers
  */
 
 #define TSI721_RIO_EM_INT_STAT		0x10910
+#define TSI721_RIO_EM_INT_STAT_PORT	0x20000000
 #define TSI721_RIO_EM_INT_STAT_PW_RX	0x00010000
 
 #define TSI721_RIO_EM_INT_ENABLE	0x10914
