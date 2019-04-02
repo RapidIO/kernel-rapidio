@@ -303,6 +303,8 @@ tsi721_port_err_handler(struct tsi721_device *priv)
 	union rio_pw_msg pwmsg;
 	u32 plm_en;
 	u32 plm_stat;
+	u32 hs_ints = TSI721_RIO_PLM_SP_INT_EN_LINK_INIT
+			| TSI721_RIO_PLM_SP_INT_EN_DLT;
 
 	/* compose port write using local register values.
 	 * NOTE: Ignores RCS and LOCALOG bits.
@@ -330,12 +332,44 @@ tsi721_port_err_handler(struct tsi721_device *priv)
 		priv->pw_discard_count++;
 	spin_unlock(&priv->pw_fifo_lock);
 
-	/* Disable active PLM interrupt sources. */
+	/* Disable active PLM interrupt sources.
+	 *
+	 * Handle hot-swap by enabling Link Initialization
+	 * events after a Dead Link Timer (DLT), and the DLT
+	 * after a Link Initialization Event.
+	 */
 	plm_en = plm_en ^ pwmsg.em.is_port;
-	iowrite32(plm_en, priv->regs + TSI721_RIO_PLM_SP_INT_EN);
 
-	/* Clear pending interrupt events. */
-	iowrite32(pwmsg.em.is_port, priv->regs + TSI721_RIO_PLM_SP_STATUS);
+	if (pwmsg.em.is_port & hs_ints)
+		plm_stat |= hs_ints;
+
+	if (pwmsg.em.is_port & TSI721_RIO_PLM_SP_STATUS_DLT) {
+		/* Set PORT_LOCKOUT immediately when the link fails. */
+		u32 ctl;
+		ctl = ioread32(priv->regs + TSI721_CTL);
+		ctl |= RIO_PORT_N_CTL_LOCKOUT;
+		iowrite32(ctl, priv->regs + TSI721_CTL);
+
+		/* Enable Link Initialization Events. */
+		plm_en |= TSI721_RIO_PLM_SP_INT_EN_LINK_INIT;
+		plm_en &= ~TSI721_RIO_PLM_SP_INT_EN_DLT;
+	}
+	/* Do not clear PORT_LOCKOUT, that is the responsibility
+	 * of the user mode handler for now.
+	 */
+	if (pwmsg.em.is_port & TSI721_RIO_PLM_SP_STATUS_LINK_INIT) {
+		plm_en |= TSI721_RIO_PLM_SP_INT_EN_DLT;
+		plm_en &= ~TSI721_RIO_PLM_SP_INT_EN_LINK_INIT;
+	}
+	tsi_info(&priv->pdev->dev,
+		"Port Interrupt St 0x%08x En 0x%08x Clr 0x%08x",
+		pwmsg.em.is_port, plm_en, plm_stat);
+
+	/* Clear all interrupt events. */
+	iowrite32(plm_stat, priv->regs + TSI721_RIO_PLM_SP_STATUS);
+
+	/* Clear all interrupt events. */
+	iowrite32(plm_en, priv->regs + TSI721_RIO_PLM_SP_INT_EN);
 
 	schedule_work(&priv->pw_work);
 

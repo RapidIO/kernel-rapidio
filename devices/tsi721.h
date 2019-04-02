@@ -117,6 +117,11 @@ extern u32 dbg_level;
 #define TSI721_PCIECFG_EPCTL	0x400
 
 /*
+ * Per-port physical layer registers
+ */
+
+#define TSI721_CTL		0x15c
+/*
  * Error Management Registers
  */
 
@@ -137,6 +142,8 @@ extern u32 dbg_level;
 #define TSI721_RIO_PLM_IS_PW_MASK 0xFFFFC000
 
 #define TSI721_RIO_PLM_SP_INT_EN       0x10094
+#define TSI721_RIO_PLM_SP_INT_EN_LINK_INIT 0x10000000
+#define TSI721_RIO_PLM_SP_INT_EN_DLT 0x08000000
 
 #define TSI721_RIO_PLM_SP_ALL_INT_EN   0x100a0
 #define TSI721_RIO_PLM_SP_ALL_INT_EN_IRQ_EN    0x00000001
