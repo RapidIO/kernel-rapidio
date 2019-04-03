@@ -120,6 +120,7 @@ extern u32 dbg_level;
  * Per-port physical layer registers
  */
 
+#define TSI721_ERR_STAT		0x158
 #define TSI721_CTL		0x15c
 /*
  * Error Management Registers

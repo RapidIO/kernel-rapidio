@@ -394,6 +394,8 @@ static void tsi721_pw_dpc(struct work_struct *work)
 
 /**
  * tsi721_pw_enable - enable/disable port-write interface init
+ *                    Also enables/disables local hot swap events,
+ *                    which are passed up as port-writes.
  * @mport: Master port implementing the port write unit
  * @enable:    1=enable; 0=disable port-write message handling
  */
@@ -401,7 +403,9 @@ static int tsi721_pw_enable(struct rio_mport *mport, int enable)
 {
 	struct tsi721_device *priv = mport->priv;
 	u32 rval;
+	u32 enables;
 
+	/* Enable port-write reception */
 	rval = ioread32(priv->regs + TSI721_RIO_EM_INT_ENABLE);
 
 	if (enable)
@@ -415,6 +419,28 @@ static int tsi721_pw_enable(struct rio_mport *mport, int enable)
 	/* Update enable bits */
 	iowrite32(rval, priv->regs + TSI721_RIO_EM_INT_ENABLE);
 
+	/* Enable hot swap interrupt reception */
+	if (!enable) {
+		iowrite32(0, priv->regs + TSI721_RIO_PLM_SP_ALL_INT_EN);
+		goto exit;
+	}
+	/* Enable dead link timer or link initialization interrupts
+	 * based on the current status of the link.  These local events
+	 * are passed to the application as port-writes.
+	 */
+	rval = ioread32(priv->regs + TSI721_ERR_STAT);
+	enables = ioread32(priv->regs + TSI721_RIO_PLM_SP_INT_EN);
+	if (rval & RIO_PORT_N_ERR_STS_PORT_OK) {
+		enables &= ~TSI721_RIO_PLM_SP_STATUS_LINK_INIT;
+		enables |= TSI721_RIO_PLM_SP_STATUS_DLT;
+	} else {
+		enables |= TSI721_RIO_PLM_SP_STATUS_LINK_INIT;
+		enables &= ~TSI721_RIO_PLM_SP_STATUS_DLT;
+	}
+	iowrite32(enables, priv->regs + TSI721_RIO_PLM_SP_INT_EN);
+	iowrite32(TSI721_RIO_PLM_SP_ALL_INT_EN_IRQ_EN,
+		priv->regs + TSI721_RIO_PLM_SP_ALL_INT_EN);
+exit:
 	return 0;
 }
 
