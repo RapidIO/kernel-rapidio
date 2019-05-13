@@ -419,8 +419,12 @@ static int tsi721_pw_enable(struct rio_mport *mport, int enable)
 	/* Update enable bits */
 	iowrite32(rval, priv->regs + TSI721_RIO_EM_INT_ENABLE);
 
-	/* Enable hot swap interrupt reception */
+	/* Disable hot swap interrupts */
 	if (!enable) {
+		enables = ioread32(priv->regs + TSI721_RIO_PLM_SP_INT_EN);
+		enables &= ~TSI721_RIO_PLM_SP_STATUS_LINK_INIT;
+		enables &= ~TSI721_RIO_PLM_SP_STATUS_DLT;
+		iowrite32(enables, priv->regs + TSI721_RIO_PLM_SP_INT_EN);
 		iowrite32(0, priv->regs + TSI721_RIO_PLM_SP_ALL_INT_EN);
 		goto exit;
 	}

@@ -2176,11 +2176,13 @@ static void mport_cdev_release_dma(struct file *filp)
 static int mport_cdev_release(struct inode *inode, struct file *filp)
 {
 	struct mport_cdev_priv *priv = filp->private_data;
+	struct mport_dev *md = priv->md;
 	struct mport_dev *chdev;
 	struct rio_mport_pw_filter *pw_filter, *pw_filter_next;
 	struct rio_mport_db_filter *db_filter, *db_filter_next;
 	struct rio_mport_mapping *map, *_map;
 	unsigned long flags;
+	int hdel = 0;
 
 	rmcd_debug(EXIT, "%s filp=%p", dev_name(&priv->md->dev), filp);
 
@@ -2191,11 +2193,17 @@ static int mport_cdev_release(struct inode *inode, struct file *filp)
 
 	spin_lock_irqsave(&chdev->pw_lock, flags);
 	if (!list_empty(&priv->pw_filters)) {
+		hdel = 1;
 		list_for_each_entry_safe(pw_filter, pw_filter_next,
 					 &priv->pw_filters, priv_node)
 			rio_mport_delete_pw_filter(pw_filter);
 	}
 	spin_unlock_irqrestore(&chdev->pw_lock, flags);
+	if (hdel) {
+		rio_del_mport_pw_handler(md->mport, priv->md,
+					rio_mport_pw_handler);
+		rio_pw_enable(md->mport, 0);
+	}
 
 	spin_lock_irqsave(&chdev->db_lock, flags);
 	list_for_each_entry_safe(db_filter, db_filter_next,
