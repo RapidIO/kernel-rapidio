@@ -268,6 +268,9 @@ tsi721_pw_handler(struct tsi721_device *priv)
 
 
 	pw_stat = ioread32(priv->regs + TSI721_RIO_PW_RX_STAT);
+	/* Check for irregularities in port-write reception. */
+	if (pw_stat & 0x0000000E)
+		tsi_err(&priv->pdev->dev, "PW_STAT: 0x%x\n", pw_stat);
 
 	if (pw_stat & TSI721_RIO_PW_RX_STAT_PW_VAL) {
 		pw_buf[0] = ioread32(priv->regs + TSI721_RIO_PW_RX_CAPT(0));
