@@ -158,7 +158,7 @@ static int tsi721_maint_dma(struct tsi721_device *priv, u32 sys_size,
 	while ((ch_stat = ioread32(regs + TSI721_DMAC_STS))
 							& TSI721_DMAC_STS_RUN) {
 		udelay(1);
-		if (++i >= 5000000) {
+		if (++i >= 5000) {
 			tsi_debug(MAINT, &priv->pdev->dev,
 				"DMA[%d] read timeout ch_status=%x",
 				priv->mdma.ch_id, ch_stat);
@@ -265,7 +265,6 @@ tsi721_pw_handler(struct tsi721_device *priv)
 {
 	u32 pw_stat;
 	u32 pw_buf[TSI721_RIO_PW_MSG_SIZE/sizeof(u32)];
-
 
 	pw_stat = ioread32(priv->regs + TSI721_RIO_PW_RX_STAT);
 	/* Check for irregularities in port-write reception. */

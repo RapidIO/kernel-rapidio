@@ -66,8 +66,8 @@ extern u32 dbg_level;
 
 #define DEFAULT_HOPCOUNT	0xff
 #define DEFAULT_DESTID		0xff
-#define TSI721_DEFAULT_LINK_TO	0xa6 /* TO counter value for ~50 uS */
-#define TSI721_DEFAULT_RESP_TO	0x81dca /* TO counter value for ~100 mS */
+#define TSI721_DEFAULT_LINK_TO 0x11 /* TO counter value for ~5 uS */
+#define TSI721_DEFAULT_RESP_TO 0x81dca /* TO counter value for ~18.8-37.6 uS */
 #define TSI721_DEFAULT_DLT_TR	0x1f40	/* Threshold for dead link TO ~200 mS */
 
 /* PCI device ID */
