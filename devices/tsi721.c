@@ -138,7 +138,8 @@ static int tsi721_maint_dma(struct tsi721_device *priv, u32 sys_size,
 	rd_count = ioread32(regs + TSI721_DMAC_DRDCNT);
 
 	/* Initialize DMA descriptor */
-	bd_ptr[0].type_id = cpu_to_le32((DTYPE2 << 29) | (op << 19) | destid);
+	/* Data in descriptor, Maintenance Read/write, Priority 2+CRF, destID */
+	bd_ptr[0].type_id = cpu_to_le32((DTYPE2 << 29) | (op << 19) | (2 << 17) | 0x10000 | destid);
 	bd_ptr[0].bcount = cpu_to_le32((sys_size << 26) | 0x04);
 	bd_ptr[0].raddr_lo = cpu_to_le32((hopcount << 24) | offset);
 	bd_ptr[0].raddr_hi = 0;
