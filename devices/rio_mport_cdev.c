@@ -27,6 +27,7 @@
 #include <linux/spinlock.h>
 #include <linux/sched.h>
 #include <linux/kfifo.h>
+#include <linux/interrupt.h>
 
 #include <linux/mm.h>
 #include <linux/slab.h>
@@ -560,6 +561,9 @@ struct mport_dma_req {
 	struct dma_chan *dmach;
 	enum dma_data_direction dir;
 	dma_cookie_t cookie;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+	struct dmaengine_result result;
+#endif
 	enum dma_status	status;
 	struct completion req_comp;
 };
@@ -619,15 +623,21 @@ static void dma_xfer_callback(void *param,
 	struct mport_dma_req *req = (struct mport_dma_req *)param;
 	struct mport_cdev_priv *priv = req->priv;
 
-	if (result->result != DMA_TRANS_NOERROR)
+	if (result && (result->result != DMA_TRANS_NOERROR)) {
 		req->status = DMA_ERROR;
-	else
+		req->result = *result;
+		rmcd_error("Cookie %d status %d (res=0x%x due=0x%x)",
+			req->cookie, req->status,
+			req->result.result, req->result.residue);
+	} else {
 		req->status = dma_async_is_tx_complete(priv->dmach, req->cookie,
 					       NULL, NULL);
+		rmcd_debug(DMA, "Cookie %d status %d",
+			req->cookie, req->status);
+	}
 
 	complete(&req->req_comp);
 	kref_put(&req->refcount, dma_req_free);
-
 }
 #else
 static void dma_xfer_callback(void *param)
@@ -831,12 +841,34 @@ static int do_dma_request(struct mport_dma_req *req,
 #else
 	if (req->status != DMA_SUCCESS) {
 #endif
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+		switch (req->result.result) {
+		case DMA_TRANS_READ_FAILED:
+			ret = -ETIMEDOUT;
+			break;
+		case DMA_TRANS_WRITE_FAILED:
+			ret = -ECONNREFUSED;
+			break;
+		default:
+			ret = 0;
+		}
+		if (ret) {
+			rmcd_error("%s(%d) DMA_%s %d st %d (ret=%d res=0x%x due=0x%x)",
+				current->comm, task_pid_nr(current),
+				(dir == DMA_DEV_TO_MEM)?"READ":"WRITE",
+				cookie, req->status, ret,
+				req->result.result, req->result.residue);
+		}
+#else
 		/* DMA transaction completion was signaled with error */
 		rmcd_error("%s(%d) DMA_%s %d completed with status %d (ret=%d)",
 			current->comm, task_pid_nr(current),
 			(dir == DMA_DEV_TO_MEM)?"READ":"WRITE",
 			cookie, req->status, ret);
 		ret = -EIO;
+#endif
+	} else {
+		rmcd_debug(DMA, "Complete.");
 	}
 
 err_out:
@@ -1131,14 +1163,32 @@ static int rio_mport_wait_for_async_dma(struct file *filp, void __user *arg)
 #else
 	if (req->status != DMA_SUCCESS) {
 #endif
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+		switch (req->result.result) {
+		case DMA_TRANS_READ_FAILED:
+			ret = -ETIMEDOUT;
+			break;
+		case DMA_TRANS_WRITE_FAILED:
+			ret = -ECONNREFUSED;
+			break;
+		case DMA_TRANS_ABORTED:
+			ret = -ENOTRECOVERABLE;
+			break;
+		default:
+			ret = 0;
+		}
+
 		/* DMA transaction completion signaled with transfer error */
-		rmcd_error("%s(%d) ASYNC DMA_%s completion with status %d",
+		rmcd_error("%s(%d) ASYNC DMA_%s failed with status %d, ret %d",
 			current->comm, task_pid_nr(current),
 			(req->dir == DMA_FROM_DEVICE)?"READ":"WRITE",
-			req->status);
-		ret = -EIO;
-	} else
+			req->status, ret);
+	} else {
+#endif
 		ret = 0;
+		rmcd_debug(DMA, "Cookie %d Status %d",
+			req->cookie, req->status);
+	}
 
 	if (req->status != DMA_IN_PROGRESS && req->status != DMA_PAUSED)
 		kref_put(&req->refcount, dma_req_free);

@@ -682,6 +682,24 @@ static void tsi721_dma_tasklet(unsigned long data)
 		rval |= TSI721_DMAC_INT_ERR;
 		iowrite32(rval, bdma_chan->regs + TSI721_DMAC_INTE);
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+		/* Set specific abort reason:
+		 * DMA_TRANS_ABORTED: PCIe error
+		 * DMA_TRANS_READ_FAILED: For reads, ERR response, for writes, response timeout.
+		 * DMA_TRANS_WRITE_FAILED: For reads, response timeout, for writes, ERR response.
+		 */
+		rval = ioread32(bdma_chan->regs + TSI721_DMAC_STS);
+		res.residue = rval;
+		rval &= TSI721_DMAC_STS_CS;
+
+		if (TSI721_DMAC_STS_CS_RTO == rval)
+			res.result = DMA_TRANS_READ_FAILED;
+		else if (TSI721_DMAC_STS_CS_ERR == rval)
+			res.result = DMA_TRANS_WRITE_FAILED;
+		else
+			res.result = DMA_TRANS_ABORTED;
+#endif
+
 		spin_lock(&bdma_chan->lock);
 
 		desc->status = DMA_ERROR;
@@ -704,8 +722,6 @@ static void tsi721_dma_tasklet(unsigned long data)
 			tsi721_advance_work(bdma_chan, NULL);
 		spin_unlock(&bdma_chan->lock);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
-		res.result = (desc->rtype == NREAD) ?
-			DMA_TRANS_READ_FAILED : DMA_TRANS_WRITE_FAILED;
 		dmaengine_desc_callback_invoke(&cb, &res);
 #else
 		if (callback)
