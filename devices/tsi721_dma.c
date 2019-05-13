@@ -316,6 +316,29 @@ static irqreturn_t tsi721_bdma_msix(int irq, void *ptr)
 }
 #endif /* CONFIG_PCI_MSI */
 
+static void tsi721_clr_stat(struct tsi721_bdma_chan *bdma_chan)
+{
+	u32 srd_ptr;
+	u64 *sts_ptr;
+	int i, j;
+
+	/* Check and clear descriptor status FIFO entries */
+	srd_ptr = bdma_chan->sts_rdptr;
+	sts_ptr = bdma_chan->sts_base;
+	j = srd_ptr * 8;
+	while (sts_ptr[j]) {
+		for (i = 0; i < 8 && sts_ptr[j]; i++, j++)
+			sts_ptr[j] = 0;
+
+		++srd_ptr;
+		srd_ptr %= bdma_chan->sts_size;
+		j = srd_ptr * 8;
+	}
+
+	iowrite32(srd_ptr, bdma_chan->regs + TSI721_DMAC_DSRP);
+	bdma_chan->sts_rdptr = srd_ptr;
+}
+
 /* Must be called with the spinlock held */
 static void tsi721_start_dma(struct tsi721_bdma_chan *bdma_chan)
 {
@@ -344,6 +367,31 @@ static void tsi721_start_dma(struct tsi721_bdma_chan *bdma_chan)
 	bdma_chan->wr_count = bdma_chan->wr_count_next;
 }
 
+static void
+tsi721_dma_restart(struct tsi721_bdma_chan *bdma_chan)
+{
+	size_t sts_size = bdma_chan->sts_size * sizeof(struct tsi721_dma_sts);;
+
+	/* Zero Status buffer  */
+	memset(bdma_chan->sts_base, 0, sts_size);
+
+	bdma_chan->sts_rdptr = 0;
+	bdma_chan->wr_count = 0;
+	bdma_chan->wr_count_next = 0;
+
+	tsi_debug(DMA, &bdma_chan->dchan.dev->device,
+		"DMAC%d Restart", bdma_chan->id);
+
+	/* Clear interrupt bits */
+	iowrite32(TSI721_DMAC_INT_ALL,
+		bdma_chan->regs + TSI721_DMAC_INT);
+	/* Ensure all previous PCIe register transactions complete */
+	ioread32(bdma_chan->regs + TSI721_DMAC_INT);
+
+	iowrite32(TSI721_DMAC_CTL_INIT, bdma_chan->regs + TSI721_DMAC_CTL);
+	udelay(10);
+}
+
 static int
 tsi721_desc_fill_init(struct tsi721_tx_desc *desc,
 		      struct tsi721_dma_desc *bd_ptr,
@@ -355,6 +403,7 @@ tsi721_desc_fill_init(struct tsi721_tx_desc *desc,
 		return -EINVAL;
 
 	/* Initialize DMA descriptor */
+	/* NOTE: Always use priority 0 for DMA transactions. */
 	bd_ptr->type_id = cpu_to_le32((DTYPE1 << 29) |
 				      (desc->rtype << 19) | desc->destid);
 	bd_ptr->bcount = cpu_to_le32(((desc->rio_addr & 0x3) << 30) |
@@ -406,29 +455,6 @@ static void tsi721_dma_tx_err(struct tsi721_bdma_chan *bdma_chan,
 		callback(param);
 #endif
 	list_move(&desc->desc_node, &bdma_chan->free_list);
-}
-
-static void tsi721_clr_stat(struct tsi721_bdma_chan *bdma_chan)
-{
-	u32 srd_ptr;
-	u64 *sts_ptr;
-	int i, j;
-
-	/* Check and clear descriptor status FIFO entries */
-	srd_ptr = bdma_chan->sts_rdptr;
-	sts_ptr = bdma_chan->sts_base;
-	j = srd_ptr * 8;
-	while (sts_ptr[j]) {
-		for (i = 0; i < 8 && sts_ptr[j]; i++, j++)
-			sts_ptr[j] = 0;
-
-		++srd_ptr;
-		srd_ptr %= bdma_chan->sts_size;
-		j = srd_ptr * 8;
-	}
-
-	iowrite32(srd_ptr, bdma_chan->regs + TSI721_DMAC_DSRP);
-	bdma_chan->sts_rdptr = srd_ptr;
 }
 
 /* Must be called with the channel spinlock held */
@@ -616,39 +642,48 @@ static void tsi721_dma_tasklet(unsigned long data)
 	void *param = NULL;
 #endif
 
-
 	dmac_int = ioread32(bdma_chan->regs + TSI721_DMAC_INT);
 	tsi_debug(DMA, &bdma_chan->dchan.dev->device, "DMAC%d_INT = 0x%x",
 		  bdma_chan->id, dmac_int);
 
 	if (dmac_int & TSI721_DMAC_INT_ERR) {
 		u32 rval;
-		LIST_HEAD(list);
-		struct tsi721_tx_desc *_desc, *_d;
 
 		desc = bdma_chan->active_tx;
 		dmac_sts = ioread32(bdma_chan->regs + TSI721_DMAC_STS);
-		tsi_err(&bdma_chan->dchan.dev->device,
+		tsi_debug(DMA, &bdma_chan->dchan.dev->device,
 			"DMAC%d_STS = 0x%x did=%d raddr=0x%llx",
 			bdma_chan->id, dmac_sts, desc->destid, desc->rio_addr);
 
+		/* If DMA channel has not aborted yet, check periodically
+		 * until it has.  A channel that has not aborted cannot
+		 * be restarted.  Note that the error interrupt has been disabled,
+		 * but the interrupt status is still there, so we'll keep checking...
+		 */
+
 		if ((dmac_sts & TSI721_DMAC_STS_ABORT) == 0) {
+			tsi_err(&bdma_chan->dchan.dev->device,
+				"DMAC%d_STS ERR no ABORT, DEAD...",
+				bdma_chan->id);
 			/* Disable BDMA channel ERROR interrupts */
 			rval = ioread32(bdma_chan->regs + TSI721_DMAC_INTE);
 			rval &= ~TSI721_DMAC_INT_ERR;
 			iowrite32(rval, bdma_chan->regs + TSI721_DMAC_INTE);
+			udelay(5);
 			tasklet_schedule(&bdma_chan->tasklet);
 			goto err_out;
 		}
 
-		/* Clear error interrupt */
+		/* Clear error interrupt, now that the DMA engine has aborted
+		 * Ensure that error interrupts are re-enabled.
+		 */
 		iowrite32(TSI721_DMAC_INT_ERR, bdma_chan->regs + TSI721_DMAC_INT);
-
-		tsi721_clr_stat(bdma_chan);
+		rval = ioread32(bdma_chan->regs + TSI721_DMAC_INTE);
+		rval |= TSI721_DMAC_INT_ERR;
+		iowrite32(rval, bdma_chan->regs + TSI721_DMAC_INTE);
 
 		spin_lock(&bdma_chan->lock);
 
-		bdma_chan->active = false;
 		desc->status = DMA_ERROR;
 		dma_cookie_complete(&desc->txd);
 
@@ -662,9 +697,11 @@ static void tsi721_dma_tasklet(unsigned long data)
 		}
 
 		list_add(&desc->desc_node, &bdma_chan->free_list);
+		/* Restart bdma_chan after abort. */
+		tsi721_dma_restart(bdma_chan);
 		bdma_chan->active_tx = NULL;
-		/* Get list of pending requests for this channel */
-		list_splice_init(&bdma_chan->queue, &list);
+		if (bdma_chan->active)
+			tsi721_advance_work(bdma_chan, NULL);
 		spin_unlock(&bdma_chan->lock);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4,9,0))
 		res.result = (desc->rtype == NREAD) ?
@@ -674,9 +711,9 @@ static void tsi721_dma_tasklet(unsigned long data)
 		if (callback)
 			callback(param);
 #endif
-		/* Notify issuers of pending requesst */
-		list_for_each_entry_safe(_desc, _d, &list, desc_node)
-			tsi721_dma_tx_err(bdma_chan, _desc);
+		tsi_err(&bdma_chan->dchan.dev->device,
+			"DMAC%d not active???",
+			bdma_chan->id);
 		goto err_out;
 	}
 
