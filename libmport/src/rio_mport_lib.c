@@ -1074,6 +1074,23 @@ void display_mport_info(struct rio_mport_properties *attr)
 	printf("\n");
 }
 
+int rio_mport_query_dma(int fd, int *dma_chan)
+{
+	int ret = -1;
+
+	/* Request MPORT list from the driver (first entry is list size) */
+	if (ioctl(fd, RIO_MPORT_QUERY_DMA, dma_chan)) {
+		ret = errno;
+		goto exit;
+	}
+
+	/* Return list information */
+	ret = 0;
+exit:
+	return ret;
+}
+
+
 #ifdef __cplusplus
 }
 #endif
