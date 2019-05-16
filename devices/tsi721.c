@@ -2780,6 +2780,10 @@ static void tsi721_disable_ints(struct tsi721_device *priv)
 	iowrite32(0, priv->regs + TSI721_RIO_EM_DEV_INT_EN);
 }
 
+#ifdef CONFIG_RAPIDIO_DMA_ENGINE
+int tsi721_query_dma(struct dma_chan *dma_chan);
+#endif
+
 static struct rio_ops tsi721_rio_ops = {
 	.lcread			= tsi721_lcread,
 	.lcwrite		= tsi721_lcwrite,
@@ -2799,6 +2803,9 @@ static struct rio_ops tsi721_rio_ops = {
 	.query_mport		= tsi721_query_mport,
 	.map_outb		= tsi721_map_outb_win,
 	.unmap_outb		= tsi721_unmap_outb_win,
+#ifdef CONFIG_RAPIDIO_DMA_ENGINE
+	.query_dma              = tsi721_query_dma,
+#endif
 };
 
 static void tsi721_mport_release(struct device *dev)
