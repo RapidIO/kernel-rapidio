@@ -2284,6 +2284,28 @@ static int mport_cdev_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+#ifdef CONFIG_RAPIDIO_DMA_ENGINE
+static int rio_mport_query_dma(struct file *filp, void __user *arg)
+{
+	struct mport_cdev_priv *priv = filp->private_data;
+	struct mport_dev *md = priv->md;
+	int chan_num = -1;
+
+	if (!md->mport->ops->query_dma)
+		return -EPROTONOSUPPORT;
+
+	if (priv->dmach)
+		chan_num = md->mport->ops->query_dma(priv->dmach);
+
+	if (copy_to_user((void __user *)arg, &chan_num, sizeof(chan_num)))
+		return -EFAULT;
+
+	rmcd_debug(EXIT, "filp=%p dma=%d", dev_name(&md->dev), chan_num);
+
+	return 0;
+}
+#endif
+
 /*
  * mport_cdev_ioctl() - IOCTLs for character device
  */
@@ -2354,6 +2376,10 @@ static long mport_cdev_ioctl(struct file *filp,
 		return rio_mport_add_riodev(data, (void __user *)arg);
 	case RIO_DEV_DEL:
 		return rio_mport_del_riodev(data, (void __user *)arg);
+#ifdef CONFIG_RAPIDIO_DMA_ENGINE
+	case RIO_MPORT_QUERY_DMA:
+		return rio_mport_query_dma(filp, (void __user *)arg);
+#endif
 	default:
 		break;
 	}

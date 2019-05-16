@@ -284,5 +284,7 @@ struct rio_rdev_info {
 	_IOW(RIO_MPORT_DRV_MAGIC, 23, struct rio_rdev_info)
 #define RIO_DEV_DEL \
 	_IOW(RIO_MPORT_DRV_MAGIC, 24, struct rio_rdev_info)
+#define RIO_MPORT_QUERY_DMA \
+	_IOW(RIO_MPORT_DRV_MAGIC, 25, int)
 
 #endif /* _RIO_MPORT_CDEV_H_ */
