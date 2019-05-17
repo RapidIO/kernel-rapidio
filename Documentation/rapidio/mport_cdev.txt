@@ -57,6 +57,8 @@ following RapidIO bus and subsystem operations:
   transfer modes.
 - Check/Wait for completion of asynchronous DMA data transfer
     (RIO_WAIT_FOR_ASYNC)
+- Query status of the DMA engine allocated to an mport.
+    (RIO_MPORT_QUERY_DMA)
 - Manage device objects supported by RapidIO subsystem (RIO_DEV_ADD/RIO_DEV_DEL).
   This allows implementation of various RapidIO fabric enumeration algorithms
   as user-space applications while using remaining functionality provided by
