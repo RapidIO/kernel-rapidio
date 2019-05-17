@@ -1,0 +1,10 @@
+// Script to run on all endpoints in CPS hot swap test.
+// This script starts fault insertion on a node.
+//
+// In a 45 second period:
+// 15 seconds of link down
+// 5 seconds of error responses
+// 5 seconds of response timeouts
+t 12 -1 0
+w 12 H
+7T 12 I 45 15 5 5

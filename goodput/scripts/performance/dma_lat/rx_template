@@ -1,0 +1,22 @@
+levelog 1
+kill all
+wait 0 d
+wait 1 d
+wait 2 d
+wait 3 d
+wait 4 d
+wait 5 d
+wait 6 d
+wait 7 d
+thread 0 -1 0
+wait 0 2
+IBAlloc 0 bytes iba_addr
+wait 0 1
+wait 0 2
+dRxLat 0 did iba_addr acc_size
+wait 0 1
+echo DMA LATENCY RECEIVER bytes acc_size RUNNING!
+sleep wait_time
+echo DMA LATENCY RECEIVER bytes acc_size STATUS
+wait 0 r
+status

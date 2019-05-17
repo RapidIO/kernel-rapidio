@@ -1,0 +1,77 @@
+// Tsi721 <=> Tsi721 script
+//
+// Run this on node 2.
+// Node 2 performs continuous DMA transactions to node 1. 
+// Node 2 also inserts "response timeout" faults on its own links.
+
+levelog 6
+dlevel 5
+
+kill all
+thread 0 -1 0
+thread 1 -1 0
+thread 2 -1 0
+thread 3 -1 0
+thread 4 -1 1
+thread 5 -1 1
+thread 6 -1 1
+thread 7 -1 1
+thread 8 -1 1
+
+// Ensure MAST_EN is set
+lw 0x13c 0xE0000000
+
+// Ensure INPUT_EN and OUTPUT_EN are set
+lw 0x15c 0x600001
+
+// Shorten response timeout
+lw 0x124 0x1547
+
+// One thread does continuous successful DMA transactions
+wait 0 H
+// echo NWRITE, kbuf, sync, success
+dma 0 5 0x200000000 0x100000 0x100000 1 1 0 0 0 0 0 0 1
+
+// Remaining threads do continuously failing DMA transactions
+wait 1 H
+// echo NWRITE_R, kbuf, sync, failure
+dma 1 5 0x200000000 0x100000 0x100000 1 1 2 0 0 0 0 0 1
+
+wait 2 H
+// echo NWRITE_R, kbuf, async, failure
+dma 2 5 0x200000000 0x100000 0x100000 1 1 2 1 0 0 0 0 1
+
+wait 3 H
+// echo NWRITE_R, usermem, sync, failure
+dma 3 5 0x200000000 0x100000 0x100000 1 0 2 0 0 0 0 0 1
+
+wait 4 H
+// echo NWRITE_R, usermem, async, failure
+dma 4 5 0x200000000 0x100000 0x100000 1 0 2 1 0 0 0 0 1
+
+wait 5 H
+// echo NREAD, kbuf, sync, failure
+dma 5 5 0x200000000 0x100000 0x100000 0 1 0 0 0 0 0 0 1
+
+wait 6 H
+// echo NREAD, kbuf, async, failure
+dma 6 5 0x200000000 0x100000 0x100000 0 1 0 1 0 0 0 0 1
+
+wait 7 H
+// echo NREAD, usermem, sync, failure
+dma 7 5 0x200000000 0x100000 0x100000 0 0 0 0 0 0 0 0 1
+
+wait 8 H
+// echo NREAD, usermem, async, failure
+dma 8 5 0x200000000 0x100000 0x100000 0 0 0 1 0 0 0 0 1
+
+// Allocate inbound window for node 1's DMA
+thread 9 -1 0
+wait 9 H
+IBA 9 0x100000 0x200000000
+
+// Regularly insert response timeout fault on this endpoint.
+thread 10 -1 0
+wait 10 H
+7T 10 I 45 0 15 0
+

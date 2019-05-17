@@ -1,0 +1,61 @@
+// Script to test all possible timeout scenarios
+thread 0 -1 0
+wait 0 H
+
+// NWRITE, kbuf, sync, success
+h 0
+wait 0 H
+echo NWRITE, kbuf, sync, success
+dnum 0 5 0x200000000 0x100000 0x100000 1 1 0 0 1
+h 0
+wait 0 H
+echo NWRITE, kbuf, async, success
+dnum 0 5 0x200000000 0x100000 0x100000 1 1 0 1 1
+
+h 0
+wait 0 H
+echo NWRITE, usermem, sync, success
+dnum 0 5 0x200000000 0x100000 0x100000 1 0 0 0 1
+h 0
+wait 0 H
+echo NWRITE, usermem, async, success
+dnum 0 5 0x200000000 0x100000 0x100000 1 0 0 1 1
+
+h 0
+wait 0 H
+echo NWRITE_R, kbuf, sync, failure
+dnum 0 5 0x200000000 0x100000 0x100000 1 1 2 0 1
+h 0
+wait 0 H
+echo NWRITE_R, kbuf, async, failure
+dnum 0 5 0x200000000 0x100000 0x100000 1 1 2 1 1
+
+// NWRITE_R, usermem, sync/async, failure
+h 0
+wait 0 H
+cho NWRITE_R, usermem, sync, failure
+dnum 0 5 0x200000000 0x100000 0x100000 1 0 2 0 1
+h 0
+wait 0 H
+echo NWRITE_R, usermem, async, failure
+dnum 0 5 0x200000000 0x100000 0x100000 1 0 2 1 1
+
+h 0
+wait 0 H
+echo NREAD, kbuf, sync, failure
+dnum 0 5 0x200000000 0x100000 0x100000 0 1 0 0 1
+h 0
+wait 0 H
+echo NREAD, kbuf, async, failure
+dnum 0 5 0x200000000 0x100000 0x100000 0 1 0 1 1
+
+h 0
+wait 0 H
+echo NREAD, usermem, sync, failure
+dnum 0 5 0x200000000 0x100000 0x100000 0 0 0 0 1
+h 0
+wait 0 H
+echo NREAD, usermem, async, failure
+dnum 0 5 0x200000000 0x100000 0x100000 0 0 0 1 1
+h 0
+wait 0 H

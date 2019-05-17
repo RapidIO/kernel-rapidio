@@ -1,0 +1,61 @@
+kill all
+wait 0 D
+wait 1 D
+wait 2 D
+wait 3 D
+wait 4 D
+wait 5 D
+wait 6 D
+wait 7 D
+wait 8 D
+wait 9 D
+wait 10 D
+wait 11 D
+
+thread 0 -1 0
+thread 1 -1 0
+thread 2 -1 0
+thread 3 -1 0
+thread 4 -1 0
+thread 5 -1 0
+thread 6 -1 0
+thread 7 -1 0
+
+wait 0 H
+wait 1 H
+wait 2 H
+wait 3 H
+wait 4 H
+wait 5 H
+wait 6 H
+wait 7 H
+
+msgTx 0 did skt_prefix0 msg_size
+msgTx 1 did skt_prefix1 msg_size
+msgTx 2 did skt_prefix2 msg_size
+msgTx 3 did skt_prefix3 msg_size
+msgTx 4 did skt_prefix4 msg_size
+msgTx 5 did skt_prefix5 msg_size
+msgTx 6 did skt_prefix6 msg_size
+msgTx 7 did skt_prefix7 msg_size
+
+wait 0 R
+wait 1 R
+wait 2 R
+wait 3 R
+wait 4 R
+wait 5 R
+wait 6 R
+wait 7 R
+
+goodput
+goodput c
+goodput
+echo MSG TRANSMIT GOODPUT msg_size BYTES
+
+oset
+sleep wait_time
+echo MSG TRANSMIT GOODPUT msg_size BYTES
+status
+goodput
+od

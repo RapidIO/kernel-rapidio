@@ -1,0 +1,13 @@
+// Stand-alone test for Tsi721 port-write notification of hot swap events.
+
+dlevel 6
+
+// Start port-write reception thread.
+thread 0 -1 0
+w 0 H
+7T 0 P
+
+// Start fault insertion.  Disables the link for 15 seconds every 30 seconds.
+thread 1 -1 0
+w 1 H
+7T 1 I 30 15

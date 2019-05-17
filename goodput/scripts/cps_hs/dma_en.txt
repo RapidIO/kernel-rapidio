@@ -1,0 +1,8 @@
+// Run this script to configure the Tsi721 to send DMA transactions.
+//
+
+// Ensure MAST_EN is set
+lw 0x13c 0xE0000000
+
+// Ensure INPUT_EN and OUTPUT_EN are set
+lw 0x15c 0x600001

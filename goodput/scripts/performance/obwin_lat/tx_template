@@ -1,0 +1,25 @@
+// Template for OBDIO write and read latency measurements.
+// The read scripts can be run sequentially.
+// The Write scripts require the appropriate RX target scripts
+// to be run on the target before the write script is executed.
+//
+kill all
+wait 0 d
+wait 1 d
+wait 2 d
+wait 3 d
+wait 4 d
+wait 5 d
+wait 6 d
+wait 7 d
+thread 0 -1 0
+wait 0 h
+IBAlloc 0 bytes iba_addr
+wait 0 r
+wait 0 h
+DIOTxLat 0 did iba_addr acc_size wr
+wait 0 r
+echo DIOT LATENCY acc_size wr TRANSMIT
+sleep wait_time
+echo DIOT LATENCY acc_size wr TRANSMIT
+lat

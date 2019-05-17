@@ -1,0 +1,32 @@
+echo The start_target script must be run on the target node,
+echo and create_perf_scripts must be run on this node using target nodes   
+echo device ID before this script can be run!!!
+
+// UNKNOWN
+. dma_thru_read
+// UNKNOWN
+. dma_thru_write
+// UNKNOWN
+// UNKNOWN
+. dma_thru_interleave_read
+// UNKNOWN
+. dma_thru_interleave_write
+// UNKNOWN
+. pdma_thru_pdd_write
+// UNKNOWN
+. pdma_thru_pd1_write
+// UNKNOWN
+. pdma_thru_pdm_write
+// UNKNOWN
+. pdma_thru_pdm_read
+// UNKNOWN
+. pdma_thru_pd1_read
+// UNKNOWN
+. pdma_thru_pdd_read
+
+// Create log file indicating completion of run_all_dma script
+// to automated regression software.
+
+log logs/MPORT_DIR/run_all_dma_done.log
+status
+close

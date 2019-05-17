@@ -1,0 +1,12 @@
+# Logrotate file for RDMA daemon
+# Place this file under /etc/logrotate.d/
+/var/log/rdma/rdmad.log {
+	missingok
+	notifempty
+	size 2M
+	copytruncate
+	daily
+	rotate 3
+	compress
+	create 0600 root root
+}

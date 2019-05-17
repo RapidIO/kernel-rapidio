@@ -1,0 +1,27 @@
+kill all
+wait 0 0
+wait 1 0
+wait 2 0
+wait 3 0
+wait 4 0
+wait 5 0
+wait 6 0
+wait 7 0
+wait 8 0
+wait 9 0
+wait 10 0
+wait 11 0
+thread 0 -1 0
+wait 0 2
+dma 0 did iba_addr bytes acc_size wr 1 trans sync
+goodput
+goodput c
+goodput
+echo DMA THROUGHPUT bytes acc_size wr
+oset
+sleep wait_time
+wait 0 1
+status
+echo DMA THROUGHPUT bytes acc_size wr
+goodput
+odisp

@@ -1,0 +1,21 @@
+// Tsi721 <=> Tsi721 script
+//
+// Run this on node 1, which is the DMA target node.
+
+levelog 6
+dlevel 5
+
+// Ensure MAST_EN is set
+lw 0x13c 0xE0000000
+
+// Ensure INPUT_EN and OUTPUT_EN are set
+lw 0x15c 0x600001
+
+// Shorten response timeout
+lw 0x124 0x1547
+
+// Allocate inbound window.
+thread 3 -1 0
+wait 3 H
+IBA 3 0x100000 0x200000000
+

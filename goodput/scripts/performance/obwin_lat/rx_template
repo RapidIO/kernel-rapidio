@@ -1,0 +1,25 @@
+// Script for target of OBDIO latency testing
+// This sets up the target to wait for accesses and echo them back.
+//
+kill all
+wait 0 d
+wait 1 d
+wait 2 d
+wait 3 d
+wait 4 d
+wait 5 d
+wait 6 d
+wait 7 d
+thread 0 -1 0
+wait 0 h
+IBAlloc 0 bytes iba_addr
+wait 0 r
+wait 0 h
+DIORxLat 0 did iba_addr acc_size
+wait 0 R
+sleep wait_time
+log logs/mport_dir/OBWIN_RXsize_nameDONE.log
+wait 0 R
+status
+close
+status

@@ -1,0 +1,10 @@
+Documentation may be accessed directly in inc/goodput_intro.h
+
+To compile the tools, run "make all" in this directory.
+
+To create startup scripts for the tools:
+- run "create_start_scripts.sh" in the goodput/scripts directory.
+
+To create performance measurement scripts for the tools:
+- run "create_perf_scripts.sh" in the goodput/scripts directory.
+

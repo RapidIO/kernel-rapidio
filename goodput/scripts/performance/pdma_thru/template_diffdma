@@ -1,0 +1,70 @@
+// Template for parallel DMA where all threads use different DMA engines
+kill all
+
+wait 0 d
+wait 1 d
+wait 2 d
+wait 3 D
+wait 4 D
+wait 5 D
+wait 6 D
+wait 7 D
+wait 8 D
+wait 9 D
+wait 10 D
+wait 11 D
+
+thread 0 -1 1
+thread 1 -1 1
+thread 2 -1 1
+thread 3 -1 1
+thread 4 -1 1
+thread 5 -1 1
+thread 6 -1 1
+thread 7 -1 1
+
+wait 0 h
+wait 1 H
+wait 2 2
+wait 3 h
+wait 4 h
+wait 5 h
+wait 6 h
+wait 7 h
+
+dma 0 did iba_addr bytes acc_size wr 1 trans sync
+dma 1 did iba_addr bytes acc_size wr 1 trans sync2
+dma 2 did iba_addr bytes acc_size wr 1 trans sync3
+dma 3 did iba_addr bytes acc_size wr 1 trans sync
+dma 4 did iba_addr bytes acc_size wr 1 trans sync2
+dma 5 did iba_addr bytes acc_size wr 1 trans sync3
+dma 6 did iba_addr bytes acc_size wr 1 trans sync
+dma 7 did iba_addr bytes acc_size wr 1 trans sync2
+
+wait 0 r
+wait 1 r
+wait 2 r
+wait 3 r
+wait 4 r
+wait 5 r
+wait 6 r
+wait 7 r
+
+goodput
+goodput c
+goodput
+echo PDMA_DIF THROUGHPUT bytes acc_size UNUSED
+oset
+sleep wait_time
+wait 0 r
+wait 1 r
+wait 2 r
+wait 3 r
+wait 4 r
+wait 5 r
+wait 6 r
+wait 7 r
+
+echo PDMA_DIF THROUGHPUT bytes acc_size UNUSED
+goodput
+odisp

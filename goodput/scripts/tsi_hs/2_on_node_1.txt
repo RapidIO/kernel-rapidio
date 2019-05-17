@@ -1,0 +1,7 @@
+// Tsi721 <=> Tsi721 script
+// Run this on node 1 to cause error responses on node 2 periodically.
+
+// Regularly insert response timeout fault on this endpoint.
+thread 10 -1 0
+wait 10 H
+7T 10 I 45 0 0 15

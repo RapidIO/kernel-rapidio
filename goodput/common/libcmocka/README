@@ -1,0 +1,13 @@
+1/ downloaded https://cmocka.org/files/1.1/cmocka-1.1.0.tar.asc
+2/ extract to a temporary working directory
+3/ copied src/cmocka.c to src
+4/ copied include/*.h to inc
+5/ created a Makefile utilizing our standard flags
+6/ added __cplusplus guards to src and inc files
+
+If you want to build with cmake (in the actual source tree)
+	Modified cmocka-1.1.0/cmake/Modules/DefineCompilerFlags.cmake
+        	refrence to -std=gnu99
+	Create a build directory
+		cd build
+		cmake -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_C_FLAGS=-std=c11 <path to cmocka directory>

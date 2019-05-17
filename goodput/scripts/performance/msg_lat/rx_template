@@ -1,0 +1,27 @@
+log m_rx_log.txt
+
+kill all
+wait 0 0
+wait 1 0
+wait 2 0
+wait 3 0
+wait 4 0
+wait 5 0
+wait 6 0
+wait 7 0
+
+thread 0 -1 0
+
+wait 0 H
+
+mRxLat 0 skt_prefix9 0x1000
+
+wait 0 R
+
+echo RUNNING MESSAGE LATENCY LOOPBACK ON SOCKET skt_prefix0 
+
+sleep wait_time
+
+wait 0 R
+status
+close 

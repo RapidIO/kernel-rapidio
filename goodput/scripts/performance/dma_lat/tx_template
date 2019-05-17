@@ -1,0 +1,23 @@
+levelog 1
+kill all
+wait 0 d
+wait 1 d
+wait 2 d
+wait 3 d
+wait 4 d
+wait 5 d
+wait 6 d
+wait 7 d
+thread 0 -1 0
+wait 0 h
+IBAlloc 0 bytes iba_addr
+sleep 1
+wait 0 h
+dTxLat 0 did iba_addr acc_size wr 1 trans
+wait 0 r
+echo DMA LATENCY acc_size wr TRANSMIT
+sleep wait_time
+wait 0 r
+status
+echo DMA LATENCY acc_size wr TRANSMIT
+lat

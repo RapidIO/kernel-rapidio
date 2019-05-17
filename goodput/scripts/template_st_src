@@ -1,0 +1,24 @@
+scrpath MPORT_DIR
+kill all
+wait 0 D
+wait 1 D
+wait 2 D
+wait 3 D
+wait 4 D
+wait 5 D
+wait 6 D
+wait 7 D
+wait 8 D
+wait 9 D
+wait 10 D
+
+thread 10 -1 0
+wait 10 H
+
+IBAlloc 10 0x400000 iba_addr
+oset
+sleep 1
+wait 10 H
+
+status i
+mpdevs

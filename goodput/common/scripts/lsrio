@@ -1,0 +1,72 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+# Loaded drivers. If none loaded just exit as there would
+# be no devices enumeratred if rio_scan was NOT loaded.
+my @loaded_drivers = `lsmod | grep rio`;
+if( !scalar @loaded_drivers ) {
+    print "No RapidIO drivers loaded.\n";
+    exit;
+}
+
+# Print drivers that start with 'rio'. Excludes 'serio_raw' for example
+print "\nLoaded Rapid I/O drivers:\n";
+print "Driver name \t       Size\n";
+print "-----------\t\       --------\n";
+foreach my $rio_driver(@loaded_drivers) {
+        if( $rio_driver =~ /^rio/ ) { print $rio_driver; }
+}
+
+# Local Rapid I/O devices
+my @rapidio_ports = `ls /sys/class/rapidio_port`;
+if( !scalar @rapidio_ports ) {
+    print "No RapidIO devices detected.\n";
+    exit;
+}
+print "\nLocal Rapid I/O devices:\n";
+print "Master port\tDevice ID\n";
+print "-----------\t---------\n";
+my @local_destids;
+foreach my $rapidio_port(sort @rapidio_ports) {
+    chomp $rapidio_port;
+    my $destid = `cat /sys/class/rapidio_port/$rapidio_port/port_destid`;
+    chomp $destid;
+    push( @local_destids, $destid );
+    print $rapidio_port . "\t" . $destid . "\n";
+}
+
+# Remote Rapid I/O devices
+my @sys_bus_rapidio_devices = `ls /sys/bus/rapidio/devices`;
+if( !scalar @sys_bus_rapidio_devices ) {
+    # No devices at all which means no enumeration was run
+    print "\n\nThere are no reachable remote RapidIO devices.\n";
+    exit;
+} 
+
+print "\nRemote Rapid I/O devices:\n";
+print "Endpoint   \tDest ID\n";
+print "-----------\t---------\n";
+foreach my $rapidio_device(@sys_bus_rapidio_devices) {
+    if( $rapidio_device =~ /\d{2}\:e\:\d{4}/ ) {
+	chomp $rapidio_device;
+	my $destid = `cat /sys/bus/rapidio/devices/$rapidio_device/destid`;
+	chomp $destid;
+        print "$rapidio_device\t$destid\n";
+    }
+}
+
+# Switches
+print "\nSwitches:\n";
+print "Switch   \tDest ID\n";
+print "-----------\t---------\n";
+foreach my $rapidio_device(@sys_bus_rapidio_devices) {
+    if( $rapidio_device =~ /\d{2}\:s\:\d{4}/ ) {
+	chomp $rapidio_device;
+	my $destid = `cat /sys/bus/rapidio/devices/$rapidio_device/destid`;
+	chomp $destid;
+        print "$rapidio_device\t$destid\n";
+    }	
+}
+

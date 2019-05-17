@@ -1,0 +1,68 @@
+scrpath MPORT_DIR
+kill all
+wait 0 D
+wait 1 D
+wait 2 D
+wait 3 D
+wait 4 D
+wait 5 D
+wait 6 D
+wait 7 D
+wait 8 D
+wait 9 D
+wait 10 D
+wait 11 D
+
+thread 0 -1 0
+thread 1 -1 0
+thread 2 -1 0
+thread 3 -1 0
+thread 4 -1 0
+thread 5 -1 0
+thread 6 -1 0
+thread 7 -1 0
+thread 8 -1 0
+thread 9 -1 0
+thread 10 -1 0
+thread 11 -1 0
+
+wait 0 H
+wait 1 H
+wait 2 H
+wait 3 H
+wait 4 H
+wait 5 H
+wait 6 H
+wait 7 H
+wait 8 H
+wait 9 H
+wait 10 H
+wait 11 H
+
+msgRx 0 skt_prefix0
+msgRx 1 skt_prefix1
+msgRx 2 skt_prefix2
+msgRx 3 skt_prefix3
+msgRx 4 skt_prefix4
+msgRx 5 skt_prefix5
+msgRx 6 skt_prefix6
+msgRx 7 skt_prefix7
+
+mRxOh 8 skt_prefix9 0x1000
+
+wait 0 R
+wait 1 R
+wait 2 R
+wait 3 R
+wait 4 R
+wait 5 R
+wait 6 R
+wait 7 R
+wait 8 R
+
+IBAlloc 10 0x400000 iba_addr
+sleep 1
+wait 10 H
+
+status i
+mpdevs

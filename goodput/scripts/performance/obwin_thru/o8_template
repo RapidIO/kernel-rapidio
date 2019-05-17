@@ -1,0 +1,63 @@
+kill all
+wait 0 d
+wait 1 d
+wait 2 d
+wait 3 d
+wait 4 d
+wait 5 d
+wait 6 d
+wait 7 d
+wait 8 d
+wait 9 d
+wait 10 d
+wait 11 d
+
+thread 0 -1 0
+thread 1 -1 0
+thread 2 -1 0
+thread 3 -1 0
+thread 4 -1 0
+thread 5 -1 0
+thread 6 -1 0
+thread 7 -1 0
+
+wait 0 h
+wait 1 h
+wait 2 h
+wait 3 h
+wait 4 h
+wait 5 h
+wait 6 h
+wait 7 h
+
+OBDIO 0 did iba_addr bytes acc_size wr
+OBDIO 1 did iba_addr bytes acc_size wr
+OBDIO 2 did iba_addr bytes acc_size wr
+OBDIO 3 did iba_addr bytes acc_size wr
+OBDIO 4 did iba_addr bytes acc_size wr
+OBDIO 5 did iba_addr bytes acc_size wr
+OBDIO 6 did iba_addr bytes acc_size wr
+OBDIO 7 did iba_addr bytes acc_size wr
+
+wait 0 R
+wait 1 R
+wait 2 R
+wait 3 R
+wait 4 R
+wait 5 R
+wait 6 R
+wait 7 R
+
+goodput
+goodput c
+goodput
+
+echo OBDIO THRUPUT bytes acc_size UNUSED
+oset
+sleep wait_time
+
+echo OBDIO THRUPUT bytes acc_size UNUSED
+goodput
+odisp
+wait 0 r
+status
