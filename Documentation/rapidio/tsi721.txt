@@ -66,13 +66,41 @@ by setting CONFIG_RAPIDIO_DMA_ENGINE option. Tsi721 miniport driver uses seven
 out of eight available BDMA channels to support DMA data transfers.
 One BDMA channel is reserved for generation of maintenance read/write requests.
 
+DMA transactions are always sent with RapidIO priority 0 (lowest).  Maintenance
+transactions are sent at priority 2+CRF (highest).  In most situations this
+allows maintenance transactions to make forward progress even when DMA
+transactions are blocked.
+
+For kernel revisions of 4.9.0 and later, DMA transactions may return a
+success/failure result.  ETIMEDOUT indicates a RapidIO response timeout occurred.
+ECONNREFUSED indicates a response with a status of "ERROR" was received.
+
 If Tsi721 mport driver have been built with RAPIDIO_DMA_ENGINE support included,
 this driver will accept DMA-specific module parameter:
   "dma_desc_per_channel" - defines number of hardware buffer descriptors used by
                            each BDMA channel of Tsi721 (by default - 128).
 
-IV. Version History
+IV. Hot Swap Support
 
+The Tsi721 mport driver supports hot swap on the local RapidIO link.
+When an application registers to receive port-writes, the Tsi721 initializes
+port-write reception and hot swap events for the local link.  A hot-swap
+event is either the link going down (no packets exchanged), or the link
+coming back up (link recovery).  In both cases, it is up to the application
+to react appropriately to the event.
+
+When the link is down, the Tsi721 configures the RapidIO port to
+discard all packets sent.  Any transactions initiated while the link is down
+will time out.  It is up to the application to manage these time outs,
+and optionally to not initiate new transactions while the link is down.
+
+When the link reinitializes, packet exchange may or may not be possible.
+Again, it is up to the application to recover the link, and possibly the rest
+of the network.
+
+V. Version History
+
+  1.3.0 - Addition of hot swap support for the Tsi721 RapidIO link.
   1.1.0 - DMA operations re-worked to support data scatter/gather lists larger
           than hardware buffer descriptors ring.
   1.0.0 - Initial driver release.
