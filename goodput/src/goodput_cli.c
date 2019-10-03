@@ -2380,7 +2380,7 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 	if (n < argc) {
 		rc = tok_parse_ul(argv[n], &downtime, 10);
 		if (rc) {
-			LOGMSG(env, "Unrecognized period value: %s\n", argv[n]);
+			LOGMSG(env, "Unrecognized downtime value: %s\n", argv[n]);
 			goto exit;
 		}
 	}
@@ -2388,7 +2388,7 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 	if (n < argc) {
 		rc = tok_parse_ul(argv[n], &to_time, 10);
 		if (rc) {
-			LOGMSG(env, "Unrecognized period value: %s\n", argv[n]);
+			LOGMSG(env, "Unrecognized TOTime value: %s\n", argv[n]);
 			goto exit;
 		}
 	}
@@ -2397,7 +2397,7 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 	if (n < argc) {
 		rc = tok_parse_ul(argv[n], &err_time, 10);
 		if (rc) {
-			LOGMSG(env, "Unrecognized period value: %s\n", argv[n]);
+			LOGMSG(env, "Unrecognized ErrTime value: %s\n", argv[n]);
 			goto exit;
 		}
 	}
@@ -2819,11 +2819,6 @@ static int CPSStatusCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(arg
 				LOGMSG(env, "         ");
 			}
 		}
-		/*
-		if (CPS1848_PORT_X_MCAST_MASK_Y(0,0) == regs[reg].oset) {
-			LOGMSG(env, "\n");
-		}
-		*/
 	}
 	LOGMSG(env, "\n");
 	ret = 0;
