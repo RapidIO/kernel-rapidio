@@ -379,7 +379,7 @@ void do_tsi721_fault_ins(struct worker *info)
 	ret = sync_with_other_endpoint(info, GET_DEV8_FROM_HW(did));
 
 	while (!info->stop_req && !ret) {
-		HIGH("7Test: Iter %d Tsi721 UpTime\n", iter);
+		HIGH("7Test: Iter %d Tsi721 UpTime   %d seconds\n", iter, wait_period);
 
 		// Clear PORT_DIS if it is set.
 		// PORT_DIS may not be set if
@@ -388,7 +388,7 @@ void do_tsi721_fault_ins(struct worker *info)
 		sem_wait(&tsi721_mutex);
 		ret = rio_lcfg_read(mp_h, TSI721_SP_CTL, 4, &ctl);
 		if (ctl & TSI721_SP_CTL_PORT_DIS) {
-			ret= tsi721_wait_for_empty(info);
+			ret |= tsi721_wait_for_empty(info);
 			if (ret) {
 				ERR("Wait for empty failed %d ...\n", ret);
 			} else {
@@ -407,12 +407,11 @@ void do_tsi721_fault_ins(struct worker *info)
 		sem_post(&tsi721_mutex);
 
 		if (ret)
-			break;
+			continue;
 		sleep(wait_period);
 
-		if (info->stop_req) {
-			break;
-		}
+		if (info->stop_req)
+			continue;
 
 		// Assumes that DMA is performed to inbound window 0
 		if (!info->seven_test_err_resp_time)
@@ -422,33 +421,36 @@ void do_tsi721_fault_ins(struct worker *info)
 		DBG("IBW 0x%x\n", ibw);
 		ret |= rio_lcfg_write(info->mp_h, ibw_oset, 4,
 				ibw | 0x10000000);
-		HIGH("7Test: Iter %d Tsi721 ERR RESP Time\n", iter);
+		HIGH("7Test: Iter %d Tsi721 ERR RESP Time %d seconds\n",
+			iter, info->seven_test_err_resp_time);
 		if (ret)
-			break;
+			continue;
 		sleep(info->seven_test_err_resp_time);
 		ret |= rio_lcfg_write(info->mp_h, ibw_oset, 4, ibw);
 
 		if (ret || info->stop_req)
-			break;
+			continue;
 resp_to_time:
 		if (!info->seven_test_resp_to_time)
 			goto down_time;
 
 		ret = rio_lcfg_read(info->mp_h, filt_oset, 4, &filter);
 		DBG("FILTER 0x%x\n", filter);
-		ret = rio_lcfg_write(info->mp_h, filt_oset, 4, filter | fadd);
-		HIGH("7Test: Iter %d Tsi721 RESP TO Time\n", iter);
+		ret |= rio_lcfg_write(info->mp_h, filt_oset, 4, filter | fadd);
+		HIGH("7Test: Iter %d Tsi721 RESP TO Time %d seconds\n",
+			iter, info->seven_test_resp_to_time);
 		if (ret)
-			break;
+			continue;
 		sleep(info->seven_test_resp_to_time);
-		ret = rio_lcfg_write(info->mp_h, filt_oset, 4, filter);
+		ret |= rio_lcfg_write(info->mp_h, filt_oset, 4, filter);
 
 		if (ret || info->stop_req)
-			break;
+			continue;
 down_time:
 		if (!info->seven_test_downtime)
 			continue;
-		HIGH("7Test: Iter %d Tsi721 DOWNTIME\n", iter++);
+		HIGH("7Test: Iter %d Tsi721 DOWNTIME %d seconds\n",
+			iter++, info->seven_test_downtime);
 		// INFW: Test to confirm that switch link partner is correctly
 		// 	configured.
 		// Test: before shutting down a port, confirm that the
@@ -456,20 +458,20 @@ down_time:
 		DBG("\tWaiting for tsi721_mutex\n");
 		sem_wait(&tsi721_mutex);
 		if (dev) {
-			uint32_t maskval, rc;
-			rc = rio_maint_read(mp_h, SWITCH_DEVID, SWITCH_HOPCOUNT,
+			uint32_t maskval;
+			ret |= rio_maint_read(mp_h, SWITCH_DEVID, SWITCH_HOPCOUNT,
 					CPS1848_BCAST_MCAST_MASK_X(0),
 					sizeof(maskval), &maskval);
-			if (!rc && !((1 << port) & maskval)) {
+			if (!ret && !((1 << port) & maskval)) {
 				CRIT("Port %d not in mask 0x%x\n", port, maskval);
 			}
 		}
-		ret = rio_lcfg_read(info->mp_h, ctl_oset, 4, &ctl);
+		ret |= rio_lcfg_read(info->mp_h, ctl_oset, 4, &ctl);
 		ctl |= TSI721_SP_CTL_PORT_DIS;
-		ret = rio_lcfg_write(info->mp_h, ctl_oset, 4, ctl);
+		ret |= rio_lcfg_write(info->mp_h, ctl_oset, 4, ctl);
 
 		sleep(info->seven_test_downtime);
-		ret= tsi721_wait_for_empty(info);
+		ret |= tsi721_wait_for_empty(info);
 		if (ret) {
 			ERR("Wait for empty failed %d ...\n", ret);
 		} else {
@@ -1846,6 +1848,11 @@ uint32_t handle_cps_link_down(DAR_DEV_INFO_t *dev_h,
 	ret = DARRegWrite(dev_h,
 		CPS1848_BCAST_DEV_RTE_TABLE_X(did), CPS_RT_NO_ROUTE);
 	nanosleep(&one_ms, NULL);
+
+	if (ret) {
+		ERR("Error writing routing table 0x%x\n", ret);
+		return ret;
+	}
 
 	// Set port lockout to cause packet discard
 	ret |= DARRegRead(dev_h, CPS1848_PORT_X_CTL_1_CSR(port), &ctl);
