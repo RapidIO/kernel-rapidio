@@ -2926,6 +2926,32 @@ static int CPSCountersCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(a
 	} else {
 		LOGMSG(env, "No valid devIDs.\n");
 	}
+
+	got_one = false;
+	LOGMSG(env, "BAD DMA: ");
+	for (int i = 0; i < MAX_WORKERS; i++) {
+		int did;
+		int chan;
+		uint32_t did_n_chan;
+
+		if (!wkr[i].stat)
+			continue;
+		ret = rio_mport_query_dma(wkr[i].mp_h, &did_n_chan);
+		if (ret)
+			continue;
+		did = did_n_chan >> 16;
+		if (did > MAX_DEVID_STATUS)
+			continue;
+		if (!devid_status[did]) {
+			if (got_one)
+				LOGMSG(env, ", ");
+			got_one = 1;
+			chan = did_n_chan & 0xFFFF;
+			LOGMSG(env, "%d %d %d", i, chan, did - 1);
+		}
+	}
+	LOGMSG(env, "\n");
+
 	ret = 0;
 exit:
         DBG("\tPOST tsi721_mutex\n");
@@ -3549,31 +3575,14 @@ MpdevsCmd,
 ATTR_NONE
 };
 
+
 static int QueryDmaCmd(struct cli_env *env, int argc, char **argv)
 {
-        struct {
-                uint32_t oset;
-                char *lable;
-
-        } regs[] = {
-        {TSI721_OBDMACXDWRCNT(0), (char *)"WR CNTR"},
-        {TSI721_OBDMACXDRDCNT(0), (char *)"RD CNTR"},
-        {TSI721_OBDMACXCTL(0), (char *)"CTL"},
-        {TSI721_OBDMACXINT(0),(char *)"INT"},
-        {TSI721_OBDMACXSTS(0), (char *)"STATUS"},
-        {TSI721_OBDMACXINTE(0), (char *)"INT EN"},
-        {TSI721_OBDMACXPWE(0), (char *)"PW  EN"},
-        {TSI721_OBDMACXDPTRL(0), (char *)"D_PTR_L"},
-        {TSI721_OBDMACXDPTRH(0), (char *)"D_PTR_H"},
-        {TSI721_OBDMACXDSBL(0), (char *)"STAT_L"},
-        {TSI721_OBDMACXDSBH(0), (char *)"STAT_H"},
-        {TSI721_OBDMACXDSSZ(0), (char *)"STATSz"},
-        {TSI721_OBDMACXDSRP(0), (char *)"STAT_R"},
-        {TSI721_OBDMACXDSWP(0), (char *)"STAT_W"},
-};
-        int chan_num, file_no = mp_h;
+        int file_no = mp_h;
+	uint32_t did_n_chan;
+	int chan_num, did;
 	uint16_t idx = -1;;
-        uint32_t ret, oset;
+        uint32_t ret;
 
 	if (argc) {
 		if (gp_parse_worker_index(env, argv[0], &idx)) {
@@ -3586,27 +3595,21 @@ static int QueryDmaCmd(struct cli_env *env, int argc, char **argv)
 		file_no = wkr[idx].mp_h;
 	}
 
-        ret = rio_mport_query_dma(file_no, &chan_num);
+        ret = rio_mport_query_dma(file_no, &did_n_chan);
         if (ret) {
                 LOGMSG(env, "ERR rio_mport_query_dma file %d %d:%s\n",
                                 file_no, ret, strerror(ret));
                 goto exit;
         }
 
+	did = did_n_chan >> 16;
+	chan_num = did_n_chan & 0xFFFF;
         if (chan_num < 0) {
                 LOGMSG(env, "No channel assigned.\n");
                 goto exit;
         }
 
-        LOGMSG(env, "\nChannel %d:\n", chan_num);
-        oset = 0x1000 * chan_num;
-        for (int i = 0; i < sizeof(regs)/sizeof(regs[0]); i++) {
-                uint32_t data;
-                rio_lcfg_read(mp_h, regs[i].oset + oset, 4, &data);
-                LOGMSG(env, "0x%8x %10s : 0x%8x\n",
-                                regs[i].oset + oset, regs[i].lable, data);
-        }
-
+        LOGMSG(env, "\n0x%x Channel %d DestID %d\n", did_n_chan, chan_num, did);
 exit:
         return 0;
 }
