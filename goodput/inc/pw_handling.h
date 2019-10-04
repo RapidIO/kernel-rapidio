@@ -100,6 +100,8 @@ void do_tsi721_handle_cps_pw(struct worker *info);
 void do_tsi721_manage_switch(struct worker *info);
 void do_cps_poll_for_pw(struct worker *info);
 void do_tsi721_tsi721_recovery(struct worker *info);
+void do_tsi721_test_switch_lock(struct worker *info);
+
 uint32_t reset_cps_port(DAR_DEV_INFO_t *dev_h, uint32_t port);
 uint32_t init_switch_handle(DAR_DEV_INFO_t *dev_h);
 uint32_t set_switch_port_enables(DAR_DEV_INFO_t *dev_h,

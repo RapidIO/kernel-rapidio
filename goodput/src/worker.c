@@ -1590,6 +1590,9 @@ void *worker_thread(void *parm)
 		case cps_poll_for_pw:
 			do_cps_poll_for_pw(info);
 			break;
+		case cps_test_switch_lock:
+			do_tsi721_test_switch_lock(info);
+			break;
 		case no_action:
 		case last_action:
 		default:

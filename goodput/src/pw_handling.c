@@ -2083,6 +2083,106 @@ void do_tsi721_manage_switch(struct worker *info)
 	}
 }
 
+void do_tsi721_test_switch_lock(struct worker *info)
+{
+	DAR_DEV_INFO_t dev_h;
+	librio_status sw_h;
+	uint16_t my_devid;
+	uint16_t sw_lock;
+	uint16_t byte_val = 0;
+	uint16_t curr_byte_val = 0;
+	uint32_t reg;
+	uint32_t mask;
+	uint32_t shift;
+	uint32_t did;
+	uint32_t ret;
+	uint32_t count = 0;
+	const uint32_t reg_addr = CPS1848_ASSY_IDENT_CAR_OVRD;
+	// DID TRANS   0  1  2  3  4  5  6
+	int trans[] = {-1, 0, 1, 0, 0, 2, 3};
+
+	for (int i = 0; i < MAX_DEVID_STATUS; i++)
+		devid_status[i] = 0;
+
+	ret = DAR_proc_ptr_init(SRIO_API_ReadRegFunc, SRIO_API_WriteRegFunc,
+				SRIO_API_DelayFunc);
+	/* First, get device handle. */
+	ret = init_switch_handle(&dev_h);
+	if (RIO_SUCCESS != ret) {
+		ERR("Failed initializing switch handle: 0x%08x\n", ret);
+		return;
+	}
+
+
+	ret = config_tsi721_based_on_switch(&dev_h, &sw_h, info);
+	if (RIO_SUCCESS != ret) {
+		ERR("Failed configuring tsi721: 0x%08x\n", ret);
+		return;
+	}
+
+	ret = config_switch(&dev_h, info, &sw_h, 1);
+	if (RIO_SUCCESS != ret) {
+		ERR("Failed configuring switch: 0x%08x\n", ret);
+		return;
+	}
+	INFO("Switch Configuration successful.\n");
+	ret = SRIO_API_ReadRegFunc(&dev_h, reg_addr, &reg);
+	if (RIO_SUCCESS != ret) {
+		ERR("Failed reading assy override: 0x%08x\n", ret);
+		return;
+	}
+	did = PORT_TO_DID(CONN_PORT(&dev_h));
+	if (did > sizeof(trans)/sizeof(trans[0])) {
+		ERR("DID %d out of range\n", did);
+		return;
+	}
+	my_devid = did;
+	shift = trans[did] * 8;
+	mask = 0xFF << shift;
+	byte_val = (reg & mask) >> shift;
+	INFO("DID %d shift %d mask 0x%x  byte_val 0x%x\n",
+		did, shift, mask, byte_val);
+
+	while (!info->stop_req) {
+		sem_wait(&tsi721_mutex);
+		lock_switch(&dev_h, info, &my_devid, &sw_lock);
+		ret = SRIO_API_ReadRegFunc(&dev_h, reg_addr, &reg);
+		if (ret) {
+			ERR("Failed reading assy override: 0x%08x\n", ret);
+			goto unlock;
+		}
+
+		curr_byte_val = (reg & mask) >> shift;
+		if (curr_byte_val != byte_val) {
+			ERR("Failed CURR: 0x%x EXP: 0x%x REG 0x%x RET 0x%x\n",
+				curr_byte_val, byte_val, reg, ret);
+			goto unlock;
+		}
+		byte_val = (byte_val + 1) & 0xFF;
+		reg = (reg & ~mask) | (byte_val << shift);
+
+		ret = SRIO_API_WriteRegFunc(&dev_h, reg_addr, reg);
+		if (ret) {
+			ERR("Failed writing assy override: 0x%08x\n", ret);
+			goto unlock;
+		}
+		count++;
+		if (!(count & 0xFFFF)) {
+			HIGH("0x10000 iterations\n");
+		}
+		ret = DARrioReleaseDeviceLock(&dev_h, my_devid, &sw_lock);
+		if (!ret || (RIO_ERR_LOCK == ret)) {
+			sem_post(&tsi721_mutex);
+			continue;
+		}
+		ERR("ReleaseDeviceLock Failed Lock 0x%x Err 0x%x.\n",
+				sw_lock, ret);
+		break;
+	}
+unlock:
+	sem_post(&tsi721_mutex);
+}
+
 
 #ifdef __cplusplus
 }

@@ -95,6 +95,7 @@ char *req_type_str[(int)last_action+1] = {
 	(char *)"CPSPWh",
 	(char *)"721PWh",
 	(char *)"Pol4PW",
+	(char *)"SwLock",
 	(char *)"LAST"
 };
 
@@ -2462,6 +2463,8 @@ static int CPSHotSwapCmd(struct cli_env *env, int argc, char **argv)
 		break;
 	case 'R' : req = cps_poll_for_pw;
 		break;
+	case 'M' : req = cps_test_switch_lock;
+		break;
 	case 'P' : req = seven_test_switch_mgmt;
 		if (argc < 4) {
 			LOGMSG(env, "Missing parameters.\n");
@@ -2518,6 +2521,7 @@ struct cli_cmd CPSHotSwap = {
 "<option> : T : Start Tsi721 port-write handler for CPS configuration.\n"
 "           C : Start the CPS port-write handler.\n"
 "           R : Start the CPS port-write polling thread.\n"
+"           M : Start switch lock (mutex) test.\n"
 "           P : Start the CPS port-write receiving worker.\n"
 "               The CPS port-write receiving worker distributes\n"
 "               port-writes to the Tsi721 and CPS port-write handlers.\n"
@@ -2681,6 +2685,7 @@ static int CPSStatusCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(arg
 	{CPS1848_LANE_X_ERR_DET(3),	0x400, (char *)"L3 DET", 0},
 	{CPS1848_PORT_X_DEV_RTE_TABLE_Y(0,0x20), 0x1000, (char *)"PW RT", 0},
 	{CPS1848_PORT_X_MCAST_MASK_Y(0,0), 0x100, (char *)"MC_MASK", 0},
+	{CPS1848_ASSY_IDENT_CAR_OVRD, 0, (char *)"ASSY_ID", 0},
 	};
 
 	const rio_port_t ports[] = { 0, 1, 4, 5 };
@@ -2703,6 +2708,8 @@ static int CPSStatusCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(arg
 	for (reg = 0; reg < sizeof(regs)/sizeof(regs[0]); reg++) {
 		LOGMSG(env, "\n%8s %8x ", regs[reg].lable, regs[reg].oset);
 		for (i = 0; i < sizeof(ports); i++) {
+			if (!regs[reg].pp_oset && i)
+				continue;
 			addr = regs[reg].oset;
 			addr += ports[i] * regs[reg].pp_oset;
 			if (rio_maint_read(mp_h, 0, 0, addr, 4, &data))

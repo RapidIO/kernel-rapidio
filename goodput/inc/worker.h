@@ -105,6 +105,7 @@ enum req_type {
 	cps_handle_cps_pw,
 	cps_handle_721_pw,
 	cps_poll_for_pw,
+	cps_test_switch_lock,
 	last_action
 };
 
