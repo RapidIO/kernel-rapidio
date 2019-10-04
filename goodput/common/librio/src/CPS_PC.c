@@ -526,6 +526,31 @@ static uint32_t cps_get_lrto(DAR_DEV_INFO_t *dev_info, rio_pc_set_config_out_t *
 }
 
 
+int cps_check_and_set_rr_arb(DAR_DEV_INFO_t *dev_info,
+		uint32_t *fail_pt)
+{
+	int rc = 0;
+	uint32_t reg;
+
+	rc = DARRegRead(dev_info, CPS1848_SWITCH_PARAM_1, &reg);
+	if (RIO_SUCCESS != rc) {
+		*fail_pt = PC_SET_CONFIG(0x05);
+		goto exit;
+	}
+	if (CPS1848_SWITCH_PARAM_1_ARB_MODE_RR_AGELESS ==
+		(reg & CPS1848_SWITCH_PARAM_1_ARB_MODE_RR_AGELESS)) {
+		goto exit;
+	}
+	rc = DARRegWrite(dev_info, CPS1848_SWITCH_PARAM_1,
+		(reg | CPS1848_SWITCH_PARAM_1_ARB_MODE_RR_AGELESS));
+	if (RIO_SUCCESS != rc) {
+		*fail_pt = PC_SET_CONFIG(0x06);
+		goto exit;
+	}
+exit:
+	return rc;
+}
+
 // Inputs  - requested configuration
 //         - initialized port info structure
 // Updates - sorted version of requested configuration, one entry for each port on the device
@@ -2669,6 +2694,11 @@ uint32_t CPS_rio_pc_set_config(DAR_DEV_INFO_t *dev_info,
 	rc = init_sw_pi(dev_info, &pi);
 	if (RIO_SUCCESS != rc) {
 		out_parms->imp_rc = PC_SET_CONFIG(0x02);
+		goto exit;
+	}
+
+	rc = cps_check_and_set_rr_arb(dev_info, &out_parms->imp_rc);
+	if (RIO_SUCCESS != rc) {
 		goto exit;
 	}
 
