@@ -19,15 +19,15 @@ w 8 H
 w 9 H
 w 10 H
 w 11 H
-// NWRITE_R, continue on errors
+// NWRITE_R, kernel buffer, continue on errors
 dma 3 0xff 0x200000000 0x100000 0x100000 1 1 2 0 0 0 0 0 1
 dma 4 0xff 0x200000000 0x100000 0x100000 1 1 2 0 0 0 0 0 1
 dma 5 0xff 0x200000000 0x100000 0x100000 1 1 2 0 0 0 0 0 1
-// NREAD, continue on errors
+// NREAD, user buffer, continue on errors
 dma 6 0xff 0x200000000 0x100000 0x100000 0 0 0 0 0 0 0 0 1
 dma 7 0xff 0x200000000 0x100000 0x100000 0 0 0 0 0 0 0 0 1
 dma 8 0xff 0x200000000 0x100000 0x100000 0 0 0 0 0 0 0 0 1
-// NWRITE, STOP ON ERRORS
-dma 9 0xff 0x200000000 0x100000 0x100000 1 0 0 0 0 0 0 0
+// NWRITE, user buffer, STOP ON ERRORS
+dma  9 0xff 0x200000000 0x100000 0x100000 1 0 0 0 0 0 0 0
 dma 10 0xff 0x200000000 0x100000 0x100000 1 0 0 0 0 0 0 0
 dma 11 0xff 0x200000000 0x100000 0x100000 1 0 0 0 0 0 0 0

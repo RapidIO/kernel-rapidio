@@ -3,6 +3,8 @@
 // This starts threads for receiving and handling
 // Tsi721 and CPS port-writes, and also starts a
 // thread for polling CPS status.
+level 6
+dlevel 5
 thread 0 -1 0
 thread 1 -1 0
 thread 2 -1 0
