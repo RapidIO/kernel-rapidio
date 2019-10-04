@@ -11,8 +11,8 @@ are permitted provided that the following conditions are met:
 1. Redistributions of source code must retain the above copyright notice, this
 list of conditions and the following disclaimer.
 
-2. Redistributions in binary form must reproduce the above copyright notice, 
-this list of conditions and the following disclaimer in the documentation 
+2. Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
 and/or other materials provided with the distribution.
 
 3. Neither the name of the copyright holder nor the names of its contributors
@@ -21,12 +21,12 @@ specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
 DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
 FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
 DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, 
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *************************************************************************
@@ -137,7 +137,7 @@ const cps_ports_per_quadrant_t sps1616_ppq = {{ //
   {RIO_ALL_PORTS, 4, { {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},    \
                        {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},    \
                        {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},    \
-                       {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}} } }  
+                       {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}} } }
 
 cps_port_relations_t cps1848_cfg[] = {
   { 0, 0, { {4, 0, {          0, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
@@ -212,7 +212,7 @@ cps_port_relations_t cps1848_cfg[] = {
             {0, 0, {          3, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {2,38, {          9, INVALID_PLL}, {            9, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {1, 7, {          1, INVALID_PLL}, {            1,            13, RIO_ALL_PORTS}} } },
-  CONFIG_TERMINATOR 
+  CONFIG_TERMINATOR
 };
 
 cps_port_relations_t cps1616_cfg[] = {
@@ -281,7 +281,7 @@ cps_port_relations_t cps1616_cfg[] = {
             {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {1,15, {          6,           7}, {           12,            14, RIO_ALL_PORTS}},
             {1,15, {          6,           7}, {           12,            13,            14}} } },
-  CONFIG_TERMINATOR 
+  CONFIG_TERMINATOR
 };
 
 cps_port_relations_t cps1432_cfg[] = {
@@ -317,12 +317,12 @@ cps_port_relations_t cps1432_cfg[] = {
             {4,28, {          7, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {2,28, {          7, INVALID_PLL}, {           11, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {4,28, {          7, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}} } },
-  { 8, 0,           
+  { 8, 0,
             { {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}} } },
-  { 9, 0,           
+  { 9, 0,
           { {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
@@ -351,7 +351,7 @@ cps_port_relations_t cps1432_cfg[] = {
             {2,14, {          3, INVALID_PLL}, {            3, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {2,14, {          3, INVALID_PLL}, {            3, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {1,14, {          3, INVALID_PLL}, {            3,            11, RIO_ALL_PORTS}} } },
-  CONFIG_TERMINATOR 
+  CONFIG_TERMINATOR
 };
 
 cps_port_relations_t sps1616_cfg[] = {
@@ -419,14 +419,14 @@ cps_port_relations_t sps1616_cfg[] = {
             {0, 0, {INVALID_PLL, INVALID_PLL}, {RIO_ALL_PORTS, RIO_ALL_PORTS, RIO_ALL_PORTS}},
             {1,15, {          6,           7}, {           12,            14, RIO_ALL_PORTS}},
             {1,15, {          6,           7}, {           12,            13,            14}} } },
-  CONFIG_TERMINATOR 
+  CONFIG_TERMINATOR
 };
 
-// Structure to track current configuration register values, and 
+// Structure to track current configuration register values, and
 // indications of which values must change.
 
-// Init_sw_pi initializes constant and current configuration information 
-// about quadrant/port/lane/PLL relationships 
+// Init_sw_pi initializes constant and current configuration information
+// about quadrant/port/lane/PLL relationships
 
 uint32_t init_sw_pi(DAR_DEV_INFO_t *dev_info, cps_port_info_t *pi)
 {
@@ -525,8 +525,9 @@ static uint32_t cps_get_lrto(DAR_DEV_INFO_t *dev_info, rio_pc_set_config_out_t *
 	return rc;
 }
 
-// Inputs  - requested configuration 
-//         - initialized port info structure 
+
+// Inputs  - requested configuration
+//         - initialized port info structure
 // Updates - sorted version of requested configuration, one entry for each port on the device
 //         - current configuration of each port on the device
 //         - Configuration register values for each port on the device
@@ -1542,11 +1543,11 @@ exit:
 }
 
 reset_reg_vals_t CPS_reset_reg_vals[ARRAY_SIZE_CPS_RESET_REG_VALS] = {
-//      Value    Address                                 pinc   linc  B4     
+//      Value    Address                                 pinc   linc  B4
    {0x00000000, 0xffffffff, CPS1848_PORT_X_LINK_MAINT_REQ_CSR(0) ,  0x020, 0x000, false, true},
    {0x00000000, 0xffffffff, CPS1848_PORT_X_LINK_MAINT_RESP_CSR(0),  0x020, 0x000, true , true},
    {0x80000000, 0x7FFFFFFF, CPS1848_PORT_X_LOCAL_ACKID_CSR(0)    ,  0x020, 0x000, false, true},
-   {0x00000000, 0xffffffff, CPS1848_PORT_X_CTL_2_CSR(0)          ,  0x020, 0x000, false, true},             
+   {0x00000000, 0xffffffff, CPS1848_PORT_X_CTL_2_CSR(0)          ,  0x020, 0x000, false, true},
    {0xE0000002, 0xffffffff, CPS1848_PORT_X_ERR_STAT_CSR(0)       ,  0x020, 0x000, false, true},
    {0xD0400001, 0xffffffff, CPS1848_PORT_X_CTL_1_CSR(0)          ,  0x020, 0x000, false, true},
    {0x00000000, 0xffffffDf, CPS1848_PORT_X_IMPL_SPEC_ERR_DET(0)  ,  0x100, 0x000, false, true}, // Moved earlier to clear errors before
@@ -1571,7 +1572,7 @@ reset_reg_vals_t CPS_reset_reg_vals[ARRAY_SIZE_CPS_RESET_REG_VALS] = {
    {0xFF6FFFFF, 0xffffffff, CPS1848_PORT_X_IMPL_SPEC_ERR_RPT_EN(0), 0x040, 0x000, false, true},
    {0x00000000, 0xffffffff, CPS1848_LANE_X_ERR_RPT_EN(0)         ,  0x000, 0x100, false, true},
    {0x00000000, 0xffffffff, CPS1848_PORT_X_PGC_MODE(0)           ,  0x010, 0x000, false, true},
-// {0x00000000, 0xffffffff, CPS1848_PORT_X_PGC_DATA(0)           ,  0x010, 0x000, false, true}, 
+// {0x00000000, 0xffffffff, CPS1848_PORT_X_PGC_DATA(0)           ,  0x010, 0x000, false, true},
    {0x000000DE, 0xffffffff, CPS1848_PORT_X_DEV_RTE_TABLE_Y(0,0)  ,  0x000, 0x000, false, true}, // Routing table implemented special
 // {0x000000DE, 0xffffffff, CPS1848_PORT_X_DOM_RTE_TABLE_Y(0,0)  ,  0x000, 0x000, false, true}, // Routing table implemented special
    {0x00000000, 0xffffffff, CPS1848_PORT_X_TRACE_0_VAL_0(0)      ,  0x100, 0x000, false, true}, // Trace/filter registers implemented special
@@ -1606,7 +1607,7 @@ reset_reg_vals_t CPS_reset_reg_vals[ARRAY_SIZE_CPS_RESET_REG_VALS] = {
    {0x00000000, 0xffffffff, CPS1848_PORT_X_VC0_TTL_DROP_CNTR(0)  ,  0x100, 0x000, true , true},
    {0x00000000, 0xffffffff, CPS1848_PORT_X_VC0_CRC_LIMIT_DROP_CNTR(0), 0x100, 0x000, true , true},
    {0xFFFF0000, 0xffffffff, CPS1848_PORT_X_RETRY_CNTR(0)         ,  0x100, 0x000, true , true},
-   {0x00000004, 0xfffffffB, CPS1848_PORT_X_STATUS_AND_CTL(0)     ,  0x100, 0x000, false, true},   
+   {0x00000004, 0xfffffffB, CPS1848_PORT_X_STATUS_AND_CTL(0)     ,  0x100, 0x000, false, true},
 // {0x00000000, 0xffffffff, CPS1848_PLL_X_CTL_1(0)               ,  0x010, 0x000, false, true}, // Handled elsewhere by pc_set_cfg
 // {0x00000000, 0xffffffff, CPS1848_PLL_X_CTL_2(0)               ,  0x010, 0x000, false, true}, // Handled elsewhere by pc_set_cfg
 
@@ -1619,7 +1620,7 @@ reset_reg_vals_t CPS_reset_reg_vals[ARRAY_SIZE_CPS_RESET_REG_VALS] = {
    {0x00000000, 0xffffffff, CPS1848_LANE_X_DATA_CAPT_0(0)        ,  0x000, 0x100, false, true},
    {0x00000000, 0xffffffff, CPS1848_LANE_X_DATA_CAPT_1(0)        ,  0x000, 0x100, false, true},
    {0x00040555, 0xffffffff, CPS1848_LANE_X_DFE_1(0)              ,  0x000, 0x100, false, true},
-   {0x10488010, 0xffffffff, CPS1848_LANE_X_DFE_2(0)              ,  0x000, 0x100, false, true} 
+   {0x10488010, 0xffffffff, CPS1848_LANE_X_DFE_2(0)              ,  0x000, 0x100, false, true}
 };
 
 static uint32_t cps_set_regs_to_reset_defaults(DAR_DEV_INFO_t *dev_info, uint8_t pnum,
@@ -3244,7 +3245,7 @@ uint32_t CPS_rio_pc_secure_port(DAR_DEV_INFO_t *dev_info,
 	for (port_idx = 0; port_idx < good_ptl.num_ports; port_idx++) {
 		uint8_t pnum = good_ptl.pnums[port_idx];
 
-		// If the ports' registers can be accessed, set it up... 
+		// If the ports' registers can be accessed, set it up...
 		if (!(cfg_out.pc[port_idx].port_available
 				&& cfg_out.pc[port_idx].powered_up)) {
 			continue;
