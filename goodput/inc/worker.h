@@ -276,14 +276,19 @@ extern volatile int devid_status[MAX_DEVID_STATUS];
 // time, a Dead Link Timer event is waiting...
 //
 // Note that one DLT tick is 256 usec - a long time...
-#define DLT_DELAY_NSEC (TSI721_PLM_IMP_SPEC_CTL_DLT_TICK_USEC * 1000)
+// DLT_DELAY_NSEC is therefor 1.024 msec.
+#define DLT_DELAY_NSEC ((TSI721_PLM_IMP_SPEC_CTL_DLT_TICK_USEC * 1000) * 4)
 // The logical layer response timeout must be greater than the DLT_DELAY
 // Otherwise, a response timeout could occur before the DLT has
 // kicked in to drain requests and allow the channel/Tsi721 to be reset.
+//
+// Response timeout is 4.096 msec
 #define RSP_TO_DELAY_NSEC (DLT_DELAY_NSEC * 4)
 // The TTL_TIMEOUT must be less than half of the logical layer response
 // timeout to ensure that all transactions associated with a logical layer
 // transaction are discarded when a logical layer response timeout occurs.
+//
+// TTl timeout is 1.638 msec
 #define TTL_TIMEOUT_NSEC (RSP_TO_DELAY_NSEC*2/5)
 
 #define TSI721_OK 0
