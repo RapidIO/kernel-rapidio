@@ -1176,7 +1176,12 @@ void tsi721_unregister_dma(struct tsi721_device *priv)
 int tsi721_query_dma(struct dma_chan *dma_chan)
 {
 	struct tsi721_bdma_chan *bdma;
+	uint32_t did;
 	bdma = container_of(dma_chan, struct tsi721_bdma_chan, dchan);
 
-	return bdma->id;
+	spin_lock_bh(&bdma->lock);
+	did = bdma->active_tx ? bdma->active_tx->destid : 0xFFFF;
+	spin_unlock_bh(&bdma->lock);
+
+	return (did << 16) | ((uint32_t)(bdma->id));
 }

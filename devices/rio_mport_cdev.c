@@ -2289,18 +2289,18 @@ static int rio_mport_query_dma(struct file *filp, void __user *arg)
 {
 	struct mport_cdev_priv *priv = filp->private_data;
 	struct mport_dev *md = priv->md;
-	int chan_num = -1;
+	uint32_t did_n_chan = 0xFFFFFFFF;
 
 	if (!md->mport->ops->query_dma)
 		return -EPROTONOSUPPORT;
 
 	if (priv->dmach)
-		chan_num = md->mport->ops->query_dma(priv->dmach);
+		did_n_chan = md->mport->ops->query_dma(priv->dmach);
 
-	if (copy_to_user((void __user *)arg, &chan_num, sizeof(chan_num)))
+	if (copy_to_user((void __user *)arg, &did_n_chan, sizeof(did_n_chan)))
 		return -EFAULT;
 
-	rmcd_debug(EXIT, "filp=%p dma=%d", dev_name(&md->dev), chan_num);
+	rmcd_debug(EXIT, "filp=%p val=0x%x", dev_name(&md->dev), did_n_chan);
 
 	return 0;
 }

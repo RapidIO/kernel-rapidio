@@ -399,7 +399,8 @@ struct rio_mport_attr {
  * @query_mport: Callback to query mport device attributes.
  * @map_outb: Callback to map outbound address region into local memory space.
  * @unmap_outb: Callback to unmap outbound RapidIO address region.
- * @query_dma: Callback to query channel number and display dma status
+ * @query_dma: Callback to query did of current descriptor, channel number
+ *             and display dma status.
  */
 struct rio_ops {
 	int (*lcread) (struct rio_mport *mport, int index, u32 offset, int len,
@@ -431,7 +432,7 @@ struct rio_ops {
 			u32 size, u32 flags, dma_addr_t *laddr);
 	void (*unmap_outb)(struct rio_mport *mport, u16 destid, u64 rstart);
 #ifdef CONFIG_RAPIDIO_DMA_ENGINE
-	int (*query_dma)(struct dma_chan *dmach);
+	uint32_t (*query_dma)(struct dma_chan *dmach);
 #endif
 };
 

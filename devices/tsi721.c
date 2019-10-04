@@ -2792,7 +2792,7 @@ static void tsi721_disable_ints(struct tsi721_device *priv)
 }
 
 #ifdef CONFIG_RAPIDIO_DMA_ENGINE
-int tsi721_query_dma(struct dma_chan *dma_chan);
+uint32_t tsi721_query_dma(struct dma_chan *dma_chan);
 #endif
 
 static struct rio_ops tsi721_rio_ops = {
