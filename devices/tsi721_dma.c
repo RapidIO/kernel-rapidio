@@ -655,24 +655,29 @@ static void tsi721_dma_tasklet(unsigned long data)
 			"DMAC%d_STS = 0x%x did=%d raddr=0x%llx",
 			bdma_chan->id, dmac_sts, desc->destid, desc->rio_addr);
 
-		/* If DMA channel has not aborted yet, check periodically
+		/* If the DMA channel has not aborted yet, check periodically
 		 * until it has.  A channel that has not aborted cannot
-		 * be restarted.  Note that the error interrupt has been disabled,
-		 * but the interrupt status is still there, so we'll keep checking...
+		 * be restarted.  Note that the error interrupt has been
+		 * disabled, but the interrupt status is still there,
+		 * so we'll keep checking...
 		 */
 
 		if ((dmac_sts & TSI721_DMAC_STS_ABORT) == 0) {
-			tsi_err(&bdma_chan->dchan.dev->device,
-				"DMAC%d_STS ERR no ABORT, DEAD...",
-				bdma_chan->id);
-			/* Disable BDMA channel ERROR interrupts */
 			rval = ioread32(bdma_chan->regs + TSI721_DMAC_INTE);
-			rval &= ~TSI721_DMAC_INT_ERR;
-			iowrite32(rval, bdma_chan->regs + TSI721_DMAC_INTE);
+			if (rval & TSI721_DMAC_INT_ERR) {
+				tsi_debug(DMA, &bdma_chan->dchan.dev->device,
+					"DMAC%d_STS = 0x%x did=%d raddr=0x%llx ERR no ABORT, DEAD...",
+					bdma_chan->id, dmac_sts, desc->destid, desc->rio_addr);
+				/* Disable BDMA channel ERROR interrupts */
+				rval &= ~TSI721_DMAC_INT_ERR;
+				iowrite32(rval, bdma_chan->regs + TSI721_DMAC_INTE);
+			}
 			udelay(5);
 			tasklet_schedule(&bdma_chan->tasklet);
 			goto err_out;
 		}
+		tsi_debug(DMA, &bdma_chan->dchan.dev->device,
+			"DMAC%d Cleaning up", bdma_chan->id);
 
 		/* Clear error interrupt, now that the DMA engine has aborted
 		 * Ensure that error interrupts are re-enabled.
