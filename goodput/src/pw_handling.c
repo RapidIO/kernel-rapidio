@@ -925,10 +925,18 @@ uint32_t set_switch_event_management(DAR_DEV_INFO_t *dev_h,
 
 // Set CPS link initialization silence time to ~13 usec.
 // This may avoid some response timeouts when the link is reinitialized.
-uint32_t set_switch_silence_timer(DAR_DEV_INFO_t *dev_h)
+uint32_t set_switch_silence_timer(DAR_DEV_INFO_t *dev_h,
+				int initialization)
 {
 	uint32_t ret = 0;
-	for (rio_port_t port = 0; port < NUM_PORTS(dev_h); port++) {
+	rio_port_t st_port = 0;
+	rio_port_t end_port = NUM_PORTS(dev_h);
+
+	if (!initialization) {
+		st_port = CONN_PORT(dev_h);
+		end_port = st_port + 1;
+	}
+	for (rio_port_t port = st_port; port < end_port; port++) {
 		uint32_t ops;
 		ret |= DARRegRead(dev_h, CPS1848_PORT_X_OPS(port), &ops);
 		ops &= ~CPS1848_PORT_X_OPS_SILENCE_CTL;
@@ -953,12 +961,20 @@ uint32_t set_switch_per_port_reset(DAR_DEV_INFO_t *dev_h)
 	return ret;
 }
 
-uint32_t set_switch_counter_enables(DAR_DEV_INFO_t *dev_h)
+uint32_t set_switch_counter_enables(DAR_DEV_INFO_t *dev_h,
+				int initialization)
 {
 	uint32_t ops;
 	uint32_t ret = 0;
+	rio_port_t st_port = 0;
+	rio_port_t end_port = NUM_PORTS(dev_h);
 
-	for (int i = 0; i < NUM_PORTS(dev_h); i++) {
+	if (!initialization) {
+		st_port = CONN_PORT(dev_h);
+		end_port = st_port + 1;
+	}
+
+	for (int i = st_port; i < end_port; i++) {
 		ret |= DARRegRead(dev_h, CPS1848_PORT_X_OPS(i), &ops);
 		ret |= DARRegWrite(dev_h, CPS1848_PORT_X_OPS(i),
 				ops | CPS1848_PORT_X_OPS_CNTRS_EN);
@@ -967,14 +983,20 @@ uint32_t set_switch_counter_enables(DAR_DEV_INFO_t *dev_h)
 }
 
 uint32_t set_switch_port_enables(DAR_DEV_INFO_t *dev_h,
-			struct librio_status *sw_h)
+			struct librio_status *sw_h,
+			int initialization)
 {
 	uint32_t ret;
 
 	rio_pc_get_config_in_t get_in;
 	rio_pc_set_config_in_t set_in;
 
-	get_in.ptl.num_ports = RIO_ALL_PORTS;
+	if (initialization) {
+		get_in.ptl.num_ports = RIO_ALL_PORTS;
+	} else {
+		get_in.ptl.num_ports = 1;
+		get_in.ptl.pnums[0] = CONN_PORT(dev_h);
+	}
 	ret = rio_pc_get_config(dev_h, &get_in, &sw_h->pc);
 	if (ret) {
 		ERR("CONFIG_SWITCH: Port Cfg Err 0x%8x Imp Rc 0x%8x\n",
@@ -1094,7 +1116,7 @@ uint32_t config_switch(DAR_DEV_INFO_t *dev_h,
 		goto exit;
 	}
 
-	ret = set_switch_silence_timer(dev_h);
+	ret = set_switch_silence_timer(dev_h, initialization);
 	if (ret) {
 		ERR("set_switch_silence_timer Fail\n");
 		goto exit;
@@ -1108,14 +1130,14 @@ uint32_t config_switch(DAR_DEV_INFO_t *dev_h,
 	}
 
 	/* Add this device to routing table */
-	ret = set_switch_counter_enables(dev_h);
+	ret = set_switch_counter_enables(dev_h, initialization);
 	if (ret) {
 		ERR("set_switch_counter_enables Fail.\n");
 		goto exit;
 	}
 
 	/* Add this device to routing table */
-	ret = set_switch_port_enables(dev_h, sw_h);
+	ret = set_switch_port_enables(dev_h, sw_h, initialization);
 	if (ret) {
 		ERR("set_switch_port_enables Fail.\n");
 		goto exit;
@@ -1125,11 +1147,11 @@ uint32_t config_switch(DAR_DEV_INFO_t *dev_h,
 
 	// Now that notification is configured, set up event notification
 	// for the connected port and for all uninitialized ports.
-	ret = set_switch_event_management(dev_h, sw_h);
-	if (ret) {
-		ERR("set_switch_event_management Fail.\n");
-		goto exit;
-	}
+	//ret = set_switch_event_management(dev_h, sw_h);
+	//if (ret) {
+		// ERR("set_switch_event_management Fail.\n");
+		// goto exit;
+	// }
 
 	// Only enable routing tables after event management is configured.
 	ret = set_switch_routing_table(dev_h, sw_h, my_devid, initialization);
@@ -1199,8 +1221,8 @@ uint32_t handle_tsi721_port_write(DAR_DEV_INFO_t *dev_h,
 	if (!(plm_stat & TSI721_PLM_STATUS_LINK_INIT))
 		goto exit;
 
-	DBG("\tSleeping\n");
-	sleep(2);
+	//DBG("\tSleeping\n");
+	//sleep(2);
 
 	DBG("\tWaiting for tsi721_mutex\n");
 	sem_wait(&tsi721_mutex);

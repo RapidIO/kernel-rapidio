@@ -918,7 +918,7 @@ void cps_event_handling_test(struct cli_env *env, rio_port_t port)
 		return;
 	}
 
-	ret = set_switch_port_enables(&dev_h, &sw_h);
+	ret = set_switch_port_enables(&dev_h, &sw_h, 1);
 	if (RIO_SUCCESS != ret) {
 		LOGMSG(env, "Failed set_switch_port_enables:0x%08x\n", ret);
 		return;

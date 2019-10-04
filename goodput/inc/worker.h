@@ -265,7 +265,7 @@ void shutdown_worker_thread(struct worker *info);
 
 bool dma_alloc_ibwin(struct worker *info);
 
-#define MAX_DEVID_STATUS 50
+#define MAX_DEVID_STATUS 18
 extern volatile int devid_status[MAX_DEVID_STATUS];
 
 // Period for Dead Link Timer detection of loss of lane sync.

@@ -2613,7 +2613,7 @@ static int SevenStatusCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(a
 	LOGMSG(env, "PORT_OK  : %d\n", wkr[0].port_ok);
 	LOGMSG(env, "PORT STAT: ");
 	// 18 is the maximum possible destID for IDT switches.
-	for (int i = 1; i < 24; i++) {
+	for (int i = 1; i < MAX_DEVID_STATUS; i++) {
 		if (devid_status[i]) {
 			if (got_one) {
 				LOGMSG(env, ", %d", i - 1);
@@ -2810,7 +2810,7 @@ static int CPSCountersCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(a
 
 	LOGMSG(env, "\nPORT STAT: ");
 	// 18 is the maximum possible destID for IDT switches.
-	for (int i = 1; i < 24; i++) {
+	for (int i = 1; i < MAX_DEVID_STATUS; i++) {
 		if (devid_status[i]) {
 			if (got_one) {
 				LOGMSG(env, ", %d", i - 1);

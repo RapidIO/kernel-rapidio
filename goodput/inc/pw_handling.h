@@ -103,7 +103,8 @@ void do_tsi721_tsi721_recovery(struct worker *info);
 uint32_t reset_cps_port(DAR_DEV_INFO_t *dev_h, uint32_t port);
 uint32_t init_switch_handle(DAR_DEV_INFO_t *dev_h);
 uint32_t set_switch_port_enables(DAR_DEV_INFO_t *dev_h,
-                        struct librio_status *sw_h);
+			struct librio_status *sw_h,
+			int initialization);
 uint32_t handle_switch_port_write_event(DAR_DEV_INFO_t *dev_h,
                                         rio_port_t pw_port,
                                         rio_em_events_t ev);
