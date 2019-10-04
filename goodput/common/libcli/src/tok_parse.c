@@ -379,6 +379,30 @@ int tok_parse_s(char *token, int16_t *value, int base)
 }
 
 /**
+  * Parse a string token for a signed short (16-bit) numeric value.
+  *
+  * @param[in] token the string representation of the numeric value
+  * @param[out] value the numeric value
+  *
+  * @retval 0 on success, -1 on failure
+  */
+int tok_parse_f(char *token, float *value)
+{
+	double data;
+	float f_data;
+
+	if (NULL == value) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	data = atof(token);
+	f_data = data;
+	*value = f_data;
+	return 0;
+}
+
+/**
  * Parse a string for a destination Id value
  *
  * @param[in] token the string representation of the destination Id

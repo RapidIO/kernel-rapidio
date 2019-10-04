@@ -93,6 +93,7 @@ int tok_parse_us(char *token, uint16_t *value, int base);
 int tok_parse_ll(char *token, int64_t *value, int base);
 int tok_parse_l(char *token, int32_t *value, int base);
 int tok_parse_s(char *token, int16_t *value, int base);
+int tok_parse_f(char *token, float *value);
 
 int tok_parse_did(char *token, did_val_t *did, int base);
 int tok_parse_ct(char *token, ct_t *ct, int base);
