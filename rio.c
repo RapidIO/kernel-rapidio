@@ -1008,12 +1008,14 @@ int rio_inb_pwrite_handler(struct rio_mport *mport, union rio_pw_msg *pw_msg)
 #endif
 
 	rdev = rio_get_comptag((pw_msg->em.comptag & RIO_CTAG_UDEVID), NULL);
+#ifdef DEBUG_PW
 	if (rdev) {
 		pr_debug("RIO: Port-Write message from %s\n", rio_name(rdev));
 	} else {
 		pr_debug("RIO: %s No matching device for CTag 0x%08x\n",
 			__func__, pw_msg->em.comptag);
 	}
+#endif
 
 	/* Call a device-specific handler (if it is registered for the device).
 	 * This may be the service for endpoints that send device-specific
