@@ -2347,6 +2347,9 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 	uint32_t downtime = 10;
 	uint32_t to_time = 5;
 	uint32_t err_time = 5;
+	did_val_t mast_did = 2;
+	hc_t mast_hc = 1;
+	float delay = 0;
 	uint16_t idx;
 	req_type req;
 
@@ -2399,8 +2402,40 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 		}
 	}
 
+	n++;
+	if (n < argc) {
+		rc = tok_parse_did(argv[n], &mast_did, 10);
+		if (rc) {
+			LOGMSG(env, "Unrecognized MastDID value: %s\n", argv[n]);
+			goto exit;
+		}
+	}
+
+	n++;
+	if (n < argc) {
+		rc = tok_parse_hc(argv[n], &mast_hc, 10);
+		if (rc) {
+			LOGMSG(env, "Unrecognized MastHC value: %s\n", argv[n]);
+			goto exit;
+		}
+	}
+
+	n++;
+	if (n < argc) {
+		rc = tok_parse_f(argv[n], &delay);
+		if (rc) {
+			LOGMSG(env, "Unrecognized Delay value: %s\n", argv[n]);
+			goto exit;
+		}
+	}
+
 	if ((err_time + to_time + downtime) >= period) {
 		LOGMSG(env, "Times don't add up.\n");
+		goto exit;
+	}
+
+	if (delay > (float)(period)) {
+		LOGMSG(env, "Delay must be less than period.\n");
 		goto exit;
 	}
 
@@ -2411,6 +2446,9 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 	wkr[idx].seven_test_downtime = downtime;
 	wkr[idx].seven_test_err_resp_time = err_time;
 	wkr[idx].seven_test_resp_to_time = to_time;
+	wkr[idx].did_val = mast_did;
+	wkr[idx].hc = mast_hc;
+	wkr[idx].seven_test_delay = delay;
 
 	wkr[idx].stop_req = 0;
 	sem_post(&wkr[idx].run);
@@ -2429,7 +2467,7 @@ struct cli_cmd SevenTest = {
 "<option>: P : Receive and display all port-writes and local interrupts.\n"
 "              Do not handle the port-writes or interrupts.\n"
 "          I : Tsi721 fault insertion.  Requires <Period>, <DownTime>\n"
-"              <TOTime> and <ErrTime>.\n"
+"              <TOTime> <ErrTime> <MasterDid> <MasterHC> <Delay>.\n"
 "Period  : Time in seconds between attempts to kill the link, default is 30.\n"
 "          Downtime, TOTime, and ErrTime must add up to less than Period.\n"
 "DownTime: Time in seconds that the link will be down, default is 10.\n"
@@ -2438,7 +2476,11 @@ struct cli_cmd SevenTest = {
 "          Default is 5 seconds.\n"
 "ErrTime : Time in seconds that other Tsi721s will see error respones.\n"
 "          Corrupts the address of inbound window 0 (offset 0x29000)\n"
-"          Default is 5 seconds.\n",
+"          Default is 5 seconds.\n"
+"MastDID : Destination ID of first endpoint to run fault insertion.\n"
+"MastHC  : Hopcount to read registers on MastDID device.\n"
+"Delay   : Delay from start of Mast DID fault insertion to start of fault\n"
+"          insertion on this device.\n",
 SevenTestCmd,
 ATTR_NONE
 };

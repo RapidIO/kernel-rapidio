@@ -1,10 +1,13 @@
 // Script to run on all endpoints in CPS hot swap test.
 // This script starts fault insertion on a node.
 //
-// In a 45 second period:
-// 15 seconds of link down
+// In a 50 second period:
+// 10 seconds of link down
 // 5 seconds of error responses
 // 5 seconds of response timeouts
+// 2 Master endpoint destID is "2"
+// 1 Master hopcount
+// 20 Delay 20 seconds before starting fault insertion on non-master endpoint
 t 12 -1 0
 w 12 H
-7T 12 I 45 15 5 5
+7T 12 I 50 10 5 5 2 1 20

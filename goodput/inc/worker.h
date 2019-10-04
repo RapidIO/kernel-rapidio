@@ -136,6 +136,7 @@ struct worker {
 	enum req_mode action_mode;
 	did_val_t did_val;
 	did_val_t prev_did_val;
+	hc_t hc;
 
 	uint16_t ignore_dma_errs; // 0 - halt on DMA error, 1: continue
 	uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
@@ -227,6 +228,7 @@ struct worker {
 	uint32_t seven_test_downtime;
 	uint32_t seven_test_err_resp_time;
 	uint32_t seven_test_resp_to_time;
+	float seven_test_delay;
 };
 
 /**

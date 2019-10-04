@@ -297,6 +297,41 @@ exit:
 	}
 }
 
+int sync_with_other_endpoint(struct worker *info, uint32_t did)
+{
+	int ret;
+	uint32_t wb, new_wb;
+
+	if (info->did_val == did) {
+		HIGH("Incrementing whiteboard\n");
+		ret = rio_lcfg_read(info->mp_h, TSI721_WHITEBOARD, 4, &wb);
+		wb++;
+		ret |= rio_lcfg_write(info->mp_h, TSI721_WHITEBOARD, 4, wb);
+		HIGH("Whiteboard now %d\n", wb);
+		goto exit;
+	}
+
+	ret = rio_maint_read(info->mp_h, info->did_val, info->hc,
+				TSI721_WHITEBOARD, sizeof(wb), &wb);
+	HIGH("Waiting for whiteboard not %d\n", wb);
+
+	do {
+		ret = rio_maint_read(info->mp_h, info->did_val, info->hc,
+				TSI721_WHITEBOARD, sizeof(new_wb), &new_wb);
+	} while (!info->stop_req && !ret && (new_wb == wb));
+
+	// 22 assumes Up for 20, err 5, RTO 5, and down 10.
+	if (!info->stop_req && !ret) {
+		HIGH("Sleeping %f seconds after whiteboard change\n",
+			info->seven_test_delay);
+		sleep(info->seven_test_delay);
+	}
+exit:
+	if (ret)
+		ERR("Problem accessing whiteboard register.\n")
+	return ret;
+}
+
 void do_tsi721_fault_ins(struct worker *info)
 {
 	int ret = 0;
@@ -340,7 +375,8 @@ void do_tsi721_fault_ins(struct worker *info)
 	if (ret)
 		dev = 0;
 	DBG("ret 0x%x dev %d\n", ret, dev);
-	ret = 0;
+
+	ret = sync_with_other_endpoint(info, GET_DEV8_FROM_HW(did));
 
 	while (!info->stop_req && !ret) {
 		HIGH("7Test: Iter %d Tsi721 UpTime\n", iter);
