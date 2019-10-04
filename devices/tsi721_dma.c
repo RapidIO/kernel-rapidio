@@ -1178,42 +1178,5 @@ int tsi721_query_dma(struct dma_chan *dma_chan)
 	struct tsi721_bdma_chan *bdma;
 	bdma = container_of(dma_chan, struct tsi721_bdma_chan, dchan);
 
-	tsi_info(&bdma->dchan.dev->device,
-		"ID %d ACTIVE %d",
-		bdma->id, bdma->active);
-	tsi_info(&bdma->dchan.dev->device,
-		"TX_DESC BASE %p PHYS %p NUM %d WR CNT %d NEXT %d",
-		bdma->bd_base, (void *)bdma->bd_phys, bdma->bd_num,
-		bdma->wr_count, bdma->wr_count_next);
-	tsi_info(&bdma->dchan.dev->device,
-		"STS BASE %p PHYS %p SIZE %d R %d",
-		bdma->sts_base, (void *)bdma->sts_phys,
-	bdma->sts_size, bdma->sts_rdptr);
-	tsi_info(&bdma->dchan.dev->device,
-		"EMPTY QUEUE %d FREE %d ACTIVE %d",
-		list_empty(&bdma->queue),
-		list_empty(&bdma->free_list),
-		(NULL == bdma->active_tx));
-	tsi_info(&bdma->dchan.dev->device,
-		"WRCNT: 0x%x",
-	ioread32(bdma->regs + TSI721_DMAC_DWRCNT));
-	tsi_info(&bdma->dchan.dev->device,
-		"RDCNT: 0x%x",
-	ioread32(bdma->regs + TSI721_DMAC_DRDCNT));
-	tsi_info(&bdma->dchan.dev->device,
-		"CTL  : 0x%x",
-	ioread32(bdma->regs + TSI721_DMAC_CTL));
-	tsi_info(&bdma->dchan.dev->device,
-		"INTE 0x%x",
-	ioread32(bdma->regs + TSI721_DMAC_INTE));
-	tsi_info(&bdma->dchan.dev->device,
-		"STS 0x%x",
-	ioread32(bdma->regs + TSI721_DMAC_STS));
-	tsi_info(&bdma->dchan.dev->device,
-		"STS Rp 0x%x",
-	ioread32(bdma->regs + TSI721_DMAC_DSRP));
-	tsi_info(&bdma->dchan.dev->device,
-		"STS Wp 0x%x",
-	ioread32(bdma->regs + TSI721_DMAC_DSWP));
 	return bdma->id;
 }
