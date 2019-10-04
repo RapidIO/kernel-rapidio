@@ -1505,6 +1505,15 @@ void do_reg_scrub(struct worker *info)
 	}
 }
 
+void do_maint_traffic(struct worker *info)
+{
+	uint32_t x;
+
+	while (!info->stop_req)
+		rio_maint_read(info->mp_h, info->did_val, info->hc, 0, 4, &x);
+}
+
+
 void *worker_thread(void *parm)
 {
 	struct worker *info = (struct worker *)parm;
@@ -1592,6 +1601,9 @@ void *worker_thread(void *parm)
 			break;
 		case cps_test_switch_lock:
 			do_tsi721_test_switch_lock(info);
+			break;
+		case maint_traffic:
+			do_maint_traffic(info);
 			break;
 		case no_action:
 		case last_action:

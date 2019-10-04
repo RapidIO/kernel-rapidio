@@ -96,6 +96,7 @@ char *req_type_str[(int)last_action+1] = {
 	(char *)"721PWh",
 	(char *)"Pol4PW",
 	(char *)"SwLock",
+	(char *)"Maint ",
 	(char *)"LAST"
 };
 
@@ -2533,6 +2534,62 @@ CPSHotSwapCmd,
 ATTR_NONE
 };
 
+static int MaintTrafficCmd(struct cli_env *env, int argc, char **argv)
+{
+	int rc;
+	int n = 0;
+	uint16_t idx;
+
+	rc = gp_parse_worker_index_check_thread(env, argv[n++], &idx, 1);
+	if (rc) {
+		LOGMSG(env, "Need index of a halted thread.\n");
+		goto exit;
+	}
+
+	wkr[idx].did_val = 0;
+	wkr[idx].hc = 0;
+
+	if (argc > 1) {
+		if (tok_parse_did(argv[1], &wkr[idx].did_val, 0)) {
+			LOGMSG(env, TOK_ERR_DID_MSG_FMT);
+			goto exit;
+		}
+	}
+
+	if (argc > 2) {
+		if (tok_parse_hc(argv[2], &wkr[idx].hc, 0)) {
+			LOGMSG(env, TOK_ERR_HC_MSG_FMT);
+			goto exit;
+		}
+	}
+
+	wkr[idx].action = maint_traffic;
+	wkr[idx].action_mode = kernel_action;
+
+	wkr[idx].stop_req = 0;
+	wkr[idx].stop_req = 0;
+	sem_post(&wkr[idx].run);
+exit:
+	return 0;
+}
+
+struct cli_cmd MaintTraffic = {
+"maint",
+2,
+1,
+"Generate maintenance read traffic to specified destination.\n",
+"<idx> {<destid> {<hopcount>}}\n"
+"Perform continuous maintenance transactions to specified destination.\n"
+"<idx>     : halted thread that will generation maintenance reads.\n"
+"<destid>  : Destination ID for maintenance reads.\n"
+"            Default value is 0.\n"
+"<hopcount>: Hop count for maintenance reads.\n"
+"            Default value is 0.\n",
+MaintTrafficCmd,
+ATTR_NONE
+};
+
+
 static int SevenHotSwapCmd(struct cli_env *env, int UNUSED(argc), char **argv)
 {
 	int rc;
@@ -4283,7 +4340,8 @@ struct cli_cmd *goodput_cmds[] = {
 	&CPSEvent,
 	&CPSReset,
 	&FileRegs,
-	&CPSHotSwap
+	&CPSHotSwap,
+	&MaintTraffic
 };
 
 void bind_goodput_cmds(void)
