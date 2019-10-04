@@ -146,7 +146,7 @@ static int tsi721_maint_dma(struct tsi721_device *priv, u32 sys_size,
 	if (do_wr)
 		bd_ptr[0].data[0] = cpu_to_be32p(data);
 	else
-		bd_ptr[0].data[0] = 0xffffffff;
+		bd_ptr[0].data[0] =cpu_to_be32(0xdeadbeef);
 
 	mb();
 
@@ -159,7 +159,7 @@ static int tsi721_maint_dma(struct tsi721_device *priv, u32 sys_size,
 	while ((ch_stat = ioread32(regs + TSI721_DMAC_STS))
 							& TSI721_DMAC_STS_RUN) {
 		udelay(1);
-		if (++i >= 5000) {
+		if (++i >= 50000) {
 			tsi_debug(MAINT, &priv->pdev->dev,
 				"DMA[%d] read timeout ch_status=%x",
 				priv->mdma.ch_id, ch_stat);
@@ -191,8 +191,19 @@ static int tsi721_maint_dma(struct tsi721_device *priv, u32 sys_size,
 		goto err_out;
 	}
 
-	if (!do_wr)
-		*data = be32_to_cpu(bd_ptr[0].data[0]);
+	/*
+	 * Under pathological RapidIO/PCIe traffic conditions,
+	 * when the engine says it is done the data read may not be
+	 * in memory yet.
+	 *
+	 * Wait until the data shows up, or 5 usec (whichever is shorter).
+	 */
+	if (!do_wr) {
+		i = 0;
+		do
+			*data = be32_to_cpu(bd_ptr[0].data[0]);
+		while ((0xdeadbeef == *data) && (i++ < 1000));
+	}
 
 	/*
 	 * Update descriptor status FIFO RD pointer.
