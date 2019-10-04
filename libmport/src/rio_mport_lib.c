@@ -1074,12 +1074,12 @@ void display_mport_info(struct rio_mport_properties *attr)
 	printf("\n");
 }
 
-int rio_mport_query_dma(int fd, int *dma_chan)
+int rio_mport_query_dma(int fd, uint32_t *did_n_chan)
 {
 	int ret = -1;
 
-	/* Request MPORT list from the driver (first entry is list size) */
-	if (ioctl(fd, RIO_MPORT_QUERY_DMA, dma_chan)) {
+	/* Query DMA channel and status associated with MPORT */
+	if (ioctl(fd, RIO_MPORT_QUERY_DMA, did_n_chan)) {
 		ret = errno;
 		goto exit;
 	}

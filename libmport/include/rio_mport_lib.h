@@ -118,7 +118,7 @@ int rio_mport_get_ep_list(uint8_t mport_id, uint32_t **destids,
 
 int rio_mport_free_ep_list(uint32_t **destids);
 
-int rio_mport_query_dma(int fd, int *dma_chan);
+int rio_mport_query_dma(int fd, uint32_t *did_n_chan);
 
 int rio_dma_write(int fd, uint16_t destid, uint64_t tgt_addr, void *buf,
 		  uint32_t size, enum rio_exchange wr_mode,
