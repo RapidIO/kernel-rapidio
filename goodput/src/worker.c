@@ -636,8 +636,8 @@ int alloc_dma_tx_buffer(struct worker *info)
 			info->rdma_ptr = NULL;
 
 		if (NULL == info->rdma_ptr) {
-			ERR("FAILED: mmap rc %d:%s\n",
-						rc, strerror(errno));
+			ERR("FAILED: mmap errno %d:%s\n",
+						errno, strerror(errno));
 			rc = 1;
 			goto exit;
 		}
@@ -1444,8 +1444,8 @@ bool dma_alloc_ibwin(struct worker *info)
 
 	if (NULL == info->ib_ptr) {
 		rio_ibwin_free(info->mp_h, &info->ib_handle);
-		ERR("FAILED: riomp_dma_map_memory rc %d:%s\n",
-					rc, strerror(errno));
+		ERR("FAILED: riomp_dma_map_memory errno %d:%s\n",
+					errno, strerror(errno));
 		return false;
 	}
 	if (info->ib_ptr == NULL) {
