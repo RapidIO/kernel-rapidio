@@ -1443,9 +1443,9 @@ bool dma_alloc_ibwin(struct worker *info)
 		info->ib_ptr = NULL;
 
 	if (NULL == info->ib_ptr) {
-		rio_ibwin_free(info->mp_h, &info->ib_handle);
 		ERR("FAILED: riomp_dma_map_memory errno %d:%s\n",
 					errno, strerror(errno));
+		rio_ibwin_free(info->mp_h, &info->ib_handle);
 		return false;
 	}
 	if (info->ib_ptr == NULL) {
