@@ -435,12 +435,22 @@ int direct_io_obwin_map(struct worker *info)
 	info->ob_valid = 1;
 
 	info->ob_ptr = mmap(NULL, info->ob_byte_cnt, PROT_READ | PROT_WRITE,
-		MAP_SHARED, info->mp_h, info->mp_h);
+		MAP_SHARED, info->mp_h, info->ob_handle);
+
+	if (info->ob_ptr == MAP_FAILED)
+		info->ob_ptr = NULL;
+
+	if (info->ob_ptr == NULL) {
+		ERR("FAILED: mmap %d:%s\n",errno,strerror(errno));
+		rc = 1;
+		goto exit;
+	}
+
 	// rc = riomp_dma_map_memory(info->mp_h, info->ob_byte_cnt,
 	//			info->ob_handle, &info->ob_ptr);
-	if (rc)
-		ERR("FAILED: riomp_dma_map_memory rc %d:%s\n",
-					rc, strerror(errno));
+	//if (rc)
+	//	ERR("FAILED: riomp_dma_map_memory rc %d:%s\n",
+	//		rc, strerror(errno));
 exit:
 	return rc;
 }
@@ -622,9 +632,13 @@ int alloc_dma_tx_buffer(struct worker *info)
 			info->mp_h, info->rdma_kbuff);
 		// rc = riomp_dma_map_memory(info->mp_h, info->rdma_buff_size,
 		//			info->rdma_kbuff, &info->rdma_ptr);
+		if (info->rdma_ptr == MAP_FAILED)
+			info->rdma_ptr = NULL;
+
 		if (NULL == info->rdma_ptr) {
-			ERR("FAILED: mmap rc %d:%s\n",
-						rc, strerror(errno));
+			ERR("FAILED: mmap errno %d:%s\n",
+						errno, strerror(errno));
+			rc = 1;
 			goto exit;
 		}
 	} else {
@@ -787,7 +801,7 @@ void dma_goodput(struct worker *info)
 	while (!info->stop_req) {
 		uint64_t cnt;
 
-		if (dma_tx_lat == info->action) {
+		if (dma_tx_lat == info->action && info->wr) {
 			start_iter_stats(info);
 			*rx_flag = info->perf_iter_cnt + 1;
 		}
@@ -1425,10 +1439,13 @@ bool dma_alloc_ibwin(struct worker *info)
 				MAP_SHARED, info->mp_h, info->ib_handle);
 	// rc = riomp_dma_map_memory(info->mp_h, info->ib_byte_cnt,
 	//				info->ib_handle, &info->ib_ptr);
+	if (info->ib_ptr == MAP_FAILED)
+		info->ib_ptr = NULL;
+
 	if (NULL == info->ib_ptr) {
+		ERR("FAILED: riomp_dma_map_memory errno %d:%s\n",
+					errno, strerror(errno));
 		rio_ibwin_free(info->mp_h, &info->ib_handle);
-		ERR("FAILED: riomp_dma_map_memory rc %d:%s\n",
-					rc, strerror(errno));
 		return false;
 	}
 	if (info->ib_ptr == NULL) {

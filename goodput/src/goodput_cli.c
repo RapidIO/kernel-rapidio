@@ -1865,7 +1865,7 @@ static void display_msg_status(struct cli_env *env)
 			wkr[i].con_skt_valid, wkr[i].msg_size,
 			wkr[i].sock_num, (NULL != wkr[i].sock_tx_buf),
 			(NULL != wkr[i].sock_rx_buf)
-		)
+		);
 	}
 }
 
