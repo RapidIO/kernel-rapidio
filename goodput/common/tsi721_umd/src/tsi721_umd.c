@@ -5,9 +5,10 @@
 
 #define CFG_MEM_SIZE (512*1024) // TBD: check this size
 
-// TBD - check normal defaults on these
-#define DEFAULT_REQUEST_Q_SIZE    (16*1024*1024)
-#define DEFAULT_COMPLETION_Q_SIZE (16*1024*1024)
+#define DTYPE1_DESCRIPTOR_SIZE    32
+#define RESPONSE_DESCRIPTOR_SIZE  64
+#define DEFAULT_REQUEST_Q_SIZE    (64 * DTYPE1_DESCRIPTOR_SIZE)
+#define DEFAULT_COMPLETION_Q_SIZE (64 * RESPONSE_DESCRIPTOR_SIZE)
 
 static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id);
 
@@ -53,7 +54,7 @@ int32_t tsi721_umd_open(struct tsi721_umd* h, uint32_t mport_id)
 	h->dev_fd = rio_mport_open(mport_id, 0);
 	if (h->dev_fd <= 0)
 	{
-		ERRMSG("Fail to open mport dev\n");
+		ERRMSG("Fail to open mport dev, err %d %s\n",errno,strerror(errno));
 		return -1;
 	}
 	
