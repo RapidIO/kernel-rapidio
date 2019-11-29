@@ -3,7 +3,7 @@
 #include <assert.h>
 #include "tsi721_umd.h"
 
-#define CFG_MEM_SIZE (512*1024) // TBD: check for define for this size
+#define CFG_MEM_SIZE (512*1024) // TBD: check this size
 
 // TBD - check normal defaults on these
 #define DEFAULT_REQUEST_Q_SIZE    (16*1024*1024)
@@ -17,13 +17,13 @@ static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id)
 	char bar_filename[256];
 	void* ptr;
 
-	snprintf(bar_filename,256,"/sys/class/rapidio_port/rapidio%d/device/resource/bar0",mport_id);
+	snprintf(bar_filename,256,"/sys/class/rapidio_port/rapidio%d/device/resource0",mport_id);
 
 	fd = open(bar_filename, O_RDWR | O_SYNC | O_CLOEXEC);
 
 	if (fd < 0)
 	{
-		ERRMSG("Failed to open fd to mport %d bar 0\n",mport_id);
+		ERRMSG("Failed to open fd to mport %d bar 0 at filename %s, error %d %s\n",mport_id,bar_filename, errno, strerror(errno));
 		return -1;
 	}
 
@@ -33,7 +33,7 @@ static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id)
 
 	if (ptr == MAP_FAILED)
 	{
-		ERRMSG("Failed to MMAP %d of bar0 space, error %d %s\n",CFG_MEM_SIZE,errno,strerror(errno));
+		ERRMSG("Failed to mmap %d bytes of bar0 space, error %d %s\n",CFG_MEM_SIZE,errno,strerror(errno));
 		return -1;
 	}
 
@@ -137,17 +137,25 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
 	return 0;
 }
 
-int32_t tsi721_umd_queue_start(struct tsi721_umd* h, uint8_t channel_mask, void* queue_mem[], uint32_t queue_mem_size)
+int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t channel_mask, void* phys_mem, uint32_t phys_mem_size)
 {
 	int32_t i, ret, fail=0;
+	uintptr_t ptr = (uintptr_t)phys_mem;
+	const uint32_t queue_size = DEFAULT_REQUEST_Q_SIZE + DEFAULT_COMPLETION_Q_SIZE;
 
 	assert(h->state == TSI721_UMD_STATE_UNCONFIGURED);
+
+	if (phys_mem_size < queue_size * TSI721_DMA_CHNUM)
+	{
+		ERRMSG("Error: %d allocated physical memory size is insufficent",phys_mem_size);
+		return -1;
+	}
 
 	for (i=0; i<TSI721_DMA_CHNUM; i++)
 	{
 		if ((1<<i) & channel_mask)
 		{
-			ret = tsi721_umd_queue_config(h,i,queue_mem[i],queue_mem_size);
+			ret = tsi721_umd_queue_config(h,i,(void*)ptr,queue_size);
 			if (ret < 0)
 			{
 				ERRMSG("Failed to configure queue %d\n",i);
@@ -157,6 +165,7 @@ int32_t tsi721_umd_queue_start(struct tsi721_umd* h, uint8_t channel_mask, void*
 			{
 				printf("Success configure queue %d\n",i);
 			}
+			ptr += queue_size;
 		}
 	}
 
@@ -167,34 +176,9 @@ int32_t tsi721_umd_queue_start(struct tsi721_umd* h, uint8_t channel_mask, void*
 	return 0;
 }
 
-int32_t tsi721_umd_start(struct tsi721_umd* h, uint8_t channel_mask, void* phys_mem, uint32_t phys_mem_size)
+int32_t tsi721_umd_start(struct tsi721_umd* h)
 {
-	int32_t i, ret;
-	uintptr_t ptr = (uintptr_t)phys_mem;
-
-	assert(h->state == TSI721_UMD_STATE_UNALLOCATED);
-
-	if (phys_mem_size < (DEFAULT_REQUEST_Q_SIZE + DEFAULT_COMPLETION_Q_SIZE) * TSI721_DMA_CHNUM)
-	{
-		ERRMSG("Error: %d allocated physical memory size is insufficent",phys_mem_size);
-		return -1;
-	}
-
-	// Allocate queues
-	for (i=0; i<TSI721_DMA_CHNUM; i++)
-	{
-		if (channel_mask & (1<<i))
-		{
-			ret = tsi721_umd_queue_config(h, i, (void*)ptr, DEFAULT_REQUEST_Q_SIZE + DEFAULT_COMPLETION_Q_SIZE);
-			if (ret < 0)
-			{
-				ERRMSG("Error config queue %d\n",i);
-				return -1;
-			}
-			ptr += DEFAULT_REQUEST_Q_SIZE + DEFAULT_COMPLETION_Q_SIZE;
-		}
-			
-	}
+	int32_t ret;
 
 	// Allocate channel dispatch mutex
 	ret = pthread_mutex_init(&h->channel_mutex, NULL);
