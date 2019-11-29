@@ -17,7 +17,7 @@ static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id)
 	char bar_filename[256];
 	void* ptr;
 
-	snprintf(bar_file,256,"/sys/class/rapidio_port/rapidio%d/device/resource/bar0",mport_id);
+	snprintf(bar_filename,256,"/sys/class/rapidio_port/rapidio%d/device/resource/bar0",mport_id);
 
 	fd = open(bar_filename, O_RDWR | O_SYNC | O_CLOEXEC);
 
@@ -43,34 +43,36 @@ static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id)
 }
 
 
-int32_t tsi721_umd_open(struct tsi721_umd* h, uint32_t mport_id, uint8_t channel_mask)
+int32_t tsi721_umd_open(struct tsi721_umd* h, uint32_t mport_id)
 {
 	assert(h->state == TSI721_UMD_STATE_UNALLOCATED);
 	
-	memset(0, h, sizeof(*h));
+	memset(h, 0, sizeof(*h));
 
 	// Get device handle
-	h->dev_file = rio_mport_open(mport_id, 0);
-	if (h->dev_file <= 0)
+	h->dev_fd = rio_mport_open(mport_id, 0);
+	if (h->dev_fd <= 0)
 	{
 		ERRMSG("Fail to open mport dev\n");
 		return -1;
 	}
 	
 	// Get pointer to BAR0 configuration space
-	if (map_bar0(mport_id) < 0)
+	if (map_bar0(h,mport_id) < 0)
 	{
 		ERRMSG("Failed to map registers to process mem\n");
 		return -1;
 	}
 
 	h->state = TSI721_UMD_STATE_UNCONFIGURED;
+
+	return 0;
 }
 
-int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8 channel_num, void* queue_mem_phys, uint32_t queue_mem_size)
+int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void* queue_mem_phys, uint32_t queue_mem_size)
 {
 	uint32_t page_size = sysconf(_SC_PAGE_SIZE);
-	dma_channel* chan;
+	struct dma_channel* chan;
 	int32_t mem_fd;
 
 	if (!h)
@@ -84,11 +86,11 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8 channel_num, void* q
 
 	if (h->chan_mask & (1<<channel_num))
 	{
-		ERRMSG("Channel %d already configured\n");
+		ERRMSG("Channel %d already configured\n", channel_num);
 		return -1;
 	}
 	
-	chan = h->chan[channel_numm];
+	chan = &h->chan[channel_num];
 
 	// TBD: use user-config sizes for queues instead of a fixed default
 	if (queue_mem_size < (DEFAULT_REQUEST_Q_SIZE + DEFAULT_COMPLETION_Q_SIZE))
@@ -102,7 +104,7 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8 channel_num, void* q
 		return -1;
 	}
 
-	if ((queue_mem_phys & (page_size-1)) != 0)
+	if (((uintptr_t)queue_mem_phys & (page_size-1)) != 0)
 	{
 		ERRMSG("Invalid queue memory address %p, must be page aligned to %x\n",queue_mem_phys,page_size);
 		return -1;
@@ -165,12 +167,18 @@ int32_t tsi721_umd_queue_start(struct tsi721_umd* h, uint8_t channel_mask, void*
 	return 0;
 }
 
-int32_t tsi721_umd_start(struct tsi721* h, uint8_t channel_mask, void* phys_mem, uint32_t phys_mem_size)
+int32_t tsi721_umd_start(struct tsi721_umd* h, uint8_t channel_mask, void* phys_mem, uint32_t phys_mem_size)
 {
 	int32_t i, ret;
 	uintptr_t ptr = (uintptr_t)phys_mem;
 
 	assert(h->state == TSI721_UMD_STATE_UNALLOCATED);
+
+	if (phys_mem_size < (DEFAULT_REQUEST_Q_SIZE + DEFAULT_COMPLETION_Q_SIZE) * TSI721_DMA_CHNUM)
+	{
+		ERRMSG("Error: %d allocated physical memory size is insufficent",phys_mem_size);
+		return -1;
+	}
 
 	// Allocate queues
 	for (i=0; i<TSI721_DMA_CHNUM; i++)
