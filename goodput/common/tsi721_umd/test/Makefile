@@ -42,7 +42,7 @@ TARGETS:=basic
 
 all: $(TARGETS)
 
-basic:
+basic: basic.c
 	$(CC) -g basic.c -o basic $(CFLAGS)
 #gcc basic.c -o basic -lumd -l:libmport.a -L.. -L../../../../libmport -I../../../../libmport/include -I../../../inc
 

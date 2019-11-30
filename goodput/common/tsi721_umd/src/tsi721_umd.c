@@ -111,11 +111,11 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
 	}
 	
 	chan->request_q_phys = queue_mem_phys;
-	chan->request_q = mmap(NULL, queue_mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, h->dev_fd, (size_t)queue_mem_phys);
+	chan->request_q = mmap(NULL, queue_mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, h->dev_fd, (size_t)queue_mem_phys);
 
 	if (chan->request_q == MAP_FAILED)
 	{
-		ERRMSG("Failed to mmap the queue memory\n");
+		ERRMSG("Failed to mmap the queue memory at address %p size %d: err %d %s\n",queue_mem_phys,queue_mem_size,errno,strerror(errno));
 		return -1;
 	}
 
@@ -138,7 +138,7 @@ int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t channel_mask
 
 	if (phys_mem_size < queue_size * TSI721_DMA_CHNUM)
 	{
-		ERRMSG("Error: %d allocated physical memory size is insufficent",phys_mem_size);
+		ERRMSG("Allocated physical (%d) memory size is insufficent",phys_mem_size);
 		return -1;
 	}
 
