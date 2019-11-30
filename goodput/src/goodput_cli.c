@@ -4322,6 +4322,271 @@ UTimeCmd,
 ATTR_NONE
 };
 
+static int Tsi721WCmd(struct cli_env *env, int argc, char **argv)
+{
+	int rc;
+	uint16_t w_idx;
+	uint64_t address;
+	uint32_t win_size;
+	char *mem_sizes = (char *)"32K 64K 128K 256K 512K 1M 2M 4M 8M 16M ";
+	char *disp_sizes[] = {(char *)"32K",
+				(char *)"64K",
+				(char *)"128K",
+				(char *)"256K",
+				(char *)"512K",
+				(char *)"1M",
+				(char *)"2M",
+				(char *)"4M",
+				(char *)"8M",
+				(char *)"16M" };
+	uint32_t obwin_u, obwin_l, obwin_sz;
+
+	if (tok_parse_ushort(argv[0], &w_idx, 0, 7, 0)) {
+		LOGMSG(env, "Window index must be 0 to 7.\n");
+		goto exit;
+	}
+
+	if (argc > 2) {
+		uint32_t unused;
+		uint32_t addr_mask;
+
+		if (tok_parse_ull(argv[1], &address, 0)) {
+			LOGMSG(env, "Unrecognized address value.\n");
+			goto exit;
+		}
+
+		win_size = parm_idx(argv[2], mem_sizes);
+		if (win_size > 9) {
+			LOGMSG(env, "Window size must be one of:\n%s\n",
+					mem_sizes);
+			goto exit;
+		}
+
+		addr_mask = (1 << (15 + win_size)) - 1;
+		if (address & addr_mask) {
+			LOGMSG(env, "Window address must be aligned to"
+				" window size");
+			goto exit;
+		}
+		obwin_l = address & TSI721_OBWINLBX_ADD;
+		obwin_l |= TSI721_OBWINLBX_WIN_EN;
+		obwin_u = (uint32_t)(address >> 32) & TSI721_OBWINUBX_ADD;
+		obwin_sz = (win_size << 8) & TSI721_OBWINSZX_SIZE;
+
+		// Before changing the window, disable it.
+		rc = rio_lcfg_write(mp_h, TSI721_OBWINLBX(w_idx), 4, 0);
+		rc |= rio_lcfg_read(mp_h, TSI721_OBWINLBX(w_idx), 4, &unused);
+		// Reprogram the window, re-enable is the last write
+		rc |= rio_lcfg_write(mp_h, TSI721_OBWINSZX(w_idx), 4, obwin_sz);
+		rc |= rio_lcfg_write(mp_h, TSI721_OBWINUBX(w_idx), 4, obwin_u);
+		rc |= rio_lcfg_write(mp_h, TSI721_OBWINLBX(w_idx), 4, obwin_l);
+		rc |= rio_lcfg_read(mp_h, TSI721_OBWINLBX(w_idx), 4, &unused);
+		if (rc) {
+			LOGMSG(env, "Error writing registers.\n");
+			goto exit;
+		}
+	}
+
+	rc = rio_lcfg_read(mp_h, TSI721_OBWINSZX(w_idx), 4, &obwin_sz);
+	rc |= rio_lcfg_read(mp_h, TSI721_OBWINUBX(w_idx), 4, &obwin_u);
+	rc |= rio_lcfg_read(mp_h, TSI721_OBWINLBX(w_idx), 4, &obwin_l);
+	if (rc) {
+		LOGMSG(env, "Error reading registers.\n");
+		goto exit;
+	}
+
+	address = ((uint64_t)(obwin_u) << 32)
+		| (uint64_t)(obwin_l & TSI721_OBWINLBX_ADD);
+	win_size = (obwin_sz & TSI721_OBWINSZX_SIZE) >> 8;
+
+	if (obwin_l & TSI721_OBWINLBX_WIN_EN) {
+		LOGMSG(env, "Window %d enabled.\n", w_idx);
+		LOGMSG(env, "Window    Address: 0x%lx\n", address);
+		LOGMSG(env, "Window    Size   : 0x%x %s\n",
+			win_size,
+			win_size < 10 ? disp_sizes[win_size] : "Unknown");
+	} else {
+		LOGMSG(env, "Window %d Disabled.\n", w_idx);
+	}
+exit:
+	return 0;
+}
+
+struct cli_cmd Tsi721W = {
+"Window",
+2,
+1,
+"Tsi721 Outbound Window command.",
+"<window> {<PciAddr> <size>}\n"
+"Manage Tsi721 outbound windows.  Optionally, set Tsi721 outbound windows.\n"
+"<window> : Value 0-7, selecting a window\n"
+"<PciAddr>: Memory address the window should respond to.\n"
+"           This value MUST be in the currently configured BAR2 or BAR4.\n"
+"           Use lspci from linux command line to determine current values.\n"
+"<size>   : One of 32K, 64K, 128K, 256K, 512K, 1M, 2M, 4M, 8M, 16M.\n",
+Tsi721WCmd,
+ATTR_NONE
+};
+
+static int Tsi721ZCmd(struct cli_env *env, int argc, char **argv)
+{
+	int rc;
+	uint16_t w_idx;
+	uint16_t z_idx;
+	uint64_t trans_addr;
+	hc_t hc;
+	did_val_t did;
+	int dev16_sz;
+	int mtc_trans;
+	char *mem_or_mtc = (char *)"Mem Mtc ";
+	char *dev8_or_16 = (char *)"dev8 dev16 ";
+	uint32_t zone_sel, lut_0, lut_1, lut_2, temp;
+
+	if (tok_parse_ushort(argv[0], &w_idx, 0, 7, 0)) {
+		LOGMSG(env, "Window index must be 0 to 7.\n");
+		goto exit;
+	}
+
+	if (tok_parse_ushort(argv[1], &z_idx, 0, 7, 0)) {
+		LOGMSG(env, "Zone index must be 0 to 7.\n");
+		goto exit;
+	}
+
+	if (argc >= 6) {
+		mtc_trans = parm_idx(argv[2], mem_or_mtc);
+		if (mtc_trans > 1) {
+			LOGMSG(env, "Translation type must be one of:\n%s\n",
+					mem_or_mtc);
+			goto exit;
+		}
+
+		if (tok_parse_ull(argv[3], &trans_addr, 0)) {
+			LOGMSG(env, "Unrecognized address value.\n");
+			goto exit;
+		}
+		dev16_sz = parm_idx(argv[4], dev8_or_16);
+		if (dev16_sz > 1) {
+			LOGMSG(env, "DestID size must be be one of:\n%s\n",
+					dev8_or_16);
+			goto exit;
+		}
+		if (tok_parse_did(argv[5], &did, 0)) {
+			LOGMSG(env, "Device ID must be between 0 and 0xFFFF\n");
+			goto exit;
+		}
+		if (mtc_trans) {
+			if (argc < 7) {
+				LOGMSG(env, "Missing parameter: hopcount.\n");
+				goto exit;
+			}
+			if (tok_parse_hc(argv[6], &hc, 0)) {
+				LOGMSG(env, TOK_ERR_HC_MSG_FMT);
+				goto exit;
+			}
+		}
+
+		zone_sel = ((w_idx << 3) & TSI721_ZONE_SEL_WIN_SEL)
+			| (z_idx & TSI721_ZONE_SEL_ZONE_SEL)
+			| TSI721_ZONE_SEL_ZONE_GO;
+		lut_0 = trans_addr & TSI721_LUT_DATA0_ADD;
+		lut_1 = (trans_addr >> 32) & TSI721_LUT_DATA1_ADD;
+		lut_2 = did & TSI721_LUT_DATA2_DEVICEID;
+		if (mtc_trans) {
+			lut_0 |= 0x202;
+			lut_2 |= ((uint32_t)(hc) << 24)
+				& TSI721_LUT_DATA2_HOP_CNT;
+		} else {
+			lut_0 |= 0x101;
+		}
+		if (dev16_sz) {
+			lut_2 |= (0x10000 & TSI721_LUT_DATA2_TT);
+		}
+
+		LOGMSG(env, "Writing Lut0 0x%x\n", lut_0);
+		LOGMSG(env, "Writing Lut1 0x%x\n", lut_1);
+		LOGMSG(env, "Writing Lut2 0x%x\n\n", lut_2);
+
+		// Check that zone_go is 0
+		do
+			rc = rio_lcfg_read(mp_h, TSI721_ZONE_SEL, 4, &temp);
+		while (!rc && (temp & TSI721_ZONE_SEL_ZONE_GO));
+
+		// Program the zone
+		rc |= rio_lcfg_write(mp_h, TSI721_LUT_DATA0, 4, lut_0);
+		rc |= rio_lcfg_write(mp_h, TSI721_LUT_DATA1, 4, lut_1);
+		rc |= rio_lcfg_write(mp_h, TSI721_LUT_DATA2, 4, lut_2);
+		rc |= rio_lcfg_write(mp_h, TSI721_ZONE_SEL, 4, zone_sel);
+
+		// Wait for write zone registers to finish
+		do
+			rc = rio_lcfg_read(mp_h, TSI721_ZONE_SEL, 4, &temp);
+		while (!rc && (temp & TSI721_ZONE_SEL_ZONE_GO));
+		if (rc) {
+			LOGMSG(env, "Error writing registers.\n");
+			goto exit;
+		}
+
+	}
+
+	// Check that zone_go is 0
+	do
+		rc = rio_lcfg_read(mp_h, TSI721_ZONE_SEL, 4, &temp);
+	while (!rc && (temp & TSI721_ZONE_SEL_ZONE_GO));
+
+	zone_sel = ((w_idx << 3) & TSI721_ZONE_SEL_WIN_SEL)
+		| (z_idx & TSI721_ZONE_SEL_ZONE_SEL)
+		| TSI721_ZONE_SEL_ZONE_GO
+		| TSI721_ZONE_SEL_RD_WRB;
+	rc |= rio_lcfg_write(mp_h, TSI721_ZONE_SEL, 4, zone_sel);
+
+	// Wait until read of data registers is complete (zone_go == 0)
+	do
+		rc = rio_lcfg_read(mp_h, TSI721_ZONE_SEL, 4, &temp);
+	while (!rc && (temp & TSI721_ZONE_SEL_ZONE_GO));
+
+	rc |= rio_lcfg_read(mp_h, TSI721_LUT_DATA0, 4, &lut_0);
+	rc |= rio_lcfg_read(mp_h, TSI721_LUT_DATA1, 4, &lut_1);
+	rc |= rio_lcfg_read(mp_h, TSI721_LUT_DATA2, 4, &lut_2);
+	if (rc) {
+		LOGMSG(env, "Error reading registers.\n");
+		goto exit;
+	}
+
+	trans_addr = (uint64_t)(lut_0 & TSI721_LUT_DATA0_ADD)
+		| ((uint64_t)(lut_1 & TSI721_LUT_DATA1_ADD) << 32);
+	mtc_trans = ((lut_0 & TSI721_LUT_DATA0_WR_TYPE) == 2);
+	did = lut_2 & TSI721_LUT_DATA2_DEVICEID;
+	dev16_sz = !!(lut_2 & TSI721_LUT_DATA2_TT);
+	hc = (lut_2 & TSI721_LUT_DATA2_HOP_CNT) >> 24;
+
+	LOGMSG(env, "Zone Address: 0x%lx\n", trans_addr);
+	LOGMSG(env, "Translation : %s\n", mtc_trans ? "Mtc" : "Mem");
+	LOGMSG(env, "DestID size : %s\n", dev16_sz ? "dev16" : "dev8");
+	LOGMSG(env, "DestID      : 0x%x\n", did);
+	LOGMSG(env, "Hopcount    : 0x%x\n", hc);
+exit:
+	return 0;
+}
+
+struct cli_cmd Tsi721Z = {
+"Zone",
+2,
+2,
+"Tsi721 Outbound Window Zone command.",
+"<window> <zone> {<Mem|Mtc> <rio_addr> <dev8|dev16> <did> {hopcount}}\n"
+"Display and/or write Tsi721 outbound window zones.\n"
+"window    : Value 0-7, selecting a window\n"
+"zone      : Value 0-7, selecting a zone\n"
+"Mem|Mtc   : Select read/write translation type, either Memory or Maintenance\n"
+"            If Maintenance is selected, hopcount must be entered.\n"
+"rio_addr  : RapidIO memory address, or maintenance offset.\n"
+"dev8|dev16: Size of destination ID to use, either 8 or 16 bit.\n"
+"did       : Destination ID value.\n"
+"hopcount  : Hopcount for maintenance transactions.\n",
+Tsi721ZCmd,
+ATTR_NONE
+};
+
 struct cli_cmd *goodput_cmds[] = {
 	&IBAlloc,
 	&IBDealloc,
@@ -4381,7 +4646,9 @@ struct cli_cmd *goodput_cmds[] = {
 	&CPSReset,
 	&FileRegs,
 	&CPSHotSwap,
-	&MaintTraffic
+	&MaintTraffic,
+	&Tsi721W,
+	&Tsi721Z
 };
 
 void bind_goodput_cmds(void)
