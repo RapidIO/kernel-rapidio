@@ -72,6 +72,7 @@ int32_t tsi721_umd_open(struct tsi721_umd* h, uint32_t mport_id)
 
 int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void* queue_mem_phys, uint32_t queue_mem_size)
 {
+	int32_t ret;
 	uint32_t page_size = sysconf(_SC_PAGE_SIZE);
 	struct dma_channel* chan;
 
@@ -110,8 +111,15 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
 		return -1;
 	}
 	
+	// cdev driver needs to map physical memory to dev_fd
+	uint64_t handle = (uintptr_t)queue_mem_phys;
+	ret = rio_dbuf_alloc(h->dev_fd, queue_mem_size, &handle);
+	if (ret < 0)
+	{
+		ERRMSG("Fail rio_dbuf_alloc sz %d ptr %p : err %d %s\n",queue_mem_size,queue_mem_phys,ret,strerror(ret));
+	}
 	chan->request_q_phys = queue_mem_phys;
-	chan->request_q = mmap(NULL, queue_mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, h->dev_fd, (size_t)queue_mem_phys);
+	chan->request_q = mmap(NULL, queue_mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, h->dev_fd, handle);
 
 	if (chan->request_q == MAP_FAILED)
 	{
@@ -154,7 +162,7 @@ int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t channel_mask
 			}
 			else
 			{
-				printf("Success configure queue %d\n",i);
+				printf("Success configure queue %d at address %lx size %d\n",i,ptr,phys_mem_size);
 			}
 			ptr += queue_size;
 		}

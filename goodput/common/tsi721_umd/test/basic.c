@@ -9,8 +9,10 @@ int main(void)
 	struct tsi721_umd umd;
 
 	ret = tsi721_umd_open(&umd, 0);
+	/*
 	if (ret < 0)
 		return -1;
+		*/
 
 	ret = tsi721_umd_queue_config_multi(&umd, 0x03, (void*)0x50000000, 8*8192);
 	if (ret < 0)
