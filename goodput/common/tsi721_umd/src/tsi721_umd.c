@@ -5,9 +5,9 @@
 
 #define CFG_MEM_SIZE (512*1024) // TBD: check this size
 
-#define DTYPE1_DESCRIPTOR_SIZE    32
+#define TSI721_DESCRIPTOR_SIZE    32
 #define RESPONSE_DESCRIPTOR_SIZE  64
-#define DEFAULT_REQUEST_Q_SIZE    (64 * DTYPE1_DESCRIPTOR_SIZE)
+#define DEFAULT_REQUEST_Q_SIZE    (128 * TSI721_DESCRIPTOR_SIZE)
 #define DEFAULT_COMPLETION_Q_SIZE (64 * RESPONSE_DESCRIPTOR_SIZE)
 
 static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id);
@@ -74,7 +74,6 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
 {
 	uint32_t page_size = sysconf(_SC_PAGE_SIZE);
 	struct dma_channel* chan;
-	int32_t mem_fd;
 
 	if (!h)
 		return -1;
@@ -111,17 +110,8 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
 		return -1;
 	}
 	
-	// Note: Access to /dev/mem requires root access
-	// If not ok, will need a separate process to open this mapping on boot
 	chan->request_q_phys = queue_mem_phys;
-	mem_fd = open("/dev/mem", O_SYNC);
-	if (mem_fd <= 0)
-	{
-		ERRMSG("Failed to open /dev/mem (not running as root?)\n");
-		return -1;
-	}
-
-	chan->request_q = mmap(NULL, queue_mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, mem_fd, (size_t)queue_mem_phys);
+	chan->request_q = mmap(NULL, queue_mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, h->dev_fd, (size_t)queue_mem_phys);
 
 	if (chan->request_q == MAP_FAILED)
 	{
