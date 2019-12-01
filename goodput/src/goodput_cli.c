@@ -4329,13 +4329,23 @@ static int Tsi721WCmd(struct cli_env *env, int argc, char **argv)
 	uint64_t address;
 	uint32_t win_size;
 	char *mem_sizes = (char *)"32K 64K 128K 256K 512K 1M 2M 4M 8M 16M ";
+	char *disp_sizes[] = {(char *)"32K",
+				(char *)"64K",
+				(char *)"128K",
+				(char *)"256K",
+				(char *)"512K",
+				(char *)"1M",
+				(char *)"2M",
+				(char *)"4M",
+				(char *)"8M",
+				(char *)"16M" };
 	uint32_t obwin_u, obwin_l, obwin_sz;
-	
+
 	if (tok_parse_ushort(argv[0], &w_idx, 0, 7, 0)) {
 		LOGMSG(env, "Window index must be 0 to 7.\n");
 		goto exit;
 	}
-	
+
 	if (argc > 2) {
 		uint32_t unused;
 		uint32_t addr_mask;
@@ -4392,7 +4402,9 @@ static int Tsi721WCmd(struct cli_env *env, int argc, char **argv)
 	if (obwin_l & TSI721_OBWINLBX_WIN_EN) {
 		LOGMSG(env, "Window %d enabled.\n", w_idx);
 		LOGMSG(env, "Window    Address: 0x%lx\n", address);
-		LOGMSG(env, "Window    Size   : 0x%x\n", win_size);
+		LOGMSG(env, "Window    Size   : 0x%x %s\n",
+			win_size,
+			win_size < 10 ? disp_sizes[win_size] : "Unknown");
 	} else {
 		LOGMSG(env, "Window %d Disabled.\n", w_idx);
 	}
@@ -4404,7 +4416,7 @@ struct cli_cmd Tsi721W = {
 "Window",
 2,
 1,
-"Tsi721 Window and Zone command.",
+"Tsi721 Outbound Window command.",
 "<window> {<PciAddr> <size>}\n"
 "Manage Tsi721 outbound windows.  Optionally, set Tsi721 outbound windows.\n"
 "<window> : Value 0-7, selecting a window\n"
@@ -4429,17 +4441,17 @@ static int Tsi721ZCmd(struct cli_env *env, int argc, char **argv)
 	char *mem_or_mtc = (char *)"Mem Mtc ";
 	char *dev8_or_16 = (char *)"dev8 dev16 ";
 	uint32_t zone_sel, lut_0, lut_1, lut_2, temp;
-	
+
 	if (tok_parse_ushort(argv[0], &w_idx, 0, 7, 0)) {
 		LOGMSG(env, "Window index must be 0 to 7.\n");
 		goto exit;
 	}
-	
+
 	if (tok_parse_ushort(argv[1], &z_idx, 0, 7, 0)) {
 		LOGMSG(env, "Zone index must be 0 to 7.\n");
 		goto exit;
 	}
-	
+
 	if (argc >= 6) {
 		mtc_trans = parm_idx(argv[2], mem_or_mtc);
 		if (mtc_trans > 1) {
@@ -4495,7 +4507,7 @@ static int Tsi721ZCmd(struct cli_env *env, int argc, char **argv)
 		LOGMSG(env, "Writing Lut2 0x%x\n\n", lut_2);
 
 		// Check that zone_go is 0
-		do 
+		do
 			rc = rio_lcfg_read(mp_h, TSI721_ZONE_SEL, 4, &temp);
 		while (!rc && (temp & TSI721_ZONE_SEL_ZONE_GO));
 
@@ -4506,7 +4518,7 @@ static int Tsi721ZCmd(struct cli_env *env, int argc, char **argv)
 		rc |= rio_lcfg_write(mp_h, TSI721_ZONE_SEL, 4, zone_sel);
 
 		// Wait for write zone registers to finish
-		do 
+		do
 			rc = rio_lcfg_read(mp_h, TSI721_ZONE_SEL, 4, &temp);
 		while (!rc && (temp & TSI721_ZONE_SEL_ZONE_GO));
 		if (rc) {
@@ -4517,7 +4529,7 @@ static int Tsi721ZCmd(struct cli_env *env, int argc, char **argv)
 	}
 
 	// Check that zone_go is 0
-	do 
+	do
 		rc = rio_lcfg_read(mp_h, TSI721_ZONE_SEL, 4, &temp);
 	while (!rc && (temp & TSI721_ZONE_SEL_ZONE_GO));
 
@@ -4528,7 +4540,7 @@ static int Tsi721ZCmd(struct cli_env *env, int argc, char **argv)
 	rc |= rio_lcfg_write(mp_h, TSI721_ZONE_SEL, 4, zone_sel);
 
 	// Wait until read of data registers is complete (zone_go == 0)
-	do 
+	do
 		rc = rio_lcfg_read(mp_h, TSI721_ZONE_SEL, 4, &temp);
 	while (!rc && (temp & TSI721_ZONE_SEL_ZONE_GO));
 
@@ -4560,7 +4572,7 @@ struct cli_cmd Tsi721Z = {
 "Zone",
 2,
 2,
-"Tsi721 Window and Zone command.",
+"Tsi721 Outbound Window Zone command.",
 "<window> <zone> {<Mem|Mtc> <rio_addr> <dev8|dev16> <did> {hopcount}}\n"
 "Display and/or write Tsi721 outbound window zones.\n"
 "window    : Value 0-7, selecting a window\n"
