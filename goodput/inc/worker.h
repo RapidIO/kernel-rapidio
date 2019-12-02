@@ -107,6 +107,7 @@ enum req_type {
 	cps_poll_for_pw,
 	cps_test_switch_lock,
 	maint_traffic,
+	umd_dma_num,
 	last_action
 };
 

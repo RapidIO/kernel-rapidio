@@ -70,6 +70,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "libtime_utils.h"
 #include "worker.h"
+#include "umd_worker.h"
 #include "pw_handling.h"
 #include "goodput.h"
 #include "Tsi721.h"

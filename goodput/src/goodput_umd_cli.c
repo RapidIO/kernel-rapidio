@@ -168,6 +168,69 @@ static int gp_parse_did(struct cli_env *env, char *tok, did_val_t *did_val)
 
 int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv)
 {
+	uint16_t idx;
+	did_val_t did_val;
+	uint64_t rio_addr;
+	uint64_t acc_sz;
+	uint16_t wr;
+	uint32_t num_trans;
+	
+	int n = 0;
+	if (gp_parse_worker_index_check_thread(env, argv[n++], &idx, 1)) {
+		goto exit;
+	}
+	
+	if (gp_parse_did(env, argv[n++], &did_val))
+	{
+		goto exit;
+	}
+	
+	if (tok_parse_ulonglong(argv[n++], &rio_addr, 1, UINT64_MAX, 0))
+	{
+		LOGMSG(env, "\n");
+		LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<rio_addr>",
+				(uint64_t)1, (uint64_t)UINT64_MAX);
+		goto exit;
+	}	
+
+	if (gp_parse_ull_pw2(env, argv[n++], "<acc_sz>", &acc_sz, 1, UINT32_MAX))
+	{
+		goto exit;
+	}
+	
+	if (gp_parse_bool(env, argv[n++], "<wr>", &wr)) 
+	{
+		goto exit;
+	}
+	
+	
+	if (tok_parse_ul(argv[n++], &num_trans, 0)) 
+	{
+		LOGMSG(env, "\n");
+		LOGMSG(env, TOK_ERR_UL_HEX_MSG_FMT, "<num>");
+		goto exit;
+	}
+	
+	if (did_val < MAX_DEVID_STATUS)
+	{
+		devid_status[did_val] = 1;
+	}
+	
+	wkr[idx].action = umd_dma_num;
+	wkr[idx].action_mode = user_mode_action;
+	wkr[idx].did_val = did_val;
+	wkr[idx].rio_addr = rio_addr;
+	wkr[idx].acc_size = acc_sz;
+	wkr[idx].wr = (int)wr;
+	wkr[idx].dma_trans_type = convert_int_to_riomp_dma_directio_type(trans);
+	wkr[idx].num_trans = (int)num_trans;
+	LOGMSG(env, "Wr %x, num %x\n", wkr[idx].wr, wkr[idx].num_trans);
+	wkr[idx].stop_req = 0;
+	sem_post(&wkr[idx].run);
+	
+exit:
+	return 0;
+
 }
 	
 int umdThreadCmd(struct cli_env *env, int UNUSED(argc), char **argv)

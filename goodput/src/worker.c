@@ -160,6 +160,9 @@ void init_worker_info(struct worker *info, int first_time)
 	info->dsdist = 0;
 	info->dssize = 0;
 
+	info->umd_engine_h = 0;
+	info->umd_queue_h = 0;
+
 }
 
 void msg_cleanup_con_skt(struct worker *info);
