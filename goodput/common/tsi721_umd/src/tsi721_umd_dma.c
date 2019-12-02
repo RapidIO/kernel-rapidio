@@ -12,12 +12,16 @@ static inline uint32_t le32(const uint32_t n)
 }
 
 void tsi721_umd_create_dma_descriptor (tsi721_dma_desc* bd_ptr, 
-                uint8_t rtype, uint8_t prio, uint8_t crf,
-                uint16_t devid, uint8_t tt, uint32_t bcount,
+                uint16_t devid, uint32_t bcount,
                 uint64_t raddr_lsb64, uint8_t raddr_msb2,
                 uint8_t *buffer_ptr)
 
 {
+	const uint8_t rtype = ALL_NWRITE;
+	const uint8_t prio  = 0;
+	const uint8_t crf   = 0;
+	const uint8_t tt    = 1;
+
 	enum dma_dtype dtype = DTYPE1;
 
         memset(bd_ptr, 0, sizeof(*bd_ptr));

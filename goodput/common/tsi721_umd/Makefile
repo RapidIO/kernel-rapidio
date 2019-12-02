@@ -38,8 +38,8 @@ OBJECTS:=$(patsubst src/%.cpp,src/%.o,$(wildcard src/*.cpp))
 OBJECTS:= $(OBJECTS) $(patsubst src/%.c,src/%.o,$(wildcard src/*.c))
 
 CFLAGS+=-D$(DEBUG_CTL) -DRDMA_LL=$(LOG_LEVEL) -Lpthread
-CFLAGS+=-I../librio/inc -I../../inc
-CFLAGS+=-g
+CFLAGS+=-I../librio/inc -I../../inc -Iinc
+CFLAGS+=-g -O0
 
 
 .PHONY: all clean test

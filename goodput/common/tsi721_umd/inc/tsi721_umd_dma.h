@@ -1,3 +1,13 @@
+#include <stdint.h>
+#include "Tsi721.h"
+
+/* Register offsets */
+
+/* Register access macros */
+#define TSI721_WR32(reg, channel, value) (*(volatile uint32_t*)((uintptr_t)h->all_regs + reg(channel))= value)
+#define TSI721_RD32(reg, channel)        (*(volatile uint32_t*)((uintptr_t)h->all_regs + reg(channel)))
+
+
 /* Descriptor types for BDMA and Messaging blocks */
 enum dma_dtype {
 	DTYPE1 = 1, /* Data Transfer DMA Descriptor */
@@ -62,11 +72,7 @@ typedef struct {
 #define TSI721_BDMA_MAX_BCOUNT	(TSI721_DMAD_BCOUNT1 + 1)
 
 void tsi721_umd_create_dma_descriptor(tsi721_dma_desc* bd_ptr,
-		      uint8_t rtype,
-			  uint8_t prio,
-			  uint8_t crf,
 			  uint16_t devid,
-			  uint8_t tt,
 			  uint32_t bcount,
 			  uint64_t raddr_lsb64,
 			  uint8_t raddr_msb2,
