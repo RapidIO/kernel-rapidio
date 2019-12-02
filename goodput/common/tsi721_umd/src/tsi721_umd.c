@@ -214,13 +214,13 @@ int32_t tsi721_umd_start(struct tsi721_umd* h)
 	return 0;
 }
 
-int32_t tsi721_umd_write(struct tsi721_umd* h, void* phys_addr, uint32_t num_bytes, uint64_t rio_addr, uint16_t dest_id)
+int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_bytes, uint64_t rio_addr, uint16_t dest_id)
 {
 	int32_t ret, i;
 	int8_t chan = -1;
 	tsi721_dma_desc descriptor; // TBD - check if need to handle splitting to multiple descriptor
 	
-	// Form descriptors in local mem
+	// Form descriptor in local mem
 	tsi721_umd_create_dma_descriptor(
 		&descriptor, // dest pointer
 		ALL_NWRITE,  // request type
@@ -270,4 +270,20 @@ int32_t tsi721_umd_write(struct tsi721_umd* h, void* phys_addr, uint32_t num_byt
 	sem_post(&h->chan_sem); // mark a dma engine is free for use
 
 	return 0;
+}
+
+int32_t tsi721_umd_stop(struct tsi721_umd* h)
+{
+	if (0) {
+		free(h);
+	}
+	return -1;
+}
+
+int32_t tsi721_close(struct tsi721_umd* h)
+{
+	if (0) {
+		free(h);
+	}
+	return -1;
 }

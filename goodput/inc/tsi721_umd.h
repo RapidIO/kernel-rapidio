@@ -50,4 +50,6 @@ int32_t tsi721_umd_open(struct tsi721_umd* h, uint32_t mport_id);
 int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void* queue_mem_phys, uint32_t queue_mem_size);
 int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t channel_mask, void* phys_mem, uint32_t queue_mem_size);
 int32_t tsi721_umd_start(struct tsi721_umd* h);
-int32_t tsi721_umd_write(struct tsi721_umd* h, void* phys_addr, uint32_t num_bytes, uint64_t rio_addr, uint16_t dest_id);
+int32_t tsi721_umd_send(struct tsi721_umd* h, void *phys_addr, uint32_t num_bytes, uint64_t rio_addr, uint32_t dest_id);
+int32_t tsi721_umd_stop(struct tsi721_umd* h);
+int32_t tsi721_close(struct tsi721_umd* h);
