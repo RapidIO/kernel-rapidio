@@ -1909,6 +1909,7 @@ struct cli_cmd Status = {
 	"i : IBWIN status\n"
 	"m : Messaging status\n"
 	"g : General status\n"
+	"u : user mode driver activity status"
 	"Default is general status\n",
 StatusCmd,
 ATTR_RPT
@@ -4653,8 +4654,6 @@ struct cli_cmd *goodput_cmds[] = {
 	&Tsi721Z,
 	&UMDDmaNum,
 	&UMDThread,
-	&UMDKill,
-	&UMDStatus
 };
 
 void bind_goodput_cmds(void)

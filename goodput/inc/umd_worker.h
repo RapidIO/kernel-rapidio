@@ -40,9 +40,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
-void start_umd_worker_thread(struct worker *info, int new_mp_h, int cpu);
+void start_umd_worker_thread(struct worker *info, int cpu);
 
 void shutdown_umd_worker_thread(struct worker *info);
+
+void umd_dma_num_cmd(struct worker *info);
+
 
 
 

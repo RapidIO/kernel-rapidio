@@ -235,6 +235,10 @@ struct worker {
 	uint32_t seven_test_err_resp_time;
 	uint32_t seven_test_resp_to_time;
 	float seven_test_delay;
+
+/*  UMD data structure TBD */
+	int umd_engine_h;
+	int umd_queue_h;	
 };
 
 /**

@@ -86,7 +86,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
-void start_umd_worker_thread(struct worker *info, int new_mp_h, int cpu)
+void start_umd_worker_thread(struct worker *info, int cpu)
 {
     int rc;
     
@@ -116,6 +116,12 @@ void shutdown_umd_worker_thread(struct worker *info)
 
 	//TODO
 	//odp_pktio_close to release resource
+
+}
+
+
+void umd_dma_num_cmd(struct worker *info)
+{
 
 }
 

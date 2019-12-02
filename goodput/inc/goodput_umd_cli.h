@@ -41,10 +41,6 @@ int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv);
 
 int umdThreadCmd(struct cli_env *env, int UNUSED(argc), char **argv);
 
-int umdKillCmd(struct cli_env *env, int UNUSED(argc), char **argv);
-
-int umdStatusCmd(struct cli_env *env, int UNUSED(argc), char **argv);
-
 
 struct cli_cmd UMDDmaNum =
 {
@@ -72,36 +68,10 @@ struct cli_cmd UMDThread =
 	"start <idx> <cpu>\n"
 		"<idx>	   is a worker index from 0 to " STR(MAX_WORKER_IDX) "\n"
 		"<cpu>	   is a cpu number, or -1 to indicate no cpu affinity\n"
-	ThreadCmd,
+	umdThreadCmd,
 	ATTR_NONE	
 };
 	
-struct cli_cmd UMDKill =
-{
-	"umd_kill",
-	8,
-	1,
-	"Kill a thread",
-	"kill <idx>\n"
-		"<idx> is a UMD worker index from 0 to " STR(MAX_WORKER_IDX) ", or \"all\"\n",
-	umdKillCmd,
-	ATTR_NONE
-};
-
-struct cli_cmd UMDStatus =
-{
-	"umd_status",
-	6,
-	0,
-	"Display status of all threads",
-	"status {i|m|g}\n"
-		"Optionally enter a character to select the status type:\n"
-		"TODO\n"
-		"Default is general status\n",
-	umdStatusCmd,
-	ATTR_RPT
-};
-
 
 #ifdef __cplusplus
 }
