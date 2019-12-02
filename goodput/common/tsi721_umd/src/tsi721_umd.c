@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <sys/stat.h>
 #include "tsi721_umd.h"
-
-#define CFG_MEM_SIZE (512*1024) // TBD: check this size
+#include "tsi721_umd_dma.h"
 
 #define TSI721_DESCRIPTOR_SIZE    32
 #define RESPONSE_DESCRIPTOR_SIZE  64
@@ -14,9 +14,11 @@ static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id);
 
 static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id)
 {
+	int32_t ret;
 	int32_t fd;
 	char bar_filename[256];
 	void* ptr;
+	struct stat fd_stat;
 
 	snprintf(bar_filename,256,"/sys/class/rapidio_port/rapidio%d/device/resource0",mport_id);
 
@@ -30,11 +32,19 @@ static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id)
 
 	h->regs_fd = fd;
 
-	ptr = mmap(NULL, CFG_MEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	ret = fstat(fd, &fd_stat);
+	if (ret < 0)
+	{
+		ERRMSG("Failed to fstat %s: %d %s\n",bar_filename,ret,strerror(ret));
+		return -1;
+	}
+
+
+	ptr = mmap(NULL, fd_stat.st_size,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
 	if (ptr == MAP_FAILED)
 	{
-		ERRMSG("Failed to mmap %d bytes of bar0 space, error %d %s\n",CFG_MEM_SIZE,errno,strerror(errno));
+		ERRMSG("Failed to mmap %d bytes of bar0 space, error %d %s\n",(int)fd_stat.st_size,errno,strerror(errno));
 		return -1;
 	}
 
@@ -131,6 +141,8 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
 	chan->completion_q_phys = chan->request_q + DEFAULT_REQUEST_Q_SIZE;
 	chan->reg_base = (void*)((uintptr_t)h->all_regs + TSI721_DMAC_BASE(channel_num));
 
+	chan->in_use = false;
+
 	h->chan_mask |= (1<<channel_num);
 
 	return 0;
@@ -150,6 +162,7 @@ int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t channel_mask
 		return -1;
 	}
 
+	h->chan_count = 0;
 	for (i=0; i<TSI721_DMA_CHNUM; i++)
 	{
 		if ((1<<i) & channel_mask)
@@ -162,7 +175,8 @@ int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t channel_mask
 			}
 			else
 			{
-				printf("Success configure queue %d at address %lx size %d\n",i,ptr,phys_mem_size);
+				printf("Success configure queue %d at address %lx size %d\n",i,ptr,queue_size);
+				h->chan_count++;
 			}
 			ptr += queue_size;
 		}
@@ -180,14 +194,80 @@ int32_t tsi721_umd_start(struct tsi721_umd* h)
 	int32_t ret;
 
 	// Allocate channel dispatch mutex
-	ret = pthread_mutex_init(&h->channel_mutex, NULL);
+	ret = pthread_mutex_init(&h->chan_mutex, NULL);
 	if (ret < 0)
 	{
 		ERRMSG("Error initializing mutex, err %d %s\n",ret,strerror(ret));
 		return -1;
 	}
 
+	// Initial semaphore count is all channels free
+	ret = sem_init(&h->chan_sem, 0, h->chan_count);
+	if (ret < 0)
+	{
+		ERRMSG("Error initializing channel semaphore. err %d %s\n",ret,strerror(ret));
+		return -1;
+	}
+
 	h->state = TSI721_UMD_STATE_READY;
+
+	return 0;
+}
+
+int32_t tsi721_umd_write(struct tsi721_umd* h, void* phys_addr, uint32_t num_bytes, uint64_t rio_addr, uint16_t dest_id)
+{
+	int32_t ret, i;
+	int8_t chan = -1;
+	tsi721_dma_desc descriptor; // TBD - check if need to handle splitting to multiple descriptor
+	
+	// Form descriptors in local mem
+	tsi721_umd_create_dma_descriptor(
+		&descriptor, // dest pointer
+		ALL_NWRITE,  // request type
+		0,           // priority
+		0,           // crf - critical request flow
+		dest_id,     // destination
+		1,           // S-RIO transport type = 16 bit deviceID
+		num_bytes,   // byte count
+		rio_addr,    // dest address [63:0]
+		0,           // dest addreess [65:64]
+		phys_addr);  // source address (physical)
+	
+	
+	// Wait for a channel to be available
+	do {
+		ret = sem_wait(&h->chan_sem);
+	} while (ret != 0); // avoid spurious exit on signal
+
+	// Mark a free channel as in use
+	pthread_mutex_lock(&h->chan_mutex);
+	for (i=0; i<TSI721_DMA_CHNUM; i++)
+	{
+		if ( (h->chan_mask & (1 << i)) && (!h->chan[i].in_use) )
+		{
+			chan = i;
+			h->chan[i].in_use = true;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&h->chan_mutex);
+
+	assert(chan != -1); // this should not be possible (got sem but no channels free)
+
+	// Copy descriptor to channel queue
+	memcpy(h->chan[chan].request_q,&descriptor,sizeof(descriptor));
+	
+	// Start transfer
+	// TBD
+	
+	// Wait for transfer completion
+	// TBD
+	
+	// Cleanup : mark DMA as idle and increment the free engine semaphore
+	pthread_mutex_lock(&h->chan_mutex);
+	h->chan[chan].in_use = false;
+	pthread_mutex_unlock(&h->chan_mutex);
+	sem_post(&h->chan_sem); // mark a dma engine is free for use
 
 	return 0;
 }
