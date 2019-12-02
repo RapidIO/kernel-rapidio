@@ -191,3 +191,29 @@ int32_t tsi721_umd_start(struct tsi721_umd* h)
 
 	return 0;
 }
+
+int32_t tsi721_umd_stop(struct tsi721_umd* h)
+{
+	if (0) {
+		free(h);
+	}
+	return -1;
+}
+
+int32_t tsi721_close(struct tsi721_umd* h)
+{
+	if (0) {
+		free(h);
+	}
+	return -1;
+}
+
+int32_t tsi721_umd_send(struct tsi721_umd* h, void *buff, uint32_t buff_size, uint64_t rio_addr, uint32_t destID)
+{
+	if (0) {
+		*(uint64_t *)buff = rio_addr;
+		buff_size = destID;
+		free(h);
+	}
+	return buff_size;
+}
