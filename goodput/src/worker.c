@@ -98,6 +98,7 @@ void init_worker_info(struct worker *info, int first_time)
 	}
 
 	info->stat = 0;
+	info->thr_type = kernel_thread;
 	info->stop_req = 0;
 	info->port_ok = 1;
 	info->wkr_thr.cpu_req = -1;
@@ -158,6 +159,7 @@ void init_worker_info(struct worker *info, int first_time)
 	info->sssize = 0;
 	info->dsdist = 0;
 	info->dssize = 0;
+
 }
 
 void msg_cleanup_con_skt(struct worker *info);
@@ -195,7 +197,10 @@ void shutdown_worker_thread(struct worker *info)
 		}
 	}
 
+	shutdown_umd_worker_thread(info);
+	
 	init_worker_info(info, 0);
+	
 }
 
 int getCPUCount()

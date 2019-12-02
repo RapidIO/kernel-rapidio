@@ -46,6 +46,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "rio_mport_lib.h"
 #include "string_util.h"
 #include "goodput_cli.h"
+#include "goodput_umd_cli.h"
 #include "libtime_utils.h"
 #include "librsvdmem.h"
 #include "liblog.h"
@@ -4587,6 +4588,7 @@ Tsi721ZCmd,
 ATTR_NONE
 };
 
+
 struct cli_cmd *goodput_cmds[] = {
 	&IBAlloc,
 	&IBDealloc,
@@ -4648,7 +4650,11 @@ struct cli_cmd *goodput_cmds[] = {
 	&CPSHotSwap,
 	&MaintTraffic,
 	&Tsi721W,
-	&Tsi721Z
+	&Tsi721Z,
+	&UMDDmaNum,
+	&UMDThread,
+	&UMDKill,
+	&UMDStatus
 };
 
 void bind_goodput_cmds(void)
