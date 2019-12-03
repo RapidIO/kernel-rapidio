@@ -40,8 +40,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
-#define MAX_UMD_CH_IDX 7
-#define MAX_UMD_CH (MAX_UMD_CH_IDX + 1)
+
+#define MAX_UDM_USER_THREAD_IDX 7
+#define MAX_UDM_USER_THREAD (MAX_UDM_USER_THREAD_IDX + 1)
 
 enum EngineStat
 {
@@ -51,40 +52,53 @@ enum EngineStat
     ENGINE_READY,
     ENGINE_STATE_MAX
 };
-    
-struct UMDEngineInfo
-{
-    int ch_idx;
-    int mport_id;    
-    enum EngineStat stat;
-    struct tsi721_umd* channel_h;
 
+struct DmaTransfer
+{
+    int index;
+    bool is_in_use;
+    
+    bool wr;
+    int  dest_id;
     uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
     uint64_t buf_size; /* Number of bytes to access for direct IO and DMA */
-    int      max_iter; /* For infinite loop tests make this the upper bound of loops*/
-
+    int      num_trans; /* Number of loops for data transfer. 0 indicates infinite number of loops*/
+    char     user_data[8]; /*User predinfed data*/  
+        
     int ib_valid;
     uint64_t ib_handle; /* Inbound window RapidIO handle */
     uint64_t ib_rio_addr; /* Inbound window RapidIO address */
     uint64_t ib_byte_cnt; /* Inbound window size */
     void *ib_ptr; /* Pointer to mapped ib_handle. Start address of ibw in user space */
 
-    bool wr;
-    int  dest_id;
+    void *tx_ptr;
+    uint_64 tx_mem_h;
+};
+    
+struct UMDEngineInfo
+{
+    int mport_id;    
+    enum EngineStat stat; //all state transfer will require mutex for pretection. Assume race condition will rarely happen. So no pretection for now. 
+    struct tsi721_umd engine;
+
+    void *queue_mem_ptr;
+    uint_64 queue_mem_h;
+
+    struct DmaTransfer dma_trans[MAX_UDM_USER_THREAD];
 };
 
 
-bool umd_open(struct UMDEngineInfo *info);
+int umd_open(struct UMDEngineInfo *info);
 
-bool umd_config(struct UMDEngineInfo *info);
+int umd_config(struct UMDEngineInfo *info);
 
-bool umd_start(struct UMDEngineInfo *info);
+int umd_start(struct UMDEngineInfo *info);
 
-bool umd_stop(struct UMDEngineInfo *info);
+int umd_stop(struct UMDEngineInfo *info);
 
-bool umd_close(struct UMDEngineInfo *info);
+int umd_close(struct UMDEngineInfo *info);
 
-void umd_dma_num_cmd(struct UMDEngineInfo *info);
+int umd_dma_num_cmd(struct UMDEngineInfo *info, int index);
 
 
 #ifdef __cplusplus

@@ -68,7 +68,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
-struct UMDEngineInfo umd_engine[MAX_UMD_CH];
+struct UMDEngineInfo umd_engine;
 
 
 // Parse the token as a boolean value. The range of the token is restricted
@@ -118,21 +118,46 @@ static int gp_parse_did(struct cli_env *env, char *tok, did_val_t *did_val)
 
 int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv)
 {
-    uint16_t idx;
+    int idx;
+    uint64_t ib_size;
+    uint64_t ib_rio_addr = RIO_MAP_ANY_ADDR;
+    uint64_t ib_phys_addr= RIO_MAP_ANY_ADDR;
     did_val_t did_val;
     uint64_t rio_addr;
     uint64_t buf_sz;
     uint16_t wr;
     uint32_t num_trans;
     char *user_data_p = NULL;
-    struct UMDEngineInfo *engine_p;
+    struct UMDEngineInfo *engine_p = &umd_engine;
+    struct DmaTransfer *dma_trans_p;
+    int ret = -1;
     
     int n = 0;
 
-    if(tok_parse_long(argv[n++], &idx, 0, MAX_UMD_CH_IDX, 0))
+    if(tok_parse_long(argv[n++], &idx, 0, MAX_UDM_USER_THREAD, 0))
     {   
         LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UMD_CH_IDX);
+        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UDM_USER_THREAD);
+        goto exit;
+    }
+
+    dma_trans_p = &(engine_p->dma_trans[idx]);
+
+    if (gp_parse_ull_pw2(env, argv[1], "<ib_size>", &ib_size, FOUR_KB,
+            4 * SIXTEEN_MB)) {
+        goto exit;
+    }
+
+    if(tok_parse_ulonglong(argv[2], &ib_rio_addr, 1, UINT64_MAX, 0))
+    {
+        LOGMSG(env, "\n");
+        LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<ib_rio_addr>",
+                (uint64_t )1, (uint64_t)UINT64_MAX);
+        goto exit:        
+    }
+
+    if ((ib_rio_addr != RIO_MAP_ANY_ADDR) && ((ib_size-1) & ib_rio_addr)) {
+        LOGMSG(env, "\n<addr> not aligned with <size>\n");
         goto exit;
     }
     
@@ -150,7 +175,7 @@ int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv)
         goto exit;
     }   
 
-    if (gp_parse_ull_pw2(env, argv[n++], "<buf_size>", &buf_sz, 1, UINT32_MAX))
+    if (gp_parse_ull_pw2(env, argv[n++], "<buf_size>", &buf_sz, FOUR_KB, 4 * SIXTEEN_MB))
     {
         goto exit;
     }
@@ -162,192 +187,119 @@ int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv)
 
     
     
-    if ((argc > 5 && tok_parse_ul(argv[n++], &num_trans, 0)) 
+    if ((argc > 7 && tok_parse_ul(argv[n++], &num_trans, 0)) 
     {
         LOGMSG(env, "\n");
         LOGMSG(env, TOK_ERR_UL_HEX_MSG_FMT, "<num>");
         goto exit;
     }
 
-    if( argc > 6)
+    if( argc > 8)
     {
         user_data_p = argv[n];
     }
 
-    engine_p = &umd_engine[idx];
-    if (engine_p->stat == ENGINE_READY)
+    if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use )
     {
-        engine_p->rio_addr = rio_addr;
-        engine_p->buf_size = buf_sz;
-        engine_p->max_iter = num_trans;
-        engine_p->wr = wr;
-        engine_p->ch_idx = idx;
-        umd_open(engine_p);
+        dma_trans_p->ib_byte_cnt = ib_size;
+        dma_trans_p->ib_rio_addr = ib_rio_addr;
+        dma_trans_p->rio_addr = rio_addr;
+        dma_trans_p->buf_size = buf_sz;
+        dma_trans_p->num_trans = num_trans;
+        dma_trans_p->wr = wr;
+        memcpy(dma_trans_p->user_data, user_data_p,8);
+        umd_dma_num_cmd(engine_p, idx);
+        ret = 0;
     }    
     
 exit:
-    return 0;
+    return ret;
 
 }
     
 int umdOpen(struct cli_env *env, int UNUSED(argc), char **argv)
 {
     int idx;
-    int n = 0;
-    int mport_id;
-    struct UMDEngineInfo *engine_p;
+    int mport_id = 0;
+    int ret = -1;
+    struct UMDEngineInfo *engine_p = &umd_engine;
 
-    if(tok_parse_long(argv[n++], &idx, 0, MAX_UMD_CH_IDX, 0))
-    {   
-        LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UMD_CH_IDX);
-        goto exit;
-    }
 
-    if(tok_parse_mport_id(argv[n++], &mport_id, 0))
+    if(argc > 0 && tok_parse_mport_id(argv[n++], &mport_id, 0))
     {
         goto exit;
     }
 
-    engine_p = &umd_engine[idx];
-    if (engine_p->stat == ENGINE_UNALLOCATED)
+    engine_p->mport_id = mport_id;
+    if(umd_open(engine_p))
     {
-        engine_p->mport_id = mport_id;
-        engine_p->ch_idx = idx;
-        umd_open(engine_p);
+        ret = 0;
     }
-        
+       
 
 exit:
-    return 0;
+    return ret;
 }
 
 
 int umdConfig(struct struct cli_env *env, int UNUSED(argc), char **argv)
 {
     int idx;
-    int n = 0;
-    uint64_t ib_size;
-    uint64_t ib_rio_addr = RIO_MAP_ANY_ADDR;
-    uint64_t ib_phys_addr= RIO_MAP_ANY_ADDR;
-    struct UMDEngineInfo *engine_p;
+    int ret = -1;
+    struct UMDEngineInfo *engine_p = &umd_engine;
 
-    if(tok_parse_long(argv[0], &idx, 0, MAX_UMD_CH_IDX, 0))
-    {   
-        LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UMD_CH_IDX);
-        goto exit;
-    }
-
-    if (gp_parse_ull_pw2(env, argv[1], "<size>", &ib_size, FOUR_KB,
-            4 * SIXTEEN_MB)) {
-        goto exit;
-    }
-
-    if(argc > 2  && 
-        (tok_parse_ulonglong(argv[2], &ib_rio_addr, 1, UINT64_MAX, 0)))
+    if(umd_config(engine_p)}
     {
-        LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<rio_addr>",
-                (uint64_t )1, (uint64_t)UINT64_MAX);
-        
-        ib_rio_addr = RIO_MAP_ANY_ADDR;
+        ret = 0;
     }
 
-    if ((ib_rio_addr != RIO_MAP_ANY_ADDR) && ((ib_size-1) & ib_rio_addr)) {
-        LOGMSG(env, "\n<addr> not aligned with <size>\n");
-        goto exit;
-    }
-
-    
-    engine_p = &umd_engine[idx];
-    if (engine_p->stat == ENGINE_UNCONFIGURED)
-    {
-        engine_p->ib_rio_addr = ib_rio_addr;
-        engine_p->ib_byte_cnt = ib_size;
-        umd_config(engine_p);
-    }
-
-
-exit: 
-
-    return 0;
+    return ret;
 }
 
 int umdStart(struct struct cli_env *env, int UNUSED(argc), char **argv)
 {
     int idx;
-    int n = 0;
-    struct UMDEngineInfo *engine_p;
+    int ret = -1;
+    struct UMDEngineInfo *engine_p = &umd_engine;
 
-    if(tok_parse_long(argv[n++], &idx, 0, MAX_UMD_CH_IDX, 0))
-    {   
-        LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UMD_CH_IDX);
-        goto exit;
-    }
-
-    engine_p = &umd_engine[idx];
-    if (engine_p->stat == ENGINE_UNCONFIGURED)
+    if(umd_start(engine_p))
     {
-        umd_start(engine_p);
+        ret = 0;
     }
-        
 
-exit:
-    return 0;
+    return ret;
 }
 
 int umdStop(struct struct cli_env *env, int UNUSED(argc), char **argv)
 {
     int idx;
-    int n = 0;
-    struct UMDEngineInfo *engine_p;
+    int ret = -1;
+    struct UMDEngineInfo *engine_p = &umd_engine;
 
-    if(tok_parse_long(argv[n++], &idx, 0, MAX_UMD_CH_IDX, 0))
-    {   
-        LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UMD_CH_IDX);
-        goto exit;
-    }
-
-    engine_p = &umd_engine[idx];
-    if (engine_p->stat == ENGINE_READY)
+    if(umd_stop(engine_p))
     {
-        umd_stop(engine_p);
+        ret = 0;
     }
 
-exit:
-     
-    return 0;
+    return ret;
+
 }
 
 int umdClose(struct struct cli_env *env, int UNUSED(argc), char **argv)
 {
     int idx;
-    int n = 0;
-    struct UMDEngineInfo *engine_p;
+    int ret = -1;
+    struct UMDEngineInfo *engine_p = &umd_engine;
 
-    if(tok_parse_long(argv[n++], &idx, 0, MAX_UMD_CH_IDX, 0))
-    {   
-        LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UMD_CH_IDX);
-        goto exit;
-    }
-
-    engine_p = &umd_engine[idx];
-    if (engine_p->stat == ENGINE_CONFIGURED
-        || engine_p->stat == ENGINE_UNCONFIGURED)
+    if(umd_close(engine_p))
     {
-        umd_close(engine_p);
+        ret = 0;
     }
 
-exit:
-     
-    return 0;
-}
+    return ret;
 
-    
+}
+   
 
 #ifdef __cplusplus
 }
