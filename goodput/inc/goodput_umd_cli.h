@@ -37,9 +37,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
+struct UMDChannelInfo umd_channel[MAX_UMD_CH];
+
+
 int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv);
 
-int umdThreadCmd(struct cli_env *env, int UNUSED(argc), char **argv);
+int umdOpen(struct cli_env *env, int UNUSED(argc), char **argv);
+
+int umdConfig(struct struct cli_env *env, int UNUSED(argc), char **argv);
+
+int umdStart(struct struct cli_env *env, int UNUSED(argc), char **argv);
+
+int umdStop(struct struct cli_env *env, int UNUSED(argc), char **argv);
+
+int umdClose(struct struct cli_env *env, int UNUSED(argc), char **argv);
 
 
 struct cli_cmd UMDDmaNum =
@@ -48,29 +59,81 @@ struct cli_cmd UMDDmaNum =
 	8,
 	6,
 	"Send a specified number of DMA reads/writes",
-	"dnum <idx> <did> <rio_addr> <bytes> <acc_sz> <wr> <num>\n"
-		"<idx>		is a worker index from 0 to " STR(MAX_WORKER_IDX) "\n"
+	"umd_dnum <did> <rio_addr> <bytes> <acc_sz> <wr> <num>\n"
+		"<idx>      UMD channel index: 0 to Maximum channel - 1\n"
 		"<did>		target device ID\n"
 		"<rio_addr> RapidIO memory address to access\n"
-		"<acc_sz>	access size, must be a power of two from 1 to 0xffffffff\n"
-		"<wr>		0: Read, 1: Write\n"
-		"<num>		number of transactions to send\n",
+		"<buf_sz>	buffer size, must be a power of two from 1 to 0xffffffff\n"
+		"<wr>		0: Read, 1: Write,2:Ramdom Writer\n"
+		"<num>		Optional default is 0, number of transactions to send. 0 indicates infinite loop\n"
+        "<data>	  RND, or constant data value, written every 8 bytes",
 	umdDmaNumCmd,
 	ATTR_NONE
 };
 	
-struct cli_cmd UMDThread =
+struct cli_cmd UMDOpen =
 {
-	"umd_thread",
-	10,
-	2,
-	"Start a thread on a cpu",
-	"start <idx> <cpu>\n"
-		"<idx>	   is a worker index from 0 to " STR(MAX_WORKER_IDX) "\n"
-		"<cpu>	   is a cpu number, or -1 to indicate no cpu affinity\n"
-	umdThreadCmd,
+	"umd_open",
+	8,
+	1,
+	"Allocate UMD resource",
+	"umd_open <mport_num>\n"
+		"<mport_num> Optional defalut is 0. Local rapidio device port. \n",
+	umdOpen,
 	ATTR_NONE	
 };
+
+struct cli_cmd UMDConfig =
+{
+	"umd_open",
+	8,
+	1,
+	"Allocate UMD resource",
+	"umd_open <mport_num>\n"
+		"<mport_num> Optional defalut is 0. Local rapidio device port. \n",
+	umdOpen,
+	ATTR_NONE	
+
+};
+
+struct cli_cmd UMDStart =
+{
+	"umd_start",
+	8,
+	1,
+	"Allocate UMD resource",
+	"umd_open <mport_num>\n"
+		"<mport_num> Optional defalut is 0. Local rapidio device port. \n",
+	umdOpen,
+	ATTR_NONE	
+
+};
+
+struct cli_cmd UMDStop =
+{
+	"umd_stop",
+	8,
+	1,
+	"Allocate UMD resource",
+	"umd_open <mport_num>\n"
+		"<mport_num> Optional defalut is 0. Local rapidio device port. \n",
+	umdOpen,
+	ATTR_NONE	
+
+};
+
+struct cli_cmd UMDClose =
+{
+	"umd_cloe",
+	8,
+	1,
+	"Allocate UMD resource",
+	"umd_open <mport_num>\n"
+		"<mport_num> Optional defalut is 0. Local rapidio device port. \n",
+	umdOpen,
+	ATTR_NONE	
+};
+
 	
 
 #ifdef __cplusplus

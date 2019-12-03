@@ -77,51 +77,62 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "CPS1848.h"
 #include "rio_misc.h"
 #include "did.h"
+#include "tsi721_umd.h"
 
-#include "RapidIO_Error_Management_API.h"
-#include "RapidIO_Port_Config_API.h"
-#include "RapidIO_Routing_Table_API.h"
+
 
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void start_umd_worker_thread(struct worker *info, int cpu)
+static bool umd_allo_ibw(struct UMDChannelInfo *info)
 {
-    int rc;
-    
-    init_worker_info(info);
-	info->thr_type =  user_mode_thread;
-	info->mp_h = mp_h;
-	info->mp_num = mp_h_num;
-	info->wkr_thr.cpu_req = cpu;
-
-	//TODO
-	//Open/CONFIG UMD engine and queue etc...
-
-	rc = pthread_create(&info->wkr_thr.thr, NULL, worker_thread,
-			(void *)info);
-
-	if (!rc)
-		sem_wait(&info->started);
 
 }
 
-void shutdown_umd_worker_thread(struct worker *info)
+static bool umd_free_ibw(struct UMDChannelInfo *info)
 {
-    if(info->thr_type != user_mode_thread)
-    {
-        return;
-    }
-
-	//TODO
-	//odp_pktio_close to release resource
 
 }
 
 
-void umd_dma_num_cmd(struct worker *info)
+bool umd_open(struct UMDChannelInfo *info)
+{
+
+}
+
+bool umd_config(struct UMDChannelInfo *info)
+{
+	if (umd_allo_ibw(info))
+	{
+		return;
+	}
+
+
+}
+
+bool umd_start(struct UMDChannelInfo *info)
+{
+
+
+}
+
+bool umd_stop(struct UMDChannelInfo *info)
+{
+
+}
+
+bool umd_close(struct UMDChannelInfo *info)
+{
+	if(umd_free_ibw(info))
+	{
+		return false;
+	}
+
+}
+
+void umd_dma_num_cmd()
 {
 
 }
