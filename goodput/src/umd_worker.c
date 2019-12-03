@@ -69,7 +69,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "liblog.h"
 
 #include "libtime_utils.h"
-#include "worker.h"
+#include "tsi721_umd.h"
 #include "umd_worker.h"
 #include "pw_handling.h"
 #include "goodput.h"
@@ -77,7 +77,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "CPS1848.h"
 #include "rio_misc.h"
 #include "did.h"
-#include "tsi721_umd.h"
+
 
 
 
@@ -86,49 +86,49 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
-static bool umd_allo_ibw(struct UMDChannelInfo *info)
+static bool umd_allo_ibw(struct UMDEngineInfo *info)
 {
 
 }
 
-static bool umd_free_ibw(struct UMDChannelInfo *info)
+static bool umd_free_ibw(struct UMDEngineInfo *info)
 {
 
 }
 
 
-bool umd_open(struct UMDChannelInfo *info)
+bool umd_open(struct UMDEngineInfo *info)
 {
 
 }
 
-bool umd_config(struct UMDChannelInfo *info)
+bool umd_config(struct UMDEngineInfo *info)
 {
-	if (umd_allo_ibw(info))
-	{
-		return;
-	}
+    if (umd_allo_ibw(info))
+    {
+        return;
+    }
 
 
 }
 
-bool umd_start(struct UMDChannelInfo *info)
+bool umd_start(struct UMDEngineInfo *info)
 {
 
 
 }
 
-bool umd_stop(struct UMDChannelInfo *info)
+bool umd_stop(struct UMDEngineInfo *info)
 {
 
 }
 
-bool umd_close(struct UMDChannelInfo *info)
+bool umd_close(struct UMDEngineInfo *info)
 {
-	if(umd_free_ibw(info))
-	{
-		return false;
-	}
+    if(umd_free_ibw(info))
+    {
+        return false;
+    }
 
 }
 

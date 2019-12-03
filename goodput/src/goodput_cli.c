@@ -4653,7 +4653,11 @@ struct cli_cmd *goodput_cmds[] = {
 	&Tsi721W,
 	&Tsi721Z,
 	&UMDDmaNum,
-	&UMDThread,
+	&UMDOpen,
+	&UMDConfig,
+	&UMDStart,
+	&UMDStop,
+	&UMDClose
 };
 
 void bind_goodput_cmds(void)

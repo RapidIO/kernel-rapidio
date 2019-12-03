@@ -34,7 +34,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __UMD_WORKER_H__
 #define __UMD_WORKER_H__
 
-#include "worker.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,38 +42,48 @@ extern "C" {
 #define MAX_UMD_CH_IDX 7
 #define MAX_UMD_CH (MAX_UMD_CH_IDX + 1)
 
-struct UMDChannelInfo
+enum EngineStat
 {
-	int ch_idx;
-	int mport_id;
-	struct tsi721_umd* channel_h;
-	void * ib_ptr;
-	void * ib_handle;
+    ENGINE_UNALLOCATED,
+    ENGINE_UNCONFIGURED,
+    ENGINE_CONFIGURED,
+    ENGINE_READY,
+    ENGINE_STATE_MAX
+};
+    
+struct UMDEngineInfo
+{
+    int ch_idx;
+    int mport_id;
+    enum EngineStat stat;
+    struct tsi721_umd* channel_h;
+    void * ib_ptr;
+    void * ib_handle;
 
-	uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
-	uint64_t buf_size; /* Number of bytes to access for direct IO and DMA */
-	int      max_iter; /* For infinite loop tests make this the upper bound of loops*/
+    uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
+    uint64_t buf_size; /* Number of bytes to access for direct IO and DMA */
+    int      max_iter; /* For infinite loop tests make this the upper bound of loops*/
 
-	int ib_valid;
-	uint64_t ib_handle; /* Inbound window RapidIO handle */
-	uint64_t ib_rio_addr; /* Inbound window RapidIO address */
-	uint64_t ib_byte_cnt; /* Inbound window size */
-	void *ib_ptr; /* Pointer to mapped ib_handle. Start address of ibw in user space */
-	
+    int ib_valid;
+    uint64_t ib_handle; /* Inbound window RapidIO handle */
+    uint64_t ib_rio_addr; /* Inbound window RapidIO address */
+    uint64_t ib_byte_cnt; /* Inbound window size */
+    void *ib_ptr; /* Pointer to mapped ib_handle. Start address of ibw in user space */
+    
 };
 
 
-bool umd_open(struct UMDChannelInfo *info);
+bool umd_open(struct UMDEngineInfo *info);
 
-bool umd_config(struct UMDChannelInfo *info);
+bool umd_config(struct UMDEngineInfo *info);
 
-bool umd_start(struct UMDChannelInfo *info);
+bool umd_start(struct UMDEngineInfo *info);
 
-bool umd_stop(struct UMDChannelInfo *info);
+bool umd_stop(struct UMDEngineInfo *info);
 
-bool umd_close(struct UMDChannelInfo *info);
+bool umd_close(struct UMDEngineInfo *info);
 
-void umd_dma_num_cmd(struct UMDChannelInfo *info);
+void umd_dma_num_cmd(struct UMDEngineInfo *info);
 
 
 #ifdef __cplusplus
