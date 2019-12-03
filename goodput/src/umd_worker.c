@@ -287,7 +287,7 @@ int umd_open(struct UMDEngineInfo *info)
         if(tsi721_umd_open(&(info->engine), info->mport_id) == 0)
         {
             info->stat = ENGINE_UNCONFIGURED;
-            return true;
+            return false;
         }
         else
         {
@@ -299,7 +299,7 @@ int umd_open(struct UMDEngineInfo *info)
         ERR("FAILED: Engine is in state %d\n", info->stat);
     }
 
-    return false;
+    return true;
 }
 
 int umd_config(struct UMDEngineInfo *info)

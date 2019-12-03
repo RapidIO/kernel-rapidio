@@ -234,37 +234,39 @@ struct cli_cmd UMDDmaNum =
     ATTR_NONE
 };
 
-int umdOpenCmd(struct cli_env *UNUSED(env), int argc, char **argv)
+int umdOpenCmd(struct cli_env *env, int argc, char **argv)
 {
     uint32_t mport_id = 0;
-    int ret = -1;
     struct UMDEngineInfo *engine_p = &umd_engine;
 
-
-    if(argc && tok_parse_mport_id(argv[0], &mport_id, 0))
-    {
+    if(argc && tok_parse_mport_id(argv[0], &mport_id, 0)) {
+	LOGMSG(env, TOK_ERR_MPORT_MSG_FMT);
         goto exit;
     }
 
     engine_p->mport_id = mport_id;
-    if(umd_open(engine_p))
+
+    if (umd_open(engine_p))
     {
-        ret = 0;
+        LOGMSG(env, "Tsi721 UMD Open FAILED.\n");
     }
-
-
+    else
+    {
+        LOGMSG(env, "Tsi721 UMD Open PASSED.\n");
+    }
 exit:
-    return ret;
+    return 0;
 }
 
 struct cli_cmd UMDOpen =
 {
-    "umd_open",
-    8,
+    "Uopen",
+    2,
     0,
     "Reserve a UMD engine",
     "umd_open <mport_num>\n"
-        "<mport_num> optional local rapidio device port. Defalut is 0. \n",
+    "Set the Tsi721 User Mode Driver to OPEN state.\n"
+    "<mport_num> optional local rapidio device port. Default is 0. \n",
     umdOpenCmd,
     ATTR_NONE
 };
