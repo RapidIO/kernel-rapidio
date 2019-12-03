@@ -41,13 +41,13 @@ int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv);
 
 int umdOpen(struct cli_env *env, int UNUSED(argc), char **argv);
 
-int umdConfig(struct struct cli_env *env, int UNUSED(argc), char **argv);
+int umdConfig(struct cli_env *env, int UNUSED(argc), char **argv);
 
-int umdStart(struct struct cli_env *env, int UNUSED(argc), char **argv);
+int umdStart(struct cli_env *env, int UNUSED(argc), char **argv);
 
-int umdStop(struct struct cli_env *env, int UNUSED(argc), char **argv);
+int umdStop(struct cli_env *env, int UNUSED(argc), char **argv);
 
-int umdClose(struct struct cli_env *env, int UNUSED(argc), char **argv);
+int umdClose(struct cli_env *env, int UNUSED(argc), char **argv);
 
 
 struct cli_cmd UMDDmaNum =
@@ -83,6 +83,7 @@ struct cli_cmd UMDOpen =
 
 struct cli_cmd UMDConfig =
 {
+
     "umd_config",
     8,
     1,

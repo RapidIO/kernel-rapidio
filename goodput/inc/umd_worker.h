@@ -34,6 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __UMD_WORKER_H__
 #define __UMD_WORKER_H__
 
+#include "tsi721_umd.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,8 +58,6 @@ struct UMDEngineInfo
     int mport_id;
     enum EngineStat stat;
     struct tsi721_umd* channel_h;
-    void * ib_ptr;
-    void * ib_handle;
 
     uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
     uint64_t buf_size; /* Number of bytes to access for direct IO and DMA */

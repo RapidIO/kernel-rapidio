@@ -88,55 +88,88 @@ extern "C" {
 
 static bool umd_allo_ibw(struct UMDEngineInfo *info)
 {
+    tsi721_umd* h;
 
+    h = info->channel_h;
+    h->dev_fd = info->mport_id;
+    return true;
 }
 
 static bool umd_free_ibw(struct UMDEngineInfo *info)
 {
+    tsi721_umd* h;
 
+    h = info->channel_h;
+    h->dev_fd = info->mport_id;
+    return true;
 }
 
 
 bool umd_open(struct UMDEngineInfo *info)
 {
+    tsi721_umd* h;
 
+    h = info->channel_h;
+    h->dev_fd = info->mport_id;
+    return true;
 }
 
 bool umd_config(struct UMDEngineInfo *info)
 {
+
+    tsi721_umd* h;
+
+
+    h = info->channel_h;
+    h->dev_fd = info->mport_id;
     if (umd_allo_ibw(info))
     {
-        return;
+        return false;
     }
 
-
+    return true;
 }
 
 bool umd_start(struct UMDEngineInfo *info)
 {
+    tsi721_umd* h;
 
+    h = info->channel_h;
+    h->dev_fd = info->mport_id;
+    return true;
 
 }
 
 bool umd_stop(struct UMDEngineInfo *info)
 {
+    tsi721_umd* h;
 
+    h = info->channel_h;
+    h->dev_fd = info->mport_id;
+    return true;
 }
 
 bool umd_close(struct UMDEngineInfo *info)
 {
+    tsi721_umd* h;
+
+    h = info->channel_h;
+    h->dev_fd = info->mport_id;
     if(umd_free_ibw(info))
     {
         return false;
     }
 
+    return true;
 }
 
-void umd_dma_num_cmd()
+void umd_dma_num_cmd(struct UMDEngineInfo *info)
 {
+    tsi721_umd* h;
 
+    h = info->channel_h;
+    h->dev_fd = info->mport_id;
 }
-
 
 #ifdef __cplusplus
 }

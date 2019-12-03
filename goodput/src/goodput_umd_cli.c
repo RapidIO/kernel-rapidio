@@ -46,8 +46,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "rio_mport_lib.h"
 #include "string_util.h"
 #include "goodput_cli.h"
-#include "goodput_umd_cli.h"
-#include "umd_worker.h"
+
+
 #include "libtime_utils.h"
 #include "librsvdmem.h"
 #include "liblog.h"
@@ -60,12 +60,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "RXS2448.h"
 #include "Tsi721.h"
 #include "cps_event_test.h"
+#include "umd_worker.h"
+#include "goodput_umd_cli.h"
+
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 struct UMDEngineInfo umd_engine[MAX_UMD_CH];
+
+extern enum rio_exchange convert_int_to_riomp_dma_directio_type(uint16_t trans);
 
 
 // Parse the token ensuring it is within the range for a worker index and
