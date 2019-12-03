@@ -45,22 +45,20 @@ extern "C" {
 
 struct UMDChannelInfo
 {
-	int ch_idx;
-	int mport_id;
-	struct tsi721_umd* channel_h;
-	void * ib_ptr;
-	void * ib_handle;
+    int ch_idx;
+    int mport_id;
+    struct tsi721_umd* channel_h;
 
-	uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
-	uint64_t buf_size; /* Number of bytes to access for direct IO and DMA */
-	int      max_iter; /* For infinite loop tests make this the upper bound of loops*/
+    uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
+    uint64_t buf_size; /* Number of bytes to access for direct IO and DMA */
+    int      max_iter; /* For infinite loop tests make this the upper bound of loops*/
 
-	int ib_valid;
-	uint64_t ib_handle; /* Inbound window RapidIO handle */
-	uint64_t ib_rio_addr; /* Inbound window RapidIO address */
-	uint64_t ib_byte_cnt; /* Inbound window size */
-	void *ib_ptr; /* Pointer to mapped ib_handle. Start address of ibw in user space */
-	
+    int ib_valid;
+    uint64_t ib_handle; /* Inbound window RapidIO handle */
+    uint64_t ib_rio_addr; /* Inbound window RapidIO address */
+    uint64_t ib_byte_cnt; /* Inbound window size */
+    void *ib_ptr; /* Pointer to mapped ib_handle. Start address of ibw in user space */
+    
 };
 
 
