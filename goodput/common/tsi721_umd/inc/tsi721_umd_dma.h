@@ -4,8 +4,8 @@
 /* Register offsets */
 
 /* Register access macros */
-#define TSI721_WR32(reg, channel, value) (*(volatile uint32_t*)((uintptr_t)h->all_regs + reg(channel))= value)
-#define TSI721_RD32(reg, channel)        (*(volatile uint32_t*)((uintptr_t)h->all_regs + reg(channel)))
+#define TSI721_WR32(reg, value)  (*(volatile uint32_t*)((uintptr_t)h->all_regs + reg) = value)
+#define TSI721_RD32(reg)         (*(volatile uint32_t*)((uintptr_t)h->all_regs + reg))
 
 
 /* Descriptor types for BDMA and Messaging blocks */

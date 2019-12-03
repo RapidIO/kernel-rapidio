@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include "tsi721_umd.h"
 
+#define MAX_MSG_PER_BUF (16)
+
 // Test basic opening and setup of the user-mode driver
 
 int main(int argc, char** argv)
@@ -12,7 +14,7 @@ int main(int argc, char** argv)
 	const uint32_t q_size = 8 * 8192;
 	const uint64_t dma_buf_addr = q_addr + 256*1024;
 	const uint32_t dma_buf_size = 1024*1024;
-	const uint32_t msg_size = dma_buf_size/512;
+	const uint32_t msg_size = dma_buf_size/MAX_MSG_PER_BUF;
 	const uint16_t dest_id = 0;
 	const uint64_t rio_base = 0xB1000000;
 	uint32_t num_writes = 1;
