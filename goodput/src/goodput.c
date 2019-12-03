@@ -164,8 +164,8 @@ int main(int argc, char *argv[])
 		init_worker_info(&wkr[i], 1);
 
 	cli_init_base(goodput_thread_shutdown);
-	bind_goodput_cmds();
 	liblog_bind_cli_cmds();
+	bind_goodput_cmds();
 
 	// INFW: Temporary script path for hot swap testing.
 	//

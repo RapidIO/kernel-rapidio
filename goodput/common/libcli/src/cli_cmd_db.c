@@ -34,7 +34,7 @@
 #include <string.h>
 #include "libcli.h"
 
-#define MAX_CMDS 100
+#define MAX_CMDS 120
 #define MIN(a, b) ((a < b)?a:b)
 
 #ifdef __cplusplus
