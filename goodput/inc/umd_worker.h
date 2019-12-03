@@ -55,7 +55,7 @@ enum EngineStat
 struct UMDEngineInfo
 {
     int ch_idx;
-    int mport_id;
+    int mport_id;    
     enum EngineStat stat;
     struct tsi721_umd* channel_h;
 
@@ -68,7 +68,9 @@ struct UMDEngineInfo
     uint64_t ib_rio_addr; /* Inbound window RapidIO address */
     uint64_t ib_byte_cnt; /* Inbound window size */
     void *ib_ptr; /* Pointer to mapped ib_handle. Start address of ibw in user space */
-    
+
+    bool wr;
+    int  dest_id;
 };
 
 
