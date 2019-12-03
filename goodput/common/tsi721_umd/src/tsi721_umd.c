@@ -373,7 +373,7 @@ int32_t tsi721_umd_stop(struct tsi721_umd* h)
 	return 0;
 }
 
-int32_t tsi721_close(struct tsi721_umd* h)
+int32_t tsi721_umd_close(struct tsi721_umd* h)
 {
 	assert(h->state == TSI721_UMD_STATE_CONFIGURED);
 	assert(h->regs != NULL);

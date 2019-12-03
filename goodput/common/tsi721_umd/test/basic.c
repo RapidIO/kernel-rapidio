@@ -59,7 +59,7 @@ int main(int argc, char** argv)
 	{
 		ret = tsi721_umd_send(
 				&umd, 
-				(void*)dma_buf_addr + i*msg_size, // phys addr
+				(void*)dma_buf_addr + (i & (MAX_MSG_PER_BUF-1))*msg_size, // phys addr
 				msg_size, // size 
 				rio_base + i*msg_size, // rio addr
 			   	dest_id); // dest ID
@@ -72,6 +72,22 @@ int main(int argc, char** argv)
 
 		printf("tsi721_umd_send %d success\n",i);
 	}
+
+	ret = tsi721_umd_stop(&umd);
+	if (ret != 0)
+	{
+		printf("Failed to stop UMD\n");
+		return -1;
+	}
+	printf("Stop UMD ok\n");
+
+	ret = tsi721_umd_close(&umd);
+	if (ret != 0)
+	{
+		printf("Failed to close UMD\n");
+		return -1;
+	}
+	printf("Close UMD ok\n");
 
 	return 0;
 }
