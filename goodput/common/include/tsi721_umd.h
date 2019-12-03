@@ -29,6 +29,7 @@ struct dma_channel
 	uint32_t *dma_engine_regs;
 	uint32_t  queue_mem_size;    // total size for all queues
 	uint32_t  req_count;
+	uint32_t  status_count;
 	void     *reg_base;          // DMA register base address for this channel
 };
 

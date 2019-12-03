@@ -3,7 +3,7 @@
 
 // Test basic opening and setup of the user-mode driver
 
-int main(void)
+int main(int argc, char** argv)
 {
 	int ret;
 	uint32_t i;
@@ -12,8 +12,13 @@ int main(void)
 	const uint32_t q_size = 8 * 8192;
 	const uint64_t dma_buf_addr = q_addr + 256*1024;
 	const uint32_t dma_buf_size = 1024*1024;
+	const uint32_t msg_size = dma_buf_size/512;
 	const uint16_t dest_id = 0;
 	const uint64_t rio_base = 0xB1000000;
+	uint32_t num_writes = 1;
+
+	if (argc > 1)
+		num_writes = atoi(argv[1]);
 
 	ret = tsi721_umd_open(&umd, 0);
 	if (ret < 0)
@@ -48,20 +53,23 @@ int main(void)
 	for (i=0; i<dma_buf_size/4; i++)
 		ptr[i] = (i & 0x0000FFFF) | 0xCAFE0000;
 
-	ret = tsi721_umd_send(
-			&umd, 
-			(void*)dma_buf_addr, // phys addr
-			dma_buf_size,        // size 
-			rio_base,            // rio addr
-		   	dest_id);            // dest ID
-
-	if (ret != 0)
+	for (i=0; i<num_writes; i++)
 	{
-		printf("tsi721_umd_send failed\n");
-		return -1;
-	}
+		ret = tsi721_umd_send(
+				&umd, 
+				(void*)dma_buf_addr + i*msg_size, // phys addr
+				msg_size, // size 
+				rio_base + i*msg_size, // rio addr
+			   	dest_id); // dest ID
 
-	printf("tsi721_umd_send success\n");
+		if (ret != 0)
+		{
+			printf("tsi721_umd_send %d failed\n",i);
+			return -1;
+		}
+
+		printf("tsi721_umd_send %d success\n",i);
+	}
 
 	return 0;
 }

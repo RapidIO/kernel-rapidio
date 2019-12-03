@@ -231,6 +231,8 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 	int32_t ret, i;
 	int8_t chan = -1;
 	tsi721_dma_desc descriptor; // TBD - check if need to handle splitting to multiple descriptor
+
+	printf("Descriptor: dest %d sz %d rioAddr %lx phys %p\n",dest_id,num_bytes,rio_addr,phys_addr);
 	
 	// Form descriptor in local mem
 	tsi721_umd_create_dma_descriptor(
@@ -263,20 +265,22 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 	assert(chan != -1); // this should not be possible (got sem but no channels free)
 
 	// Copy descriptor to channel queue
-	memcpy(h->chan[chan].request_q,&descriptor,sizeof(descriptor));
+	void* request_q_descriptor = (void*)((uintptr_t)h->chan[chan].request_q + (h->chan[chan].req_count & 127) * TSI721_DESCRIPTOR_SIZE);
+	void* request_q_descriptor_phys = (void*)((uintptr_t)h->chan[chan].request_q_phys + (h->chan[chan].req_count & 127) * TSI721_DESCRIPTOR_SIZE);
+	memcpy(&request_q_descriptor,&descriptor,sizeof(descriptor));
+	printf("Descriptor copied to %p.  Descriptor ptr %x %x\n",request_q_descriptor_phys,TSI721_RD32(TSI721_DMACXDPTRH,chan),TSI721_RD32(TSI721_DMACXDPTRL,chan));
 	
 	// Start transfer.  Increment the req count and set it in the DMA descriptor write count register
 	
-	printf("Before send: channel %d write count %d read count %d\n",chan, TSI721_RD32(TSI721_DMACXDWRCNT, chan), TSI721_RD32(TSI721_DMACXDRDCNT, chan));
-	printf("Before send: DMAChannel %d status %x\n",chan,TSI721_RD32(TSI721_DMACXSTS, chan));
+	//printf("Before send: channel %d write count %d read count %d\n",chan, TSI721_RD32(TSI721_DMACXDWRCNT, chan), TSI721_RD32(TSI721_DMACXDRDCNT, chan));
+	//printf("Before send: DMAChannel %d status %x\n",chan,TSI721_RD32(TSI721_DMACXSTS, chan));
 	h->chan[chan].req_count++;
 	TSI721_WR32(TSI721_DMACXDWRCNT, chan, h->chan[chan].req_count);
-	printf("After send: channel %d write count %d read count %d\n",chan, TSI721_RD32(TSI721_DMACXDWRCNT, chan), TSI721_RD32(TSI721_DMACXDRDCNT, chan));
 
 	// For debug: poll the local status register
 	uint32_t status = TSI721_RD32(TSI721_DMACXSTS, chan);
 	uint32_t prev_status = 0;
-	while(status & (1<<21))
+	while(status & TSI721_DMACXSTS_RUN)
 	{
 		if (status != prev_status)
 		{
@@ -286,14 +290,29 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 		usleep(1000);
 		status = TSI721_RD32(TSI721_DMACXSTS, chan);
 	}
+	
+	printf("After send: channel %d write count %d read count %d\n",chan, TSI721_RD32(TSI721_DMACXDWRCNT, chan), TSI721_RD32(TSI721_DMACXDRDCNT, chan));
 
-	if ((status>>16) & 0xF)
+	if (status & TSI721_DMACXSTS_CS)
 	{
 		printf("DMAChannel %d completed with errors, status %x\n",chan,status);
+		return -1;
 	}
+	
+	printf("DMAChannel %d completed with success, status %x\n",chan,status);
 	
 	// Wait for transfer completion
 	// use maintenance transactions to poll the destination for received msg
+	
+	// Clear status entry and increment the status fifo read pointer
+	uint64_t* status_queue_entry = (uint64_t*)((uintptr_t)h->chan[chan].completion_q + h->chan[chan].status_count * 64);
+	for (i=0; i<8; i++)
+	{
+		//printf("Status queue entry %d: %lx\n",i,status_queue_entry[i]);
+		status_queue_entry[i] = 0;
+	}
+	h->chan[chan].status_count = (h->chan[chan].status_count + 1) & TSI721_DMACXDSRP_RD_PTR;
+	TSI721_WR32(TSI721_DMACXDSRP, chan, h->chan[chan].status_count);
 	
 	// Cleanup : mark DMA as idle and increment the free engine semaphore
 	h->chan[chan].in_use = false;
