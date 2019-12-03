@@ -33,7 +33,7 @@ TOPDIR?=$(shell pwd)/..
 include $(TOPDIR)/rules.mk
 
 all: libcmocka libcli liblist liblog libtime_utils \
-	librsvdmem librio libumd
+	librsvdmem librio tsi721_umd
 
 libcmocka: FORCE
 	$(MAKE) -C libcmocka
@@ -70,7 +70,7 @@ librio: FORCE libcmocka
 	mkdir -p libs_a
 	cp librio/librio.a libs_a/
 
-libumd: FORCE libcmocka
+tsi721_umd: FORCE libcmocka
 	$(MAKE) all -C tsi721_umd
 	mkdir -p libs_a
 	cp tsi721_umd/libumd.a libs_a/
@@ -85,6 +85,7 @@ runtests:
 	$(MAKE) runtests -C librio
 
 clean:
+	$(MAKE) clean -C tsi721_umd
 	$(MAKE) clean -C libcli
 	$(MAKE) clean -C libcmocka
 	$(MAKE) clean -C liblist

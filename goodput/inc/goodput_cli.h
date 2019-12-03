@@ -42,6 +42,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
+#define FOUR_KB (4*1024)
+#define SIXTEEN_MB (16*1024*1024)
+
 /**
  * @brief Bind goodput commands into CLI base
  *

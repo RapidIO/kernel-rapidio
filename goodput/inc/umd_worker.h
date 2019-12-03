@@ -57,14 +57,14 @@ struct DmaTransfer
 {
     int index;
     bool is_in_use;
-    
+
     bool wr;
     int  dest_id;
     uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
     uint64_t buf_size; /* Number of bytes to access for direct IO and DMA */
     int      num_trans; /* Number of loops for data transfer. 0 indicates infinite number of loops*/
-    char     user_data[8]; /*User predinfed data*/  
-        
+    char     user_data[8]; /*User predinfed data*/
+
     int ib_valid;
     uint64_t ib_handle; /* Inbound window RapidIO handle */
     uint64_t ib_rio_addr; /* Inbound window RapidIO address */
@@ -72,33 +72,33 @@ struct DmaTransfer
     void *ib_ptr; /* Pointer to mapped ib_handle. Start address of ibw in user space */
 
     void *tx_ptr;
-    uint_64 tx_mem_h;
+    uint64_t tx_mem_h;
 };
-    
+
 struct UMDEngineInfo
 {
-    int mport_id;    
-    enum EngineStat stat; //all state transfer will require mutex for pretection. Assume race condition will rarely happen. So no pretection for now. 
+    int mport_id;
+    enum EngineStat stat; //all state transfer will require mutex for pretection. Assume race condition will rarely happen. So no pretection for now.
     struct tsi721_umd engine;
 
     void *queue_mem_ptr;
-    uint_64 queue_mem_h;
+    uint64_t queue_mem_h;
 
     struct DmaTransfer dma_trans[MAX_UDM_USER_THREAD];
 };
 
 
-int umd_open(struct UMDEngineInfo *info);
+extern int umd_open(struct UMDEngineInfo *info);
 
-int umd_config(struct UMDEngineInfo *info);
+extern int umd_config(struct UMDEngineInfo *info);
 
-int umd_start(struct UMDEngineInfo *info);
+extern int umd_start(struct UMDEngineInfo *info);
 
-int umd_stop(struct UMDEngineInfo *info);
+extern int umd_stop(struct UMDEngineInfo *info);
 
-int umd_close(struct UMDEngineInfo *info);
+extern int umd_close(struct UMDEngineInfo *info);
 
-int umd_dma_num_cmd(struct UMDEngineInfo *info, int index);
+extern int umd_dma_num_cmd(struct UMDEngineInfo *info, int index);
 
 
 #ifdef __cplusplus

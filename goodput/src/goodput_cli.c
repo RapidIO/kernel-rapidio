@@ -440,9 +440,6 @@ SleepCmd,
 ATTR_NONE
 };
 
-#define FOUR_KB (4*1024)
-#define SIXTEEN_MB (16*1024*1024)
-
 static int IBAllocCmd(struct cli_env *env, int argc, char **argv)
 {
     uint16_t idx;

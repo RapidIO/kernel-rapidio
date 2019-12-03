@@ -116,12 +116,11 @@ static int gp_parse_did(struct cli_env *env, char *tok, did_val_t *did_val)
 }
 
 
-int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv)
+int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
 {
     int idx;
     uint64_t ib_size;
     uint64_t ib_rio_addr = RIO_MAP_ANY_ADDR;
-    uint64_t ib_phys_addr= RIO_MAP_ANY_ADDR;
     did_val_t did_val;
     uint64_t rio_addr;
     uint64_t buf_sz;
@@ -131,11 +130,11 @@ int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv)
     struct UMDEngineInfo *engine_p = &umd_engine;
     struct DmaTransfer *dma_trans_p;
     int ret = -1;
-    
+
     int n = 0;
 
     if(tok_parse_long(argv[n++], &idx, 0, MAX_UDM_USER_THREAD, 0))
-    {   
+    {
         LOGMSG(env, "\n");
         LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UDM_USER_THREAD);
         goto exit;
@@ -153,41 +152,38 @@ int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv)
         LOGMSG(env, "\n");
         LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<ib_rio_addr>",
                 (uint64_t )1, (uint64_t)UINT64_MAX);
-        goto exit:        
+        goto exit;
     }
 
     if ((ib_rio_addr != RIO_MAP_ANY_ADDR) && ((ib_size-1) & ib_rio_addr)) {
         LOGMSG(env, "\n<addr> not aligned with <size>\n");
         goto exit;
     }
-    
+
     if (gp_parse_did(env, argv[n++], &did_val))
     {
         goto exit;
     }
 
-    
     if (tok_parse_ulonglong(argv[n++], &rio_addr, 1, UINT64_MAX, 0))
     {
         LOGMSG(env, "\n");
         LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<rio_addr>",
                 (uint64_t)1, (uint64_t)UINT64_MAX);
         goto exit;
-    }   
+    }
 
     if (gp_parse_ull_pw2(env, argv[n++], "<buf_size>", &buf_sz, FOUR_KB, 4 * SIXTEEN_MB))
     {
         goto exit;
     }
-    
-    if (gp_parse_bool(env, argv[n++], "<wr>", &wr)) 
+
+    if (gp_parse_bool(env, argv[n++], "<wr>", &wr))
     {
         goto exit;
     }
 
-    
-    
-    if ((argc > 7 && tok_parse_ul(argv[n++], &num_trans, 0)) 
+    if (argc > 7 && tok_parse_ul(argv[n++], &num_trans, 0))
     {
         LOGMSG(env, "\n");
         LOGMSG(env, TOK_ERR_UL_HEX_MSG_FMT, "<num>");
@@ -199,7 +195,7 @@ int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv)
         user_data_p = argv[n];
     }
 
-    if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use )
+    if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use)
     {
         dma_trans_p->ib_byte_cnt = ib_size;
         dma_trans_p->ib_rio_addr = ib_rio_addr;
@@ -210,22 +206,42 @@ int umdDmaNumCmd(struct cli_env *env, int UNUSED(argc), char **argv)
         memcpy(dma_trans_p->user_data, user_data_p,8);
         umd_dma_num_cmd(engine_p, idx);
         ret = 0;
-    }    
-    
+    }
+
 exit:
     return ret;
 
 }
-    
-int umdOpen(struct cli_env *env, int UNUSED(argc), char **argv)
+
+struct cli_cmd UMDDmaNum =
 {
-    int idx;
-    int mport_id = 0;
+    "umd_dnum",
+    8,
+    7,
+    "Send a specified number of DMA reads/writes",
+    "umd_dnum <inb_size> <inb_rio_addr> <idx> <did> <rio_addr> <bytes> <buf_sz> <wr> <num> <data>\n"
+        "<idx>      User thread index: 0 to 7\n"
+        "<ib_size> inbound window size. Must be a power of two from 0x1000 to 0x01000000\n"
+        "<ib_rio_addr> is the RapidIO address for the inbound window\n"
+        "       NOTE: <addr> must be aligned to <size>\n"
+        "<did>      target device ID\n"
+        "<rio_addr> is target RapidIO memory address to access\n"
+        "<buf_sz>   target buffer size, must be a power of two from 0x1000 to 0x01000000\n"
+        "<wr>       0: Read, 1: Write,2:Ramdom Writer\n"
+        "<num>      Optional default is 0, number of transactions to send. 0 indicates infinite loop\n"
+        "<data>     RND, or constant data value, written every 8 bytes",
+    umdDmaNumCmd,
+    ATTR_NONE
+};
+
+int umdOpenCmd(struct cli_env *UNUSED(env), int argc, char **argv)
+{
+    uint32_t mport_id = 0;
     int ret = -1;
     struct UMDEngineInfo *engine_p = &umd_engine;
 
 
-    if(argc > 0 && tok_parse_mport_id(argv[n++], &mport_id, 0))
+    if(argc && tok_parse_mport_id(argv[0], &mport_id, 0))
     {
         goto exit;
     }
@@ -235,20 +251,31 @@ int umdOpen(struct cli_env *env, int UNUSED(argc), char **argv)
     {
         ret = 0;
     }
-       
+
 
 exit:
     return ret;
 }
 
-
-int umdConfig(struct struct cli_env *env, int UNUSED(argc), char **argv)
+struct cli_cmd UMDOpen =
 {
-    int idx;
+    "umd_open",
+    8,
+    0,
+    "Reserve a UMD engine",
+    "umd_open <mport_num>\n"
+        "<mport_num> optional local rapidio device port. Defalut is 0. \n",
+    umdOpenCmd,
+    ATTR_NONE
+};
+
+
+int umdConfigCmd(struct cli_env *UNUSED(env), int UNUSED(argc), char **UNUSED(argv))
+{
     int ret = -1;
     struct UMDEngineInfo *engine_p = &umd_engine;
 
-    if(umd_config(engine_p)}
+    if(umd_config(engine_p))
     {
         ret = 0;
     }
@@ -256,9 +283,20 @@ int umdConfig(struct struct cli_env *env, int UNUSED(argc), char **argv)
     return ret;
 }
 
-int umdStart(struct struct cli_env *env, int UNUSED(argc), char **argv)
+struct cli_cmd UMDConfig =
 {
-    int idx;
+    "umd_config",
+    8,
+    0,
+    "Configure a UMD engine",
+    "umd_config\n",
+    umdConfigCmd,
+    ATTR_NONE
+};
+
+
+int umdStartCmd(struct cli_env *UNUSED(env), int UNUSED(argc), char **UNUSED(argv))
+{
     int ret = -1;
     struct UMDEngineInfo *engine_p = &umd_engine;
 
@@ -270,9 +308,19 @@ int umdStart(struct struct cli_env *env, int UNUSED(argc), char **argv)
     return ret;
 }
 
-int umdStop(struct struct cli_env *env, int UNUSED(argc), char **argv)
+struct cli_cmd UMDStart =
 {
-    int idx;
+    "umd_start",
+    8,
+    0,
+    "Start a UMD engine",
+    "umd_start\n",
+    umdStartCmd,
+    ATTR_NONE
+};
+
+int umdStopCmd(struct cli_env *UNUSED(env), int UNUSED(argc), char **UNUSED(argv))
+{
     int ret = -1;
     struct UMDEngineInfo *engine_p = &umd_engine;
 
@@ -285,9 +333,20 @@ int umdStop(struct struct cli_env *env, int UNUSED(argc), char **argv)
 
 }
 
-int umdClose(struct struct cli_env *env, int UNUSED(argc), char **argv)
+struct cli_cmd UMDStop =
 {
-    int idx;
+    "umd_stop",
+    8,
+    0,
+    "Stop a UMD engine",
+    "umd_stop \n",
+    umdStopCmd,
+    ATTR_NONE
+
+};
+
+int umdCloseCmd(struct cli_env *UNUSED(env), int UNUSED(argc), char **UNUSED(argv))
+{
     int ret = -1;
     struct UMDEngineInfo *engine_p = &umd_engine;
 
@@ -299,10 +358,19 @@ int umdClose(struct struct cli_env *env, int UNUSED(argc), char **argv)
     return ret;
 
 }
-   
+
+struct cli_cmd UMDClose =
+{
+    "umd_cloe",
+    8,
+    0,
+    "Free a UMD engine",
+    "umd_close\n",
+    umdCloseCmd,
+    ATTR_NONE
+};
+
 
 #ifdef __cplusplus
 }
 #endif
-
-
