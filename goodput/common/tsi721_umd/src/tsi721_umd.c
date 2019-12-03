@@ -144,14 +144,14 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
 	chan->reg_base = (void*)((uintptr_t)h->all_regs + TSI721_DMAC_BASE(channel_num));
 	
 	// Config the descriptor pointer registers, queue size
-	TSI721_WR32(TSI721_OBDMACXDPTRH, channel_num, ((uintptr_t)chan->request_q_phys) >> 32);
-	TSI721_WR32(TSI721_OBDMACXDPTRL, channel_num, ((uintptr_t)chan->request_q_phys) & 0xFFFFFFFF);
-	TSI721_WR32(TSI721_OBDMACXDSBH,  channel_num, ((uintptr_t)chan->completion_q_phys) >> 32);
-	TSI721_WR32(TSI721_OBDMACXDSBL,  channel_num, ((uintptr_t)chan->completion_q_phys) & 0xFFFFFFFF);
+	TSI721_WR32(TSI721_DMACXDPTRH, channel_num, ((uintptr_t)chan->request_q_phys) >> 32);
+	TSI721_WR32(TSI721_DMACXDPTRL, channel_num, ((uintptr_t)chan->request_q_phys) & 0xFFFFFFFF);
+	TSI721_WR32(TSI721_DMACXDSBH,  channel_num, ((uintptr_t)chan->completion_q_phys) >> 32);
+	TSI721_WR32(TSI721_DMACXDSBL,  channel_num, ((uintptr_t)chan->completion_q_phys) & 0xFFFFFFFF);
 	TSI721_WR32(TSI721_DMACXDSSZ,    channel_num, 2); // translates to 64 entries
 
 	// Initialize hardware queue counters
-	TSI721_WR32(TSI721_OBDMACXCTL,   channel_num, TSI721_OBDMACXCTL_INIT);
+	TSI721_WR32(TSI721_DMACXCTL,   channel_num, TSI721_DMACXCTL_INIT);
 
 	chan->in_use = false;
 
@@ -267,14 +267,14 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 	
 	// Start transfer.  Increment the req count and set it in the DMA descriptor write count register
 	
-	printf("Before send: channel %d write count %d read count %d\n",chan, TSI721_RD32(TSI721_OBDMACXDWRCNT, chan), TSI721_RD32(TSI721_OBDMACXDRDCNT, chan));
-	printf("Before send: DMAChannel %d status %x\n",chan,TSI721_RD32(TSI721_OBDMACXSTS, chan));
+	printf("Before send: channel %d write count %d read count %d\n",chan, TSI721_RD32(TSI721_DMACXDWRCNT, chan), TSI721_RD32(TSI721_DMACXDRDCNT, chan));
+	printf("Before send: DMAChannel %d status %x\n",chan,TSI721_RD32(TSI721_DMACXSTS, chan));
 	h->chan[chan].req_count++;
-	TSI721_WR32(TSI721_OBDMACXDWRCNT, chan, h->chan[chan].req_count);
-	printf("After send: channel %d write count %d read count %d\n",chan, TSI721_RD32(TSI721_OBDMACXDWRCNT, chan), TSI721_RD32(TSI721_OBDMACXDRDCNT, chan));
+	TSI721_WR32(TSI721_DMACXDWRCNT, chan, h->chan[chan].req_count);
+	printf("After send: channel %d write count %d read count %d\n",chan, TSI721_RD32(TSI721_DMACXDWRCNT, chan), TSI721_RD32(TSI721_DMACXDRDCNT, chan));
 
 	// For debug: poll the local status register
-	uint32_t status = TSI721_RD32(TSI721_OBDMACXSTS, chan);
+	uint32_t status = TSI721_RD32(TSI721_DMACXSTS, chan);
 	uint32_t prev_status = 0;
 	while(status & (1<<21))
 	{
@@ -284,7 +284,7 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 			prev_status = status;
 		}
 		usleep(1000);
-		status = TSI721_RD32(TSI721_OBDMACXSTS, chan);
+		status = TSI721_RD32(TSI721_DMACXSTS, chan);
 	}
 
 	if ((status>>16) & 0xF)
