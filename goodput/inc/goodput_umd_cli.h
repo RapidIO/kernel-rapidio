@@ -54,16 +54,16 @@ struct cli_cmd UMDDmaNum =
 {
     "umd_dnum",
     8,
-    6,
+    5,
     "Send a specified number of DMA reads/writes",
-    "umd_dnum <did> <rio_addr> <bytes> <acc_sz> <wr> <num>\n"
+    "umd_dnum <idx> <did> <rio_addr> <bytes> <buf_sz> <wr> <num> <data>\n"
         "<idx>      UMD channel index: 0 to Maximum channel - 1\n"
         "<did>      target device ID\n"
         "<rio_addr> RapidIO memory address to access\n"
         "<buf_sz>   buffer size, must be a power of two from 1 to 0xffffffff\n"
         "<wr>       0: Read, 1: Write,2:Ramdom Writer\n"
         "<num>      Optional default is 0, number of transactions to send. 0 indicates infinite loop\n"
-        "<data>   RND, or constant data value, written every 8 bytes",
+        "<data>     RND, or constant data value, written every 8 bytes",
     umdDmaNumCmd,
     ATTR_NONE
 };
@@ -88,13 +88,11 @@ struct cli_cmd UMDConfig =
     8,
     1,
     "Configure a UMD engine",
-    "umd_config <idx> <size> <addr> <RSVD>\n"
+    "umd_config <idx> <size> <rio_addr>\n"
         "<idx> UMD engine array index. \n"
         "<size> inbound window size. Must be a power of two from 0x1000 to 0x01000000\n"
-        "<addr> is the optional RapidIO address for the inbound window\n"
+        "<rio_addr> is the optional RapidIO address for the inbound window\n"
         "       NOTE: <addr> must be aligned to <size>\n"
-        "<RSVD> is a keyword for reserved memory area\n"
-        "       NOTE: If <RSVD> is specified, <addr> is ignored\n",
     umdConfig,
     ATTR_NONE   
 
