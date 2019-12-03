@@ -38,6 +38,7 @@ struct tsi721_umd
 	int32_t dev_fd;     // rio_mport device handle
 	int32_t regs_fd;    // handle from mmap of register memory
 	volatile void *all_regs;  // register memory pointer
+	uint32_t regs_map_size; // size of the BAR0 register mapping
 	uint8_t chan_count; // count of channels used
 	uint8_t chan_mask;  // bitfield, allocated channels
 	struct dma_channel chan[TSI721_DMA_CHNUM]; // channel descriptors

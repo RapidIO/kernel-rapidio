@@ -40,7 +40,8 @@ static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id)
 	}
 
 
-	ptr = mmap(NULL, fd_stat.st_size,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	h->regs_map_size = fd_stat.st_size;
+	ptr = mmap(NULL, h->regs_map_size,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
 	if (ptr == MAP_FAILED)
 	{
@@ -148,7 +149,7 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
 	TSI721_WR32(TSI721_DMACXDPTRL, channel_num, ((uintptr_t)chan->request_q_phys) & 0xFFFFFFFF);
 	TSI721_WR32(TSI721_DMACXDSBH,  channel_num, ((uintptr_t)chan->completion_q_phys) >> 32);
 	TSI721_WR32(TSI721_DMACXDSBL,  channel_num, ((uintptr_t)chan->completion_q_phys) & 0xFFFFFFFF);
-	TSI721_WR32(TSI721_DMACXDSSZ,    channel_num, 2); // translates to 64 entries
+	TSI721_WR32(TSI721_DMACXDSSZ,  channel_num, 2); // translates to 64 entries
 
 	// Initialize hardware queue counters
 	TSI721_WR32(TSI721_DMACXCTL,   channel_num, TSI721_DMACXCTL_INIT);
@@ -277,7 +278,7 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 	h->chan[chan].req_count++;
 	TSI721_WR32(TSI721_DMACXDWRCNT, chan, h->chan[chan].req_count);
 
-	// For debug: poll the local status register
+	// Poll status to wait for completion
 	uint32_t status = TSI721_RD32(TSI721_DMACXSTS, chan);
 	uint32_t prev_status = 0;
 	while(status & TSI721_DMACXSTS_RUN)
@@ -301,9 +302,6 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 	
 	printf("DMAChannel %d completed with success, status %x\n",chan,status);
 	
-	// Wait for transfer completion
-	// use maintenance transactions to poll the destination for received msg
-	
 	// Clear status entry and increment the status fifo read pointer
 	uint64_t* status_queue_entry = (uint64_t*)((uintptr_t)h->chan[chan].completion_q + h->chan[chan].status_count * 64);
 	for (i=0; i<8; i++)
@@ -323,16 +321,52 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 
 int32_t tsi721_umd_stop(struct tsi721_umd* h)
 {
-	if (0) {
-		free(h);
+	int32_t ret, i;
+
+	assert(h->state == TSI721_UMD_STATE_READY);
+
+	// Wait for any running channels to finish
+	for (i=0; i<TSI721_DMA_CHNUM; i++)
+	{
+		if ((1<<i) & h->chan_mask)
+		{
+			// Wait for this channel to go idle
+			while (h->chan[i].in_use)
+				usleep(1000);
+		}
 	}
-	return -1;
+
+	ret = pthread_mutex_destroy(&h->chan_mutex);
+	if (ret < 0)
+	{
+		ERRMSG("Failed to destroy channel mutex %d %s\n",ret,strerror(ret));
+		return -1;
+	}
+
+	ret = sem_destroy(&h->chan_sem);
+	if (ret < 0)
+	{
+		ERRMSG("Failed to destroy channel semaphore %d %s\n",ret,strerror(ret));
+		return -1;
+	}
+
+	h->state = TSI721_UMD_STATE_CONFIGURED;
+
+	return 0;
 }
 
 int32_t tsi721_close(struct tsi721_umd* h)
 {
-	if (0) {
-		free(h);
-	}
-	return -1;
+	assert(h->state == TSI721_UMD_STATE_CONFIGURED);
+	assert(h->regs != NULL);
+
+	munmap((void*)h->all_regs, h->regs_map_size);
+	h->all_regs = NULL;
+
+	close(h->regs_fd);
+	close(h->dev_fd);
+
+	h->state = TSI721_UMD_STATE_UNALLOCATED;
+
+	return 0;
 }
