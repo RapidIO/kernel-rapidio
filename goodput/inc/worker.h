@@ -107,6 +107,7 @@ enum req_type {
 	cps_poll_for_pw,
 	cps_test_switch_lock,
 	maint_traffic,
+	umd_dma_num,
 	last_action
 };
 
@@ -123,10 +124,16 @@ struct thread_cpu {
 	pthread_t thr; /* Thread being migrated... */
 };
 
+enum thread_type{
+    kernel_thread,
+    user_mode_thread
+};
+
 struct worker {
 	int idx; /* index of this worker thread */
 	struct thread_cpu wkr_thr;
 	sem_t started;
+	enum thread_type thr_type;
 	int stat; /* 0 - dead, 1 - running, 2 stopped */
 	volatile int stop_req; /* 0 - continue, 1 - stop 2 - shutdown, SOFT_RESTART */
 	volatile int port_ok; // True if endpoint's link is in working order,
@@ -229,6 +236,10 @@ struct worker {
 	uint32_t seven_test_err_resp_time;
 	uint32_t seven_test_resp_to_time;
 	float seven_test_delay;
+
+/*  UMD data structure TBD */
+	int umd_engine_h;
+	int umd_queue_h;	
 };
 
 /**
@@ -266,6 +277,8 @@ void start_worker_thread(struct worker *info, int new_mp_h, int cpu);
  */
 
 void shutdown_worker_thread(struct worker *info);
+
+void *worker_thread(void *parm);
 
 bool dma_alloc_ibwin(struct worker *info);
 
