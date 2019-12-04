@@ -142,11 +142,6 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         goto exit;
     }
 
-    if (gp_parse_ull_pw2(env, argv[n++], "<ib_size>", &ib_size, FOUR_KB,
-            4 * SIXTEEN_MB)) {
-        goto exit;
-    }
-
     if ((ib_rio_addr != RIO_MAP_ANY_ADDR) && ((ib_size-1) & ib_rio_addr)) {
         LOGMSG(env, "\n<addr> not aligned with <size>\n");
         goto exit;
@@ -211,7 +206,7 @@ struct cli_cmd UMDDmaNum =
     2,
     7,
     "Send a specified number of DMA reads/writes",
-    "Udnum <idx> <ib_size> <ib_rio_addr> <did> <rio_addr> <bytes> <buf_sz> <wr> <num> <data>\n"
+    "Udnum <idx> <ib_size> <ib_rio_addr> <did> <rio_addr> <buf_sz> <wr> <num> <data>\n"
         "<idx>      User DMA test thread index: 0 to 7\n"
         "<ib_size>  inbound window size. Must be a power of two from 0x1000 to 0x01000000\n"
         "<ib_rio_addr> is the RapidIO address for the inbound window\n"
