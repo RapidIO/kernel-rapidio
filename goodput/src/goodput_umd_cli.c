@@ -193,6 +193,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         dma_trans_p->buf_size = buf_sz;
         dma_trans_p->num_trans = num_trans;
         dma_trans_p->wr = wr;
+        dma_trans_p->ib_handle = RIO_MAP_ANY_ADDR;
         if(user_data_p)
         {
             memcpy(dma_trans_p->user_data, user_data_p,8);

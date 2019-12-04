@@ -424,16 +424,21 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
     uint32_t i;
     uint32_t loops;
 
-    if(umd_allo_ibw(info, index))
+    if (dma_trans_p->wr)
     {
-        ret = -1;
-        goto exit;
+        if(umd_allo_ibw(info, index))
+        {
+            ret = -1;
+            goto exit;
+        }
     }
-
-    if(umd_allo_tx_buf(info,index))
+    else
     {
-        ret  = -1;
-        goto exit;
+        if(umd_allo_tx_buf(info,index))
+        {
+            ret  = -1;
+            goto exit;
+        }
     }
 
     if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
