@@ -129,12 +129,12 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     }
     dma_trans_p = &(engine_p->dma_trans[idx]);
 
-    if (gp_parse_ull_pw2(env, argv[1], "<ib_size>", &ib_size, FOUR_KB,
+    if (gp_parse_ull_pw2(env, argv[n++], "<ib_size>", &ib_size, FOUR_KB,
             4 * SIXTEEN_MB)) {
         goto exit;
     }
 
-    if(tok_parse_ulonglong(argv[2], &ib_rio_addr, 1, UINT64_MAX, 0))
+    if(tok_parse_ulonglong(argv[n++], &ib_rio_addr, 1, UINT64_MAX, 0))
     {
         LOGMSG(env, "\n");
         LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<ib_rio_addr>",
@@ -142,7 +142,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         goto exit;
     }
 
-    if (gp_parse_ull_pw2(env, argv[1], "<ib_size>", &ib_size, FOUR_KB,
+    if (gp_parse_ull_pw2(env, argv[n++], "<ib_size>", &ib_size, FOUR_KB,
             4 * SIXTEEN_MB)) {
         goto exit;
     }
@@ -211,11 +211,11 @@ struct cli_cmd UMDDmaNum =
     2,
     7,
     "Send a specified number of DMA reads/writes",
-    "Udnum <idx> <inb_size> <inb_rio_addr> <did> <rio_addr> <bytes> <buf_sz> <wr> <num> <data>\n"
+    "Udnum <idx> <ib_size> <ib_rio_addr> <did> <rio_addr> <bytes> <buf_sz> <wr> <num> <data>\n"
         "<idx>      User DMA test thread index: 0 to 7\n"
+        "<ib_size>  inbound window size. Must be a power of two from 0x1000 to 0x01000000\n"
         "<ib_rio_addr> is the RapidIO address for the inbound window\n"
         "       NOTE: <addr> must be aligned to <size>\n"
-        "<ib_size> inbound window size. Must be a power of two from 0x1000 to 0x01000000\n"
         "<did>      target device ID\n"
         "<rio_addr> is target RapidIO memory address to access\n"
         "<buf_sz>   target buffer size, must be a power of two from 0x1000 to 0x01000000\n"
