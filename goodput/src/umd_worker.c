@@ -270,7 +270,7 @@ static int umd_allo_queue_mem(struct UMDEngineInfo *info)
                         rc, errno, strerror(errno));
         ret = -1;
     }
-	else
+    else
     {
         LOGMSG(info->env, "INFO: DMA queue handle 0x%lx\n", info->queue_mem_h);
     }
@@ -461,7 +461,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
     {
         prefix = (data_prefix*)dma_trans_p->tx_ptr;
         status = (data_status*)dma_trans_p->ib_ptr;
-		//status = (data_status*)malloc(sizeof(data_status));
+        //status = (data_status*)malloc(sizeof(data_status));
 
         for(i=0; i<loops; i++)
         {
@@ -483,9 +483,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             suffix->pattern[2] = 0x3c;
             suffix->pattern[3] = 0x4d;
 
-            prefix->xfer_size += sizeof(data_suffix);
-
-            ret = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, prefix->xfer_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
+            ret = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, dma_trans_p->buf_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
             if(ret == 0)
             {
                 while(status->xfer_check == 0)
@@ -534,7 +532,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                 prefix->pattern[2] == 0x56 &&
                 prefix->pattern[3] == 0x78)
             {
-               suffix = (data_suffix*)((uint64_t)(dma_trans_p->ib_ptr) + dma_trans_p->buf_size -  sizeof(data_suffix));
+               suffix = (data_suffix*)((uint64_t)(dma_trans_p->ib_ptr) + dma_trans_p->ib_byte_cnt -  sizeof(data_suffix));
                if(suffix->pattern[0] == 0x1a &&
                   suffix->pattern[1] == 0x2b &&
                   suffix->pattern[2] == 0x3c &&
@@ -560,7 +558,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             memset(prefix, 0, sizeof(data_prefix));
             memset(suffix, 0, sizeof(data_suffix));
 
-            ret = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, prefix->xfer_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
+            ret = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, dma_trans_p->buf_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
             if (ret !=0 )
             {
                 LOGMSG(info->env, "FAILED: UMD send failed\n");
