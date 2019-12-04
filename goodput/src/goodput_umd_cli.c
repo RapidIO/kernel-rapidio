@@ -170,7 +170,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         goto exit;
     }
 
-    if (tok_parse_ushort(env, argv[n++], &wr, 0, 2, 0))
+    if (tok_parse_ushort(argv[n++], &wr, 0, 2, 0))
     {
         goto exit;
     }
@@ -284,7 +284,7 @@ struct cli_cmd UMDConfig =
     0,
     "Configure a UMD engine",
     "Uconfig\n"
-    "Confiure DMA engine queue memory. Set Tsi721 User Mode Driver to CONFIGURED state.\n"
+    "Confiure DMA engine queue memory. Set Tsi721 User Mode Driver to CONFIGURED state.\n",
     umdConfigCmd,
     ATTR_NONE
 };
@@ -311,7 +311,7 @@ struct cli_cmd UMDStart =
     "Get a UMD engine ready",
     "Ustart\n"
     "Add a DMA engine ID to list of available DMA engines.\n"
-    "Set Tsi721 User Mode Driver to READY state.\n"
+    "Set Tsi721 User Mode Driver to READY state.\n",
     umdStartCmd,
     ATTR_NONE
 };
@@ -338,7 +338,7 @@ struct cli_cmd UMDStop =
     "Stop a UMD engine",
     "Ustop \n"
     "Remove a DMA engine ID from list of available DMA engines.\n"
-    "Set Tsi721 User Mode Driver back to CONFIGURED state.\n"
+    "Set Tsi721 User Mode Driver back to CONFIGURED state.\n",
     umdStopCmd,
     ATTR_NONE
 
@@ -366,7 +366,7 @@ struct cli_cmd UMDClose =
     "Free a UMD engine",
     "Uclose\n"
     "Free all resource of a DMA engine.\n"
-    "Set Tsi721 User Mode Driver back to OPEN state.\n"
+    "Set Tsi721 User Mode Driver back to OPEN state.\n",
     umdCloseCmd,
     ATTR_NONE
 };
