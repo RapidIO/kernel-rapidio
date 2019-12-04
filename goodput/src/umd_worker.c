@@ -397,7 +397,7 @@ int umd_close(struct UMDEngineInfo *info)
     {
         umd_free_queue_mem(info);
 
-        if(tsi721_close(&(info->engine)) == 0)
+        if(tsi721_umd_close(&(info->engine)) == 0)
         {
             info->stat = ENGINE_UNALLOCATED;
             return 0;

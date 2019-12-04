@@ -94,7 +94,7 @@ extern int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t chann
 extern int32_t tsi721_umd_start(struct tsi721_umd* h);
 extern int32_t tsi721_umd_send(struct tsi721_umd* h, void *phys_addr, uint32_t num_bytes, uint64_t rio_addr, uint16_t dest_id);
 extern int32_t tsi721_umd_stop(struct tsi721_umd* h);
-extern int32_t tsi721_close(struct tsi721_umd* h);
+extern int32_t tsi721_umd_close(struct tsi721_umd* h);
 
 #ifdef __cplusplus
 }
