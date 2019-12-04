@@ -4655,76 +4655,9 @@ struct cli_cmd *goodput_cmds[] = {
     &UMDStart,
     &UMDStop,
     &UMDClose,
-    &IBAlloc,
-    &IBDealloc,
-    &Dump,
-    &Fill,
-    &OBDIO,
-    &OBDIOTxLat,
-    &OBDIORxLat,
-    &dmaTxLat,
-    &dmaRxLat,
-    &dma,
-    &dmaNum,
-    &dmaRxGoodput,
-    &msgTx,
-    &msgRx,
-    &msgTxLat,
-    &msgRxLat,
-    &msgTxOh,
-    &msgRxOh,
-    &Goodput,
-    &Lat,
-    &Status,
-    &Thread,
-    &Kill,
-    &Halt,
-    &Move,
-    &Wait,
-    &Sleep,
-    &CPUOccSet,
-    &CPUOccDisplay,
-    &Mpdevs,
-    &Multicast,
-    &UTime,
-    &RegScrub,
-    &LRead,
-    &LWrite,
-    &RRead,
-    &RWrite,
-    &QueryDma,
-    &SevenTest,
-    &SevenHotSwap,
-    &SevenStatus,
-    &SevenMagic,
-    &SevenMECS,
-    &CPSStatus,
-    &CPSCounters,
-    &SevenClearTsi721,
-    &SevenResetTsi721,
-    &SevenResetLink,
-    &SevenLinkReq,
-    &SevenAckidSync,
-    &SevenDisablePort,
-    &CPSPortWrite,
-    &TsiPortWrite,
-    &CPSVerification,
-    &CPSEvent,
-    &CPSReset,
-    &FileRegs,
-    &CPSHotSwap,
-    &MaintTraffic,
-    &Tsi721W,
-    &Tsi721Z,
-    &UMDOpen,
-    &UMDConfig,
-    &UMDStart,
-    &UMDStop,
-    &UMDClose,
-    &UMDDmaNum
 };
 
-void bind_goodput_cmds(void)
+int bind_goodput_cmds(void)
 {
     dump_idx = 0;
     dump_base_offset = 0;
@@ -4748,7 +4681,8 @@ void bind_goodput_cmds(void)
     sem_init(&tsi721_mutex, 0, 0);
     sem_post(&tsi721_mutex);
 
-    add_commands_to_cmd_db(sizeof(goodput_cmds) / sizeof(goodput_cmds[0]),
+    return add_commands_to_cmd_db(
+            sizeof(goodput_cmds) / sizeof(goodput_cmds[0]),
             goodput_cmds);
 }
 

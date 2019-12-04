@@ -50,7 +50,7 @@ extern "C" {
  *
  */
 
-void bind_goodput_cmds(void);
+int bind_goodput_cmds(void);
 
 #ifdef __cplusplus
 }

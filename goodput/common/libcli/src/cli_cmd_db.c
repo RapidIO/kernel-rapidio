@@ -34,7 +34,7 @@
 #include <string.h>
 #include "libcli.h"
 
-#define MAX_CMDS 120
+#define MAX_CMDS 100
 #define MIN(a, b) ((a < b)?a:b)
 
 #ifdef __cplusplus
@@ -183,9 +183,7 @@ int init_cmd_db(void)
 	struct cli_cmd *help_ptr = &CLIHelp;
 
 	num_valid_cmds = 0;
-	add_commands_to_cmd_db(1, &help_ptr);
-
-	return 0;
+	return add_commands_to_cmd_db(1, &help_ptr);
 }
 
 #ifdef __cplusplus

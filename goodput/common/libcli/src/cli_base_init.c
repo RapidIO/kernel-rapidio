@@ -48,15 +48,17 @@ void default_cons_cleanup(struct cli_env *env)
 
 int cli_init_base(void (*console_cleanup)(struct cli_env *env))
 {
-	init_cmd_db();
-	bind_cli_cmd_line_cmds();
+	int rc;
+
+	rc = init_cmd_db();
+	rc |= bind_cli_cmd_line_cmds();
 
 	if (NULL != console_cleanup) {
 		cons_cleanup = console_cleanup;
 	} else {
 		cons_cleanup = default_cons_cleanup;
 	}
-	return 0;
+	return rc;
 }
 
 #ifdef __cplusplus

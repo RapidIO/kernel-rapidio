@@ -125,6 +125,7 @@ int main(int argc, char *argv[])
 
 	char* rc_script = NULL;
 	struct cli_env t_env;
+	int cli_rc;
 
 	signal(SIGINT, sig_handler);
 	signal(SIGHUP, sig_handler);
@@ -163,9 +164,17 @@ int main(int argc, char *argv[])
 	for (int i = 0; i < MAX_WORKERS; i++)
 		init_worker_info(&wkr[i], 1);
 
-	cli_init_base(goodput_thread_shutdown);
-	liblog_bind_cli_cmds();
-	bind_goodput_cmds();
+	cli_rc = cli_init_base(goodput_thread_shutdown);
+	cli_rc |= liblog_bind_cli_cmds();
+	cli_rc |= bind_goodput_cmds();
+	if (cli_rc) {
+		printf(	"\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+			"\n!!!                                          !!!"
+			"\n!!!  WARNING: CLI initialization had errors! !!!"
+			"\n!!!                                          !!!"
+			"\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+			"\n");
+	}
 
 	// INFW: Temporary script path for hot swap testing.
 	//
