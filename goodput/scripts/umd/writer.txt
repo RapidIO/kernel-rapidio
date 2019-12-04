@@ -1,0 +1,7 @@
+// Start the UMD, then start the reader thread
+
+Uopen
+Uconfig
+Ustart
+t 3 -1 0
+Udnum 3 0x100000 0x200000000 1 0x200000000 0x100000 1 1 0x123456789abcdef0
