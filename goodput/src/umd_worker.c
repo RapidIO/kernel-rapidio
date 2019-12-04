@@ -293,7 +293,7 @@ int umd_open(struct UMDEngineInfo *info)
         }
         else
         {
-            LOGMSG(info->env, "FAILED: driver returns error.\n")
+            LOGMSG(info->env, "FAILED: driver returns error.\n");
         }
     }
     else
