@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
 	//
 	// char script_path[10] = {0};
 	// snprintf(script_path, sizeof(script_path), "mport%d", mport_num);
-	set_script_path((char *)"scripts/cps_hs");
+	set_script_path((char *)"scripts/umd");
 
 	init_cli_env(&t_env);
 	splashScreen(&t_env, (char *)"Goodput Evaluation Application");

@@ -1,0 +1,21 @@
+// Script to run on reader endpoint for CPS UMD DMA test.
+//
+// This starts threads for handling Tsi721 and CPS port-writes.
+// NOTE: CPS port-writes should never be received when polling.
+level 6
+dlevel 5
+thread 0 -1 0
+thread 1 -1 0
+thread 2 -1 0
+wait 0 H
+IBA 0 0x100000 0x200000000
+sleep 2
+wait 0 H
+wait 1 H
+wait 2 H
+CH 0 T
+wait 0 R
+CH 1 C
+wait 1 R
+CH 2 P 0 1
+wait 2 R
