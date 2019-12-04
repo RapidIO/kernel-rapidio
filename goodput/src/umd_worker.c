@@ -456,6 +456,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
     {
         prefix = (data_prefix*)dma_trans_p->tx_ptr;
         status = (data_status*)dma_trans_p->ib_ptr;
+		//status = (data_status*)malloc(sizeof(data_status));
 
         for(i=0; i<loops; i++)
         {
@@ -467,10 +468,10 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             prefix->pattern[1] = 0x34;
             prefix->pattern[2] = 0x56;
             prefix->pattern[3] = 0x78;
-            prefix->xferf_offset = dma_trans_p->rio_addr+sizeof(data_prefix);
-            prefix->xfer_size = dma_trans_p->buf_size+sizeof(data_prefix);
+            prefix->xferf_offset = sizeof(data_prefix);
+            prefix->xfer_size = dma_trans_p->buf_size - sizeof(data_prefix) - sizeof(data_suffix);
 
-            suffix = (data_suffix*)(prefix + prefix->xfer_size);
+            suffix = (data_suffix*)((uint64_t)(dma_trans_p->tx_ptr)  +   dma_trans_p->buf_size - sizeof(data_suffix));
             memset(suffix, 0, sizeof(data_suffix));
             suffix->pattern[0] = 0x1a;
             suffix->pattern[1] = 0x2b;
@@ -528,7 +529,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                 prefix->pattern[2] == 0x56 &&
                 prefix->pattern[3] == 0x78)
             {
-               suffix = (data_suffix*)(prefix + dma_trans_p->buf_size + sizeof(data_prefix));
+               suffix = (data_suffix*)((uint64_t)(dma_trans_p->ib_ptr) + dma_trans_p->buf_size -  sizeof(data_suffix));
                if(suffix->pattern[0] == 0x1a &&
                   suffix->pattern[1] == 0x2b &&
                   suffix->pattern[2] == 0x3c &&
