@@ -321,7 +321,7 @@ int umd_config(struct UMDEngineInfo *info)
         {
             LOGMSG(info->env, "SUCC: queue mem is allocated.\n");
 
-        if(!tsi721_umd_queue_config_multi(&(info->engine), 0xFF, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
+        if(!tsi721_umd_queue_config_multi(&(info->engine), 0x40, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
             {
                 LOGMSG(info->env, "SUCC: udm queue is configured.\n");  
                 info->stat = ENGINE_CONFIGURED;
