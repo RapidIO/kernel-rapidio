@@ -46,8 +46,8 @@ CXXFLAGS+=-I$(COMMONDIR) -I$(MPORTINC) -I$(COMMONDIR)/librio/inc
 CXXFLAGS+=-pthread
 
 LDFLAGS_STATIC+=-L$(COMMONLIB) -L$(MPORTLIB)
-LDFLAGS_STATIC+=-lmport -lrsvdmem -ltime_utils -llog -lcli -lrio -llist
-LDFLAGS_STATIC+=-lcmocka
+LDFLAGS_STATIC+=-lmport -lrsvdmem -ltime_utils -llog -lumd -lcli -lrio
+LDFLAGS_STATIC+=-llist -lcmocka
 LDFLAGS_DYNAMIC+=-lpthread -ldl -lrt
 
 
