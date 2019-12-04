@@ -89,6 +89,9 @@ struct UMDEngineInfo
     struct cli_env *env;
 };
 
+extern struct UMDEngineInfo umd_engine;
+
+extern int umd_init_engine(struct UMDEngineInfo *info);
 
 extern int umd_open(struct UMDEngineInfo *info);
 

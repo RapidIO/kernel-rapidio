@@ -60,6 +60,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "libcli.h"
 #include "liblog.h"
 #include "worker.h"
+#include "umd_worker.h"
 #include "goodput.h"
 #include "goodput_cli.h"
 #include "rio_mport_lib.h"
@@ -163,6 +164,8 @@ int main(int argc, char *argv[])
 
 	for (int i = 0; i < MAX_WORKERS; i++)
 		init_worker_info(&wkr[i], 1);
+
+	umd_init_engine(&umd_engine);
 
 	cli_rc = cli_init_base(goodput_thread_shutdown);
 	cli_rc |= liblog_bind_cli_cmds();

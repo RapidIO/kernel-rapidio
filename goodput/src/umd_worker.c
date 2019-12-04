@@ -289,7 +289,12 @@ static int umd_free_queue_mem(struct UMDEngineInfo *info)
     return 0;
 }
 
+int umd_init_engine(struct UMDEngineInfo *info)
+{
+    memset(info, 0x0, sizeof(struct UMDEngineInfo));
 
+    return 0;
+}
 
 int umd_open(struct UMDEngineInfo *info)
 {
