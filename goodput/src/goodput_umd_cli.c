@@ -271,7 +271,7 @@ int umdConfigCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(umd_config(engine_p))
+    if(!umd_config(engine_p))
     {
         ret = 0;
     }
@@ -298,7 +298,7 @@ int umdStartCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(umd_start(engine_p))
+    if(!umd_start(engine_p))
     {
         ret = 0;
     }
@@ -325,7 +325,7 @@ int umdStopCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(umd_stop(engine_p))
+    if(!umd_stop(engine_p))
     {
         ret = 0;
     }
@@ -354,7 +354,7 @@ int umdCloseCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(umd_close(engine_p))
+    if(!umd_close(engine_p))
     {
         ret = 0;
     }

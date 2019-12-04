@@ -314,6 +314,7 @@ int umd_config(struct UMDEngineInfo *info)
 
 	    if(!tsi721_umd_queue_config_multi(&(info->engine), 0xFF, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
             {
+			    LOGMSG(info->env, "SUCC: udm queue is configured.\n");	
                 info->stat = ENGINE_CONFIGURED;
                 return 0;
             }
@@ -343,7 +344,8 @@ int umd_start(struct UMDEngineInfo *info)
         if(tsi721_umd_start(&(info->engine)) == 0)
         {
             info->stat = ENGINE_READY;
-            return true;
+            LOGMSG(info->env, "SUCC: UMD engine started.\n");
+            return 0;
         }
         else
         {
@@ -355,7 +357,7 @@ int umd_start(struct UMDEngineInfo *info)
         LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
     }
 
-    return false;
+    return 0;
 }
 
 int umd_stop(struct UMDEngineInfo *info)
