@@ -111,13 +111,18 @@ static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
     struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
     int rc;
 
-    if (!dma_trans_p->ib_byte_cnt || dma_trans_p->ib_valid) {
+    LOGMSG(info->env, "INFO: ib_rio_addr 0x%x, ib_size 0x%x\n", dma_trans_p->ib_rio_addr, dma_trans_p->ib_byte_cnt);
+
+    if (!dma_trans_p->ib_byte_cnt || dma_trans_p->ib_valid)
+    {
         LOGMSG(info->env, "FAILED: window size of 0 or ibwin already exists\n");
         return -1;
     }
 
     rc = rio_ibwin_map(info->engine.dev_fd, &dma_trans_p->ib_rio_addr,
                     dma_trans_p->ib_byte_cnt, &dma_trans_p->ib_handle);
+    LOGMSG(info->env, "INFO: ib_handle 0x%x\n", dma_trans_p->ib_handle);
+    
     if (rc)
     {
         LOGMSG(info->env, "FAILED: rio_ibwin_map rc %d:%s\n",
@@ -312,9 +317,9 @@ int umd_config(struct UMDEngineInfo *info)
         {
             LOGMSG(info->env, "SUCC: queue mem is allocated.\n");
 
-	    if(!tsi721_umd_queue_config_multi(&(info->engine), 0xFF, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
+        if(!tsi721_umd_queue_config_multi(&(info->engine), 0xFF, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
             {
-			    LOGMSG(info->env, "SUCC: udm queue is configured.\n");	
+                LOGMSG(info->env, "SUCC: udm queue is configured.\n");  
                 info->stat = ENGINE_CONFIGURED;
                 return 0;
             }
@@ -421,15 +426,13 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
         goto exit;
     }
 
-    dma_trans_p->is_in_use = true;  
-
-    if(!umd_allo_ibw(info, index))
+    if(umd_allo_ibw(info, index))
     {
         ret = -1;
         goto exit;
     }
 
-    if(!umd_allo_tx_buf(info,index))
+    if(umd_allo_tx_buf(info,index))
     {
         ret  = -1;
         goto exit;
@@ -567,7 +570,6 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
 exit:
     umd_free_ibw(info,index);
     umd_free_tx_buf(info, index);
-    dma_trans_p->is_in_use = false;
     if( ret == 0)
     {
         LOGMSG(info->env,"UDM DMA test completed successfully!!!\n");

@@ -184,6 +184,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
 
     if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use)
     {
+        dma_trans_p->is_in_use = true;
         dma_trans_p->ib_byte_cnt = ib_size;
         dma_trans_p->ib_rio_addr = ib_rio_addr;
         dma_trans_p->rio_addr = rio_addr;
@@ -194,8 +195,8 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         {
             memcpy(dma_trans_p->user_data, user_data_p,8);
         }
-        umd_dma_num_cmd(engine_p, idx);
-        ret = 0;
+        ret = umd_dma_num_cmd(engine_p, idx);
+        dma_trans_p->is_in_use = false;
     }
 
 exit:
