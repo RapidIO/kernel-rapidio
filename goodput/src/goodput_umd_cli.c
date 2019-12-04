@@ -200,6 +200,10 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         ret = umd_dma_num_cmd(engine_p, idx);
         dma_trans_p->is_in_use = false;
     }
+    else
+    {
+		LOGMSG(env, "FAILED: User thread %d is in use.\n",idx);
+    }	
 
 exit:
     return ret;

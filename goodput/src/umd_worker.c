@@ -111,7 +111,7 @@ static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
     struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
     int rc;
 
-    LOGMSG(info->env, "INFO: ib_rio_addr 0x%x, ib_size 0x%x\n", dma_trans_p->ib_rio_addr, dma_trans_p->ib_byte_cnt);
+    LOGMSG(info->env, "INFO: ib_rio_addr 0x%lx, ib_size 0x%lx\n", dma_trans_p->ib_rio_addr, dma_trans_p->ib_byte_cnt);
 
     if (!dma_trans_p->ib_byte_cnt || dma_trans_p->ib_valid)
     {
@@ -121,7 +121,7 @@ static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
 
     rc = rio_ibwin_map(info->engine.dev_fd, &dma_trans_p->ib_rio_addr,
                     dma_trans_p->ib_byte_cnt, &dma_trans_p->ib_handle);
-    LOGMSG(info->env, "INFO: ib_handle 0x%x\n", dma_trans_p->ib_handle);
+    LOGMSG(info->env, "INFO: ib_handle 0x%lx\n", dma_trans_p->ib_handle);
     
     if (rc)
     {
@@ -270,6 +270,10 @@ static int umd_allo_queue_mem(struct UMDEngineInfo *info)
                         rc, errno, strerror(errno));
         ret = -1;
     }
+	else
+    {
+        LOGMSG(info->env, "INFO: DMA queue handle 0x%lx\n", info->queue_mem_h);
+    }
 
     return ret;
 }
@@ -372,7 +376,7 @@ int umd_stop(struct UMDEngineInfo *info)
         if(tsi721_umd_stop(&(info->engine)) == 0)
         {
             info->stat = ENGINE_CONFIGURED;
-            return true;
+            return 0;
         }
         else
         {
@@ -384,7 +388,7 @@ int umd_stop(struct UMDEngineInfo *info)
         LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
     }
 
-    return false;
+    return -1;
 }
 
 int umd_close(struct UMDEngineInfo *info)
@@ -396,7 +400,7 @@ int umd_close(struct UMDEngineInfo *info)
         if(tsi721_close(&(info->engine)) == 0)
         {
             info->stat = ENGINE_UNALLOCATED;
-            return true;
+            return 0;
         }
         else
         {
@@ -407,7 +411,7 @@ int umd_close(struct UMDEngineInfo *info)
     {
         LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
     }
-    return false;
+    return -1;
 }
 
 int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
@@ -419,12 +423,6 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
     int32_t ret = 0;
     uint32_t i;
     uint32_t loops;
-
-    if(dma_trans_p->is_in_use)
-    {
-        ret = -1;
-        goto exit;
-    }
 
     if(umd_allo_ibw(info, index))
     {
