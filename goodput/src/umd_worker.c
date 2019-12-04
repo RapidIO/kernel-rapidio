@@ -308,9 +308,11 @@ int umd_config(struct UMDEngineInfo *info)
 {
     if(info->stat == ENGINE_UNCONFIGURED)
     {
-        if(umd_allo_queue_mem(info))
+        if(!umd_allo_queue_mem(info))
         {
-            if(!tsi721_umd_queue_config_multi(&(info->engine), 0xFF, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
+            LOGMSG(info->env, "SUCC: queue mem is allocated.\n");
+
+	    if(!tsi721_umd_queue_config_multi(&(info->engine), 0xFF, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
             {
                 info->stat = ENGINE_CONFIGURED;
                 return 0;
