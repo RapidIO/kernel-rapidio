@@ -85,6 +85,8 @@ struct UMDEngineInfo
     uint64_t queue_mem_h;
 
     struct DmaTransfer dma_trans[MAX_UDM_USER_THREAD];
+
+    struct cli_env *env;
 };
 
 

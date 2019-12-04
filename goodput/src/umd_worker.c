@@ -112,21 +112,21 @@ static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
     int rc;
 
     if (!dma_trans_p->ib_byte_cnt || dma_trans_p->ib_valid) {
-        ERR("FAILED: window size of 0 or ibwin already exists\n");
-        return true;
+        LOGMSG(info->env, "FAILED: window size of 0 or ibwin already exists\n");
+        return -1;
     }
 
     rc = rio_ibwin_map(info->engine.dev_fd, &dma_trans_p->ib_rio_addr,
                     dma_trans_p->ib_byte_cnt, &dma_trans_p->ib_handle);
     if (rc)
     {
-        ERR("FAILED: rio_ibwin_map rc %d:%s\n",
+        LOGMSG(info->env, "FAILED: rio_ibwin_map rc %d:%s\n",
                     rc, strerror(errno));
         return -1;
     }
     if (dma_trans_p->ib_handle == 0)
     {
-        ERR("FAILED: rio_ibwin_map failed silently with info->ib_handle==0!\n");
+        LOGMSG(info->env, "FAILED: rio_ibwin_map failed silently with info->ib_handle==0!\n");
         return -1;
     }
 
@@ -143,7 +143,7 @@ static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
 
     if (NULL == dma_trans_p->ib_ptr)
     {
-        ERR("FAILED: riomp_dma_map_memory errno %d:%s\n",
+        LOGMSG(info->env, "FAILED: riomp_dma_map_memory errno %d:%s\n",
                     errno, strerror(errno));
         rio_ibwin_free(info->engine.dev_fd, &dma_trans_p->ib_handle);
         return -1;
@@ -163,7 +163,7 @@ static int umd_free_ibw(struct UMDEngineInfo *info, int index)
 
     if (!dma_trans_p->ib_valid)
     {
-        ERR("No valid inbound window. User thread %d\n", index);
+        LOGMSG(info->env, "No valid inbound window. User thread %d\n", index);
         return ret;
     }
 
@@ -172,7 +172,7 @@ static int umd_free_ibw(struct UMDEngineInfo *info, int index)
         dma_trans_p->ib_ptr = NULL;
         if (rc)
         {
-            ERR("munmap ib rc %d: %s\n",
+            LOGMSG(info->env, "munmap ib rc %d: %s\n",
                 rc, strerror(errno));
             ret = -1;
         }
@@ -181,7 +181,7 @@ static int umd_free_ibw(struct UMDEngineInfo *info, int index)
     rc = rio_ibwin_free(info->engine.dev_fd, &dma_trans_p->ib_handle);
     if (rc)
     {
-        ERR("FAILED: rio_ibwin_free rc %d:%s\n",
+        LOGMSG(info->env, "FAILED: rio_ibwin_free rc %d:%s\n",
                     rc, strerror(errno));
         ret = -1;
     }
@@ -204,7 +204,7 @@ static int umd_allo_tx_buf(struct UMDEngineInfo *info, int index)
 
     if (rc)
     {
-        ERR("FAILED: riomp_dma_dbuf_alloc tx buffer rc %d:%s\n",
+        LOGMSG(info->env, "FAILED: riomp_dma_dbuf_alloc tx buffer rc %d:%s\n",
                         rc, strerror(errno));
         ret = -1;
         goto exit;
@@ -222,7 +222,7 @@ static int umd_allo_tx_buf(struct UMDEngineInfo *info, int index)
 
     if (NULL == dma_trans_p->tx_ptr)
     {
-        ERR("FAILED: mmap tx buffer errno %d:%s\n",
+        LOGMSG(info->env, "FAILED: mmap tx buffer errno %d:%s\n",
                  errno, strerror(errno));
         ret = -1;
         goto exit;
@@ -261,7 +261,7 @@ static int umd_allo_queue_mem(struct UMDEngineInfo *info)
 
     if (rc)
     {
-        ERR("FAILED: riomp_dma_dbuf_alloc queue buffer rc %d: %d %s\n",
+        LOGMSG(info->env, "FAILED: riomp_dma_dbuf_alloc queue buffer rc %d: %d %s\n",
                         rc, errno, strerror(errno));
         ret = -1;
     }
@@ -293,12 +293,12 @@ int umd_open(struct UMDEngineInfo *info)
         }
         else
         {
-            ERR("FAILED: driver returns error.\n")
+            LOGMSG(info->env, "FAILED: driver returns error.\n")
         }
     }
     else
     {
-        ERR("FAILED: Engine is in state %d\n", info->stat);
+        LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
     }
 
     return -1;
@@ -313,25 +313,25 @@ int umd_config(struct UMDEngineInfo *info)
             if(!tsi721_umd_queue_config_multi(&(info->engine), 0xFF, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
             {
                 info->stat = ENGINE_CONFIGURED;
-                return true;
+                return 0;
             }
             else
             {
-                ERR("FAILED: Engine configure error.\n");
+                LOGMSG(info->env, "FAILED: Engine configure error.\n");
                 umd_free_queue_mem(info);
             }
         }
         else
         {
-            ERR("FAILED: allocate queue memory error.\n");
+            LOGMSG(info->env, "FAILED: allocate queue memory error.\n");
         }
     }
     else
     {
-        ERR("FAILED: Engine is in state %d\n", info->stat);
+        LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
     }
 
-    return false;
+    return -1;
 }
 
 int umd_start(struct UMDEngineInfo *info)
@@ -345,12 +345,12 @@ int umd_start(struct UMDEngineInfo *info)
         }
         else
         {
-            ERR("FAILED: UMD start returns failure\n");
+            LOGMSG(info->env, "FAILED: UMD start returns failure\n");
         }
     }
     else
     {
-        ERR("FAILED: Engine is in state %d\n", info->stat);
+        LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
     }
 
     return false;
@@ -367,12 +367,12 @@ int umd_stop(struct UMDEngineInfo *info)
         }
         else
         {
-            ERR("FAILED: UMD stop returns failure\n");
+            LOGMSG(info->env, "FAILED: UMD stop returns failure\n");
         }
     }
     else
     {
-        ERR("FAILED: Engine is in state %d\n", info->stat);
+        LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
     }
 
     return false;
@@ -391,12 +391,12 @@ int umd_close(struct UMDEngineInfo *info)
         }
         else
         {
-            ERR("FAILED: UMD close returns failure\n");
+            LOGMSG(info->env, "FAILED: UMD close returns failure\n");
         }
     }
     else
     {
-        ERR("FAILED: Engine is in state %d\n", info->stat);
+        LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
     }
     return false;
 }
@@ -433,7 +433,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
 
     if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
     {
-        ERR("FAILED: rio_addr, buf_size is 0!\n");
+        LOGMSG(info->env, "FAILED: rio_addr, buf_size is 0!\n");
         ret = -1;
         goto exit;
     }
@@ -489,7 +489,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                     status->pattern[2] != 0x33 ||
                     status->pattern[3] != 0x44 )
                 {
-                    ERR("FAILED: pattern check error: 0x%x 0x%x 0x%x 0x%x\n",
+                    LOGMSG(info->env, "FAILED: pattern check error: 0x%x 0x%x 0x%x 0x%x\n",
                         status->pattern[0],
                         status->pattern[1],
                         status->pattern[2],
@@ -500,7 +500,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             }
             else
             {
-                ERR("FAILED: UMD send failed\n");
+                LOGMSG(info->env, "FAILED: UMD send failed\n");
                 ret = -1;
                 break;
             }
@@ -552,7 +552,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             ret = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, prefix->xfer_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
             if (ret !=0 )
             {
-                ERR("FAILED: UMD send failed\n");
+                LOGMSG(info->env, "FAILED: UMD send failed\n");
                 break;
             }
         }
@@ -566,7 +566,7 @@ exit:
     dma_trans_p->is_in_use = false;
     if( ret == 0)
     {
-        CRIT("UDM DMA test completed successfully!!!\n")
+        LOGMSG(info->env,"UDM DMA test completed successfully!!!\n");
     }
     return ret;
 }
