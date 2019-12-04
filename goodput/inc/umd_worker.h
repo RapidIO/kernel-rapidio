@@ -62,7 +62,7 @@ struct DmaTransfer
     int  dest_id;
     uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
     uint64_t buf_size; /* Number of bytes to access for direct IO and DMA */
-    int      num_trans; /* Number of loops for data transfer. 0 indicates infinite number of loops*/
+    uint32_t      num_trans; /* Number of loops for data transfer. 0 indicates infinite number of loops*/
     char     user_data[8]; /*User predinfed data*/
 
     int ib_valid;

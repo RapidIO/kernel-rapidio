@@ -71,18 +71,6 @@ extern "C" {
 struct UMDEngineInfo umd_engine;
 
 
-// Parse the token as a boolean value. The range of the token is restricted
-// to the numeric values of 0 (false) and 1 (true)
-static int gp_parse_bool(struct cli_env *env, char *tok, const char *name, uint16_t *boo)
-{
-    if (tok_parse_ushort(tok, boo, 0, 1, 0)) {
-        LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_USHORT_MSG_FMT, name, 0, 1);
-        return 1;
-    }
-    return 0;
-}
-
 // Parse the token ensuring it is within the provided range. Further ensure it
 // is a power of 2
 static int gp_parse_ull_pw2(struct cli_env *env, char *tok, const char *name,
@@ -139,7 +127,6 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UDM_USER_THREAD);
         goto exit;
     }
-
     dma_trans_p = &(engine_p->dma_trans[idx]);
 
     if (gp_parse_ull_pw2(env, argv[1], "<ib_size>", &ib_size, FOUR_KB,
@@ -152,6 +139,11 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         LOGMSG(env, "\n");
         LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<ib_rio_addr>",
                 (uint64_t )1, (uint64_t)UINT64_MAX);
+        goto exit;
+    }
+
+    if (gp_parse_ull_pw2(env, argv[1], "<ib_size>", &ib_size, FOUR_KB,
+            4 * SIXTEEN_MB)) {
         goto exit;
     }
 
@@ -178,7 +170,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         goto exit;
     }
 
-    if (gp_parse_bool(env, argv[n++], "<wr>", &wr))
+    if (tok_parse_ushort(env, argv[n++], &wr, 0, 2, 0))
     {
         goto exit;
     }
@@ -215,20 +207,20 @@ exit:
 
 struct cli_cmd UMDDmaNum =
 {
-    "umd_dnum",
-    8,
+    "Udnum",
+    2,
     7,
     "Send a specified number of DMA reads/writes",
-    "umd_dnum <inb_size> <inb_rio_addr> <idx> <did> <rio_addr> <bytes> <buf_sz> <wr> <num> <data>\n"
-        "<idx>      User thread index: 0 to 7\n"
-        "<ib_size> inbound window size. Must be a power of two from 0x1000 to 0x01000000\n"
+    "umd_dnum <idx> <inb_size> <inb_rio_addr> <did> <rio_addr> <bytes> <buf_sz> <wr> <num> <data>\n"
+        "<idx>      User DMA test thread index: 0 to 7\n"
         "<ib_rio_addr> is the RapidIO address for the inbound window\n"
         "       NOTE: <addr> must be aligned to <size>\n"
+        "<ib_size> inbound window size. Must be a power of two from 0x1000 to 0x01000000\n"
         "<did>      target device ID\n"
         "<rio_addr> is target RapidIO memory address to access\n"
         "<buf_sz>   target buffer size, must be a power of two from 0x1000 to 0x01000000\n"
         "<wr>       0: Read, 1: Write,2:Ramdom Writer\n"
-        "<num>      Optional default is 0, number of transactions to send. 0 indicates infinite loop\n"
+        "<num>      Optional. Default is 0. Number of transactions to send. 0 indicates infinite loop\n"
         "<data>     RND, or constant data value, written every 8 bytes",
     umdDmaNumCmd,
     ATTR_NONE
@@ -240,7 +232,7 @@ int umdOpenCmd(struct cli_env *env, int argc, char **argv)
     struct UMDEngineInfo *engine_p = &umd_engine;
 
     if(argc && tok_parse_mport_id(argv[0], &mport_id, 0)) {
-	LOGMSG(env, TOK_ERR_MPORT_MSG_FMT);
+    LOGMSG(env, TOK_ERR_MPORT_MSG_FMT);
         goto exit;
     }
 
@@ -264,7 +256,7 @@ struct cli_cmd UMDOpen =
     2,
     0,
     "Reserve a UMD engine",
-    "umd_open <mport_num>\n"
+    "Uopen <mport_num>\n"
     "Set the Tsi721 User Mode Driver to OPEN state.\n"
     "<mport_num> optional local rapidio device port. Default is 0. \n",
     umdOpenCmd,
@@ -287,11 +279,12 @@ int umdConfigCmd(struct cli_env *UNUSED(env), int UNUSED(argc), char **UNUSED(ar
 
 struct cli_cmd UMDConfig =
 {
-    "umd_config",
-    8,
+    "Uconfig",
+    3,
     0,
     "Configure a UMD engine",
-    "umd_config\n",
+    "Uconfig\n"
+    "Confiure DMA engine queue memory. Set Tsi721 User Mode Driver to CONFIGURED state.\n"
     umdConfigCmd,
     ATTR_NONE
 };
@@ -312,11 +305,13 @@ int umdStartCmd(struct cli_env *UNUSED(env), int UNUSED(argc), char **UNUSED(arg
 
 struct cli_cmd UMDStart =
 {
-    "umd_start",
-    8,
+    "Ustart",
+    4,
     0,
-    "Start a UMD engine",
-    "umd_start\n",
+    "Get a UMD engine ready",
+    "Ustart\n"
+    "Add a DMA engine ID to list of available DMA engines.\n"
+    "Set Tsi721 User Mode Driver to READY state.\n"
     umdStartCmd,
     ATTR_NONE
 };
@@ -337,11 +332,13 @@ int umdStopCmd(struct cli_env *UNUSED(env), int UNUSED(argc), char **UNUSED(argv
 
 struct cli_cmd UMDStop =
 {
-    "umd_stop",
-    8,
+    "Ustop",
+    4,
     0,
     "Stop a UMD engine",
-    "umd_stop \n",
+    "Ustop \n"
+    "Remove a DMA engine ID from list of available DMA engines.\n"
+    "Set Tsi721 User Mode Driver back to CONFIGURED state.\n"
     umdStopCmd,
     ATTR_NONE
 
@@ -363,11 +360,13 @@ int umdCloseCmd(struct cli_env *UNUSED(env), int UNUSED(argc), char **UNUSED(arg
 
 struct cli_cmd UMDClose =
 {
-    "umd_cloe",
-    8,
+    "Uclose",
+    3,
     0,
     "Free a UMD engine",
-    "umd_close\n",
+    "Uclose\n"
+    "Free all resource of a DMA engine.\n"
+    "Set Tsi721 User Mode Driver back to OPEN state.\n"
     umdCloseCmd,
     ATTR_NONE
 };

@@ -122,12 +122,12 @@ static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
     {
         ERR("FAILED: rio_ibwin_map rc %d:%s\n",
                     rc, strerror(errno));
-        return false;
+        return -1;
     }
     if (dma_trans_p->ib_handle == 0)
     {
         ERR("FAILED: rio_ibwin_map failed silently with info->ib_handle==0!\n");
-        return false;
+        return -1;
     }
 
 
@@ -146,24 +146,25 @@ static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
         ERR("FAILED: riomp_dma_map_memory errno %d:%s\n",
                     errno, strerror(errno));
         rio_ibwin_free(info->engine.dev_fd, &dma_trans_p->ib_handle);
-        return false;
+        return -1;
     }
 
     memset(dma_trans_p->ib_ptr, dma_trans_p->ib_byte_cnt, 0x0);
 
     dma_trans_p->ib_valid = 1;
 
-    return true;
+    return 0;
 }
 
 static int umd_free_ibw(struct UMDEngineInfo *info, int index)
 {
     struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
-    int rc;
+    int ret = -1, rc;
 
     if (!dma_trans_p->ib_valid)
     {
-        return false;
+        ERR("No valid inbound window. User thread %d\n", index);
+        return ret;
     }
 
     if (dma_trans_p->ib_ptr && dma_trans_p->ib_valid) {
@@ -173,6 +174,7 @@ static int umd_free_ibw(struct UMDEngineInfo *info, int index)
         {
             ERR("munmap ib rc %d: %s\n",
                 rc, strerror(errno));
+            ret = -1;
         }
     }
 
@@ -181,13 +183,13 @@ static int umd_free_ibw(struct UMDEngineInfo *info, int index)
     {
         ERR("FAILED: rio_ibwin_free rc %d:%s\n",
                     rc, strerror(errno));
-        return false;
+        ret = -1;
     }
 
     dma_trans_p->ib_valid = 0;
     dma_trans_p->ib_handle = 0;
 
-    return false;
+    return 0;
 }
 
 static int umd_allo_tx_buf(struct UMDEngineInfo *info, int index)
@@ -287,7 +289,7 @@ int umd_open(struct UMDEngineInfo *info)
         if(tsi721_umd_open(&(info->engine), info->mport_id) == 0)
         {
             info->stat = ENGINE_UNCONFIGURED;
-            return false;
+            return 0;
         }
         else
         {
@@ -299,7 +301,7 @@ int umd_open(struct UMDEngineInfo *info)
         ERR("FAILED: Engine is in state %d\n", info->stat);
     }
 
-    return true;
+    return -1;
 }
 
 int umd_config(struct UMDEngineInfo *info)
@@ -315,13 +317,13 @@ int umd_config(struct UMDEngineInfo *info)
             }
             else
             {
-                ERR("FAILED: Engine configure error\n");
+                ERR("FAILED: Engine configure error.\n");
                 umd_free_queue_mem(info);
             }
         }
         else
         {
-            ERR("FAILED: allocate queue memory error\n");
+            ERR("FAILED: allocate queue memory error.\n");
         }
     }
     else
@@ -406,14 +408,16 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
     data_prefix *prefix;
     data_suffix *suffix = NULL;
     int32_t ret = 0;
-    int i;
-    int loops;
+    uint32_t i;
+    uint32_t loops;
 
     if(dma_trans_p->is_in_use)
     {
         ret = -1;
         goto exit;
     }
+
+    dma_trans_p->is_in_use = true;  
 
     if(!umd_allo_ibw(info, index))
     {
@@ -559,9 +563,10 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
 exit:
     umd_free_ibw(info,index);
     umd_free_tx_buf(info, index);
+    dma_trans_p->is_in_use = false;
     if( ret == 0)
     {
-        CRIT("UDM DMA test complete successfully!!!\n")
+        CRIT("UDM DMA test completed successfully!!!\n")
     }
     return ret;
 }
