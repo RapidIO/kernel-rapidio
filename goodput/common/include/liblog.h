@@ -115,7 +115,7 @@ void rdma_log_dump();
 
 void rdma_log_close();
 
-void liblog_bind_cli_cmds();
+int liblog_bind_cli_cmds();
 
 extern unsigned g_level;
 extern unsigned g_disp_level;
