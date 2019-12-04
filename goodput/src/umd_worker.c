@@ -149,7 +149,7 @@ static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
         return false;
     }
 
-    memset(dma_trans_p->ib_ptr, dma_trans_p->ib_byte_cnt, 0x0);
+    memset(dma_trans_p->ib_ptr, 0x0, dma_trans_p->ib_byte_cnt);
 
     dma_trans_p->ib_valid = 1;
 
