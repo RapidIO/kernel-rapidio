@@ -194,6 +194,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
 
     if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use)
     {
+        //Will a mutex to lock this section if there is no plan to use woker thread infrastructure
         dma_trans_p->is_in_use = true;
         dma_trans_p->ib_byte_cnt = ib_size;
         dma_trans_p->ib_rio_addr = ib_rio_addr;
