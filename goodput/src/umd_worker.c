@@ -499,7 +499,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                     status->pattern[3] != 0x44 )
                 {
                     LOGMSG(info->env, "FAILED: pattern check error: loop %u\n, xfer_check %d, data 0x%x 0x%x 0x%x 0x%x\n",
-                        i;
+                        i,
                         status->xfer_check,
                         status->pattern[0],
                         status->pattern[1],
