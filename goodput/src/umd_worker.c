@@ -459,10 +459,12 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
 
     if(dma_trans_p->wr)
     {
-		void* payload;
+        void *payload_phys, *prefix_phys;
+        uint32_t payload_size = dma_trans_p->buf_size - sizeof(data_prefix) - sizeof(data_suffix);
         prefix = (data_prefix*)dma_trans_p->tx_ptr;
         status = (data_status*)dma_trans_p->ib_ptr;
-	    payload = (void*)((uintptr_t)prefix + sizeof(prefix));
+        payload_phys = (void*)((uintptr_t)dma_trans_p->tx_mem_h + sizeof(prefix));
+        prefix_phys  = (void*)dma_trans_p->tx_mem_h;
 
         for(i=0; i<loops; i++)
         {
@@ -481,7 +483,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             prefix->xferf_offset = sizeof(data_prefix);
             prefix->xfer_size = dma_trans_p->buf_size - sizeof(data_prefix) - sizeof(data_suffix);
 
-            suffix = (data_suffix*)((uint64_t)(dma_trans_p->tx_ptr)  +   dma_trans_p->buf_size - sizeof(data_suffix));
+            suffix = (data_suffix*)((uintptr_t)prefix_phys + sizeof(data_prefix) + payload_size);
             memset(suffix, 0, sizeof(data_suffix));
             suffix->pattern[0] = 0x1a;
             suffix->pattern[1] = 0x2b;
@@ -492,17 +494,16 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             suffix->pattern[6] = 0xc3;
             suffix->pattern[7] = 0xd4;
 
-			// Send payload before prefix, as prefix is used to check for completion
-            rc = tsi721_umd_send(&(info->engine), payload, dma_trans_p->buf_size-sizeof(data_prefix), dma_trans_p->rio_addr+sizeof(data_prefix), dma_trans_p->dest_id);
-			if (rc != 0)
-			{
-				LOGMSG(info->env, "FAILED: dma transfer returned %d\n",ret);
-				ret = -1;
-				goto exit;
-			}
+            // Send payload and suffix before prefix, as prefix is used to check for completion
+            rc = tsi721_umd_send(&(info->engine), payload_phys, payload_size + sizeof(data_suffix), dma_trans_p->rio_addr+sizeof(data_prefix), dma_trans_p->dest_id);
+            if (rc != 0)
+            {
+                LOGMSG(info->env, "FAILED: payload dma transfer returned %d\n",ret);
+                continue;
+            }
 
-			// Update prefix
-            rc = tsi721_umd_send(&(info->engine), prefix, sizeof(data_prefix), dma_trans_p->rio_addr, dma_trans_p->dest_id);
+            // Update prefix
+            rc = tsi721_umd_send(&(info->engine), prefix_phys, sizeof(data_prefix), dma_trans_p->rio_addr, dma_trans_p->dest_id);
             if(rc == 0)
             {
                 while(status->xfer_check == 0)
