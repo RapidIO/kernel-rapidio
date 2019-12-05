@@ -425,7 +425,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
     data_status *status;
     data_prefix *prefix;
     data_suffix *suffix = NULL;
-    int32_t ret = 0;
+    int32_t ret = 0, rc;
     uint32_t i;
     uint32_t loops;
 
@@ -483,8 +483,8 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             suffix->pattern[2] = 0x3c;
             suffix->pattern[3] = 0x4d;
 
-            ret = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, dma_trans_p->buf_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
-            if(ret == 0)
+            rc = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, dma_trans_p->buf_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
+            if(rc == 0)
             {
                 while(status->xfer_check == 0)
                 {
@@ -529,6 +529,12 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                 sleep(0.25);
             }
 
+            status->pattern[0] = 0x11;
+            status->pattern[1] = 0x22;
+            status->pattern[2] = 0x33;
+            status->pattern[3] = 0x44;
+            status->trans_nth = prefix->trans_nth;
+
             if(prefix->pattern[0] == 0x12 &&
                 prefix->pattern[1] == 0x34 &&
                 prefix->pattern[2] == 0x56 &&
@@ -540,12 +546,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                   suffix->pattern[2] == 0x3c &&
                   suffix->pattern[3] == 0x4d)
                {
-                  status->trans_nth = prefix->trans_nth;
                   status->xfer_check = 1;
-                  status->pattern[0] = 0x11;
-                  status->pattern[1] = 0x22;
-                  status->pattern[2] = 0x33;
-                  status->pattern[3] = 0x44;
                }
                else
                {
@@ -578,10 +579,15 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             memset(prefix, 0, sizeof(data_prefix));
             memset(suffix, 0, sizeof(data_suffix));
 
-            ret = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, dma_trans_p->buf_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
-            if (ret !=0 )
+            rc = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, dma_trans_p->buf_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
+            if (rc !=0 )                
             {
-                LOGMSG(info->env, "FAILED: UMD send failed\n");
+                ret = -1;
+                LOGMSG(info->env, "FAILED: loop %u, UMD send failed\n", i);
+            }
+
+            if(ret)
+            {
                 break;
             }
         }
