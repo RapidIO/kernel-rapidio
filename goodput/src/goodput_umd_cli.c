@@ -305,8 +305,9 @@ struct cli_cmd UMDConfig =
     0,
     "Configure a UMD engine",
     "Uconfig <chan_mask>\n"
-    "Confiure DMA engine queue memory. Set Tsi721 User Mode Driver to CONFIGURED state.\n"
-    "<chan_mask> is an optional parameter to allocate DMA channles. Bitfield. Range 0x1 to 0xFF\n",
+    "Confiure DMA engine queue memory/channels. Set Tsi721 User Mode Driver to CONFIGURED state.\n"
+    "<chan_mask> is an optional parameter to allocate DMA channles.\n" 
+    "            Bitfield. Range 0x1 to 0xFF, default 0x40\n",
     umdConfigCmd,
     ATTR_NONE
 };
