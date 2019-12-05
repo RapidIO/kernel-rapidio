@@ -189,7 +189,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     }
     else
     {
-        LOGMSG(env, "User data 0x/%lu\n",user_data);
+        LOGMSG(env, "User data 0x%lx\n",user_data);
     }
 
     if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use)
