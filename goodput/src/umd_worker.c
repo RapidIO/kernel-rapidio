@@ -483,7 +483,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             prefix->xferf_offset = sizeof(data_prefix);
             prefix->xfer_size = dma_trans_p->buf_size - sizeof(data_prefix) - sizeof(data_suffix);
 
-            suffix = (data_suffix*)((uintptr_t)prefix_phys + sizeof(data_prefix) + payload_size);
+            suffix = (data_suffix*)((uintptr_t)prefix + sizeof(data_prefix) + payload_size);
             memset(suffix, 0, sizeof(data_suffix));
             suffix->pattern[0] = 0x1a;
             suffix->pattern[1] = 0x2b;
