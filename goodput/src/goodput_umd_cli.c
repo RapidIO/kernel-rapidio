@@ -198,6 +198,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         dma_trans_p->is_in_use = true;
         dma_trans_p->ib_byte_cnt = ib_size;
         dma_trans_p->ib_rio_addr = ib_rio_addr;
+        dma_trans_p->dest_id = did_val;
         dma_trans_p->rio_addr = rio_addr;
         dma_trans_p->buf_size = buf_sz;
         dma_trans_p->num_trans = num_trans;
