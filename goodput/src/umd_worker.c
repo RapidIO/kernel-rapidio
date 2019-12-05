@@ -498,7 +498,9 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                     status->pattern[2] != 0x33 ||
                     status->pattern[3] != 0x44 )
                 {
-                    LOGMSG(info->env, "FAILED: pattern check error: 0x%x 0x%x 0x%x 0x%x\n",
+                    LOGMSG(info->env, "FAILED: pattern check error: loop %u\n, xfer_check %d, data 0x%x 0x%x 0x%x 0x%x\n",
+                        i;
+                        status->xfer_check,
                         status->pattern[0],
                         status->pattern[1],
                         status->pattern[2],
@@ -547,11 +549,29 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                }
                else
                {
-                  status->xfer_check = 2;
+                   ret = -1;
+                   
+                   LOGMSG(info->env, "FAILED: suffix validation error, loop %u\n data 0x%x 0x%x 0x%x 0x%x\n",
+                        i,
+                        suffix->pattern[0],
+                        suffix->pattern[1],
+                        suffix->pattern[2],
+                        suffix->pattern[3]);
+                   
+                   status->xfer_check = 2;
                }
             }
             else
             {
+                ret = -1;
+            
+                LOGMSG(info->env, "FAILED: prefix validation error, loop %u\n data 0x%x 0x%x 0x%x 0x%x\n",
+                    i,
+                    prefix->pattern[0],
+                    prefix->pattern[1],
+                    prefix->pattern[2],
+                    prefix->pattern[3]);
+                
                 status->xfer_check = 2;
             }
 
@@ -574,7 +594,7 @@ exit:
     umd_free_tx_buf(info, index);
     if( ret == 0)
     {
-        LOGMSG(info->env,"UDM DMA test completed successfully!!!\n");
+        LOGMSG(info->env,"%u loops of UDM DMA test completed successfully!!!\n", loops);
     }
     return ret;
 }
