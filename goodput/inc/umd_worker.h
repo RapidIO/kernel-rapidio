@@ -80,6 +80,7 @@ struct UMDEngineInfo
     int mport_id;
     enum EngineStat stat; //all state transfer will require mutex for pretection. Assume race condition will rarely happen. So no pretection for now.
     struct tsi721_umd engine;
+    uint8_t chan_mask;
 
     void *queue_mem_ptr;
     uint64_t queue_mem_h;

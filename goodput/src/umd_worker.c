@@ -326,15 +326,15 @@ int umd_config(struct UMDEngineInfo *info)
         {
             LOGMSG(info->env, "SUCC: queue mem is allocated.\n");
 
-        if(!tsi721_umd_queue_config_multi(&(info->engine), 0x40, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
+            if(!tsi721_umd_queue_config_multi(&(info->engine), info->chan_mask, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
             {
-                LOGMSG(info->env, "SUCC: udm queue is configured.\n");  
+                LOGMSG(info->env, "SUCC: UDM queue is configured. Channel mask 0x/%x\n", info->chan_mask);  
                 info->stat = ENGINE_CONFIGURED;
                 return 0;
             }
             else
             {
-                LOGMSG(info->env, "FAILED: Engine configure error.\n");
+                LOGMSG(info->env, "FAILED: Engine configure error. Channel mask 0x/%x\n", info->chan_mask);
                 umd_free_queue_mem(info);
             }
         }
@@ -498,7 +498,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                     status->pattern[2] != 0x33 ||
                     status->pattern[3] != 0x44 )
                 {
-                    LOGMSG(info->env, "FAILED: pattern check error: loop %u\n, xfer_check %d, data 0x%x 0x%x 0x%x 0x%x\n",
+                    LOGMSG(info->env, "FAILED: Writer status(from Reader) pattern check error: loop %u\n, xfer_check %d, data 0x%x 0x%x 0x%x 0x%x\n",
                         i,
                         status->xfer_check,
                         status->pattern[0],
@@ -511,7 +511,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             }
             else
             {
-                LOGMSG(info->env, "FAILED: UMD send failed\n");
+                LOGMSG(info->env, "FAILED: Writer UMD send failed\n");
                 ret = -1;
                 break;
             }
@@ -552,7 +552,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                {
                    ret = -1;
                    
-                   LOGMSG(info->env, "FAILED: suffix validation error, loop %u\n data 0x%x 0x%x 0x%x 0x%x\n",
+                   LOGMSG(info->env, "FAILED: Reader suffix validation error, loop %u\n data 0x%x 0x%x 0x%x 0x%x\n",
                         i,
                         suffix->pattern[0],
                         suffix->pattern[1],
@@ -566,7 +566,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             {
                 ret = -1;
             
-                LOGMSG(info->env, "FAILED: prefix validation error, loop %u\n data 0x%x 0x%x 0x%x 0x%x\n",
+                LOGMSG(info->env, "FAILED: Reader prefix validation error, loop %u\n data 0x%x 0x%x 0x%x 0x%x\n",
                     i,
                     prefix->pattern[0],
                     prefix->pattern[1],
@@ -583,7 +583,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             if (rc !=0 )                
             {
                 ret = -1;
-                LOGMSG(info->env, "FAILED: loop %u, UMD send failed\n", i);
+                LOGMSG(info->env, "FAILED: Reader loop %u, UMD send failed\n", i);
             }
 
             if(ret)
@@ -600,7 +600,7 @@ exit:
     umd_free_tx_buf(info, index);
     if( ret == 0)
     {
-        LOGMSG(info->env,"%u loops of UDM DMA test completed successfully!!!\n", loops);
+        LOGMSG(info->env,"INFO: Writer/Reader %d completed %u loops of UDM DMA test successfully!!!\n", dma_trans_p->wr, loops);
     }
     return ret;
 }

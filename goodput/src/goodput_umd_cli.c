@@ -203,8 +203,8 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     }
     else
     {
-		LOGMSG(env, "FAILED: User thread %d is in use.\n",idx);
-    }	
+        LOGMSG(env, "FAILED: User thread %d is in use.\n",idx);
+    }   
 
 exit:
     return ret;
@@ -271,12 +271,25 @@ struct cli_cmd UMDOpen =
 };
 
 
-int umdConfigCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
+int umdConfigCmd(struct cli_env *env, int argc, char **argv)
 {
     int ret = -1;
     struct UMDEngineInfo *engine_p = &umd_engine;
+    uint16_t chan_mask = 0x40;
     engine_p->env = env;
 
+    if(argc)
+    {
+        if(tok_parse_ushort(argv[0], &chan_mask, 0x01, 0xFF, 0))
+        {
+            LOGMSG(env, "\n");
+            LOGMSG(env, TOK_ERR_SHORT_MSG_FMT,"<chan_mask>", 0X1, 0XFF);
+            LOGMSG(env, "Use default 0x%x", 0x40);
+            chan_mask = 0x40;
+        }
+    }
+
+    engine_p->chan_mask = (uint_8)chan_mask;
     if(!umd_config(engine_p))
     {
         ret = 0;
@@ -291,8 +304,9 @@ struct cli_cmd UMDConfig =
     3,
     0,
     "Configure a UMD engine",
-    "Uconfig\n"
-    "Confiure DMA engine queue memory. Set Tsi721 User Mode Driver to CONFIGURED state.\n",
+    "Uconfig <chan_mask>\n"
+    "Confiure DMA engine queue memory. Set Tsi721 User Mode Driver to CONFIGURED state.\n"
+    "<chan_mask> is an optional parameter to allocate DMA channles. Bitfield. Range 0x1 to 0xFF\n",
     umdConfigCmd,
     ATTR_NONE
 };
