@@ -236,8 +236,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     wkr[idx].did_val = did_val;
     wkr[idx].rio_addr = rio_addr;
     wkr[idx].byte_cnt = buf_sz;
-    //wkr[idx].acc_size = acc_sz;
-    wkr[idx].acc_size = 0;
+    wkr[idx].acc_size = buf_sz;
     wkr[idx].wr = (int)wr;
     //wkr[idx].use_kbuf = (int)kbuf;
     wkr[idx].use_kbuf = 1;
@@ -252,44 +251,12 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         wkr[idx].dma_trans_type, wkr[idx].dma_sync_type,
         wkr[idx].num_trans);
 
-    wkr[idx].stop_req = 0;
+    wkr[idx].stop_req = 1; // TBD - add continuous test
     sem_post(&wkr[idx].run);
 
 exit:
     return ret;
 }
-
-int umd_dma_tx_num_cmd(struct worker *info, int idx)
-{
-    UMDEngineInfo* engine_p = info->umd_engine;
-    DmaTransfer *dma_trans_p = &engine_p->dma_trans[idx];
-    dma_trans_p->ib_byte_cnt = info->byte_cnt;
-    dma_trans_p->ib_rio_addr = info->rio_addr;
-    dma_trans_p->dest_id = info->did_val;
-    dma_trans_p->rio_addr = info->rio_addr;
-    dma_trans_p->buf_size = info->rdma_buff_size;
-    dma_trans_p->num_trans = info->num_trans;
-    dma_trans_p->wr = info->wr;
-    dma_trans_p->user_data = info->user_data;
-    dma_trans_p->ib_handle = RIO_MAP_ANY_ADDR;
-
-
-    if (engine_p->stat == ENGINE_READY)
-    {
-        printf("Starting umd_dma_num_cmd\n");
-        umd_dma_num_cmd(engine_p, idx);
-        printf("Ending umd_dma_num_cmd\n");
-    }
-    else
-    {
-        printf("FAILED: User thread state %d . Engine state %d\n",dma_trans_p->is_in_use, engine_p->stat);
-        return -1;
-    }
-
-    return 0;
-}
-
-
 
 struct cli_cmd UMDDmaNum =
 {

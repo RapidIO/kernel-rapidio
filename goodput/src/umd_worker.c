@@ -106,102 +106,10 @@ struct data_status
     uint8_t pattern[PATTERN_SIZE]; /*Predefined pattern*/
 };
 
-static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
-{
-    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
-    int rc;
-
-    LOGMSG(info->env, "INFO: ib_rio_addr 0x%lx, ib_size 0x%lx\n", dma_trans_p->ib_rio_addr, dma_trans_p->ib_byte_cnt);
-
-    if (!dma_trans_p->ib_byte_cnt || dma_trans_p->ib_valid)
-    {
-        LOGMSG(info->env, "FAILED: window size of 0 or ibwin already exists\n");
-        return -1;
-    }
-
-    rc = rio_ibwin_map(info->engine.dev_fd, &dma_trans_p->ib_rio_addr,
-                    dma_trans_p->ib_byte_cnt, &dma_trans_p->ib_handle);
-    LOGMSG(info->env, "INFO: ib_handle 0x%lx\n", dma_trans_p->ib_handle);
-    
-    if (rc)
-    {
-        LOGMSG(info->env, "FAILED: rio_ibwin_map rc %d:%s\n",
-                    rc, strerror(errno));
-        return -1;
-    }
-    if (dma_trans_p->ib_handle == 0)
-    {
-        LOGMSG(info->env, "FAILED: rio_ibwin_map failed silently with info->ib_handle==0!\n");
-        return -1;
-    }
-
-
-    dma_trans_p->ib_ptr = NULL;
-    dma_trans_p->ib_ptr = mmap(NULL, dma_trans_p->ib_byte_cnt, PROT_READ | PROT_WRITE,
-                MAP_SHARED, info->engine.dev_fd, dma_trans_p->ib_handle);
-    // rc = riomp_dma_map_memory(info->mp_h, info->ib_byte_cnt,
-    //              info->ib_handle, &info->ib_ptr);
-    if (dma_trans_p->ib_ptr == MAP_FAILED)
-    {
-        dma_trans_p->ib_ptr = NULL;
-    }
-
-    if (NULL == dma_trans_p->ib_ptr)
-    {
-        LOGMSG(info->env, "FAILED: riomp_dma_map_memory errno %d:%s\n",
-                    errno, strerror(errno));
-        rio_ibwin_free(info->engine.dev_fd, &dma_trans_p->ib_handle);
-        return -1;
-    }
-
-    memset(dma_trans_p->ib_ptr, 0x0, dma_trans_p->ib_byte_cnt);
-
-    dma_trans_p->ib_valid = 1;
-
-    return 0;
-}
-
-static int umd_free_ibw(struct UMDEngineInfo *info, int index)
-{
-    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
-    int ret = -1, rc;
-
-    if (!dma_trans_p->ib_valid)
-    {
-        LOGMSG(info->env, "No valid inbound window. User thread %d\n", index);
-        return ret;
-    }
-
-    if (dma_trans_p->ib_ptr && dma_trans_p->ib_valid) {
-        rc = munmap(dma_trans_p->ib_ptr, dma_trans_p->ib_byte_cnt);
-        dma_trans_p->ib_ptr = NULL;
-        if (rc)
-        {
-            LOGMSG(info->env, "munmap ib rc %d: %s\n",
-                rc, strerror(errno));
-            ret = -1;
-        }
-    }
-
-    rc = rio_ibwin_free(info->engine.dev_fd, &dma_trans_p->ib_handle);
-    if (rc)
-    {
-        LOGMSG(info->env, "FAILED: rio_ibwin_free rc %d:%s\n",
-                    rc, strerror(errno));
-        ret = -1;
-    }
-
-    dma_trans_p->ib_valid = 0;
-    dma_trans_p->ib_handle = 0;
-
-    return 0;
-}
-
 static int umd_allo_tx_buf(struct UMDEngineInfo *info, int index)
 {
     struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
     int rc, ret = 0;
-
 
     dma_trans_p->tx_mem_h = RIO_MAP_ANY_ADDR;
 
@@ -419,7 +327,7 @@ int umd_close(struct UMDEngineInfo *info)
     return -1;
 }
 
-int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
+int umd_dma_num_cmd(struct worker *worker_info)
 {
     data_status *status;
     data_prefix *prefix;
@@ -427,20 +335,41 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
     int32_t ret = 0, rc;
     uint32_t i;
     uint32_t loops;
+    UMDEngineInfo* info = worker_info->umd_engine;
+    int index = worker_info->idx;
     DmaTransfer* dma_trans_p = &info->dma_trans[index];
 
-     if(umd_allo_ibw(info, index))
-     {
-         ret = -1;
-         goto exit;
-     }
+    printf("umd_dma_num_cmd: worker ib_byte_cnt %lx byte_cnt %lx\n",worker_info->ib_byte_cnt,worker_info->byte_cnt);
+    dma_trans_p->ib_byte_cnt = worker_info->ib_byte_cnt;
+    dma_trans_p->ib_rio_addr = worker_info->ib_rio_addr;
+    dma_trans_p->dest_id     = worker_info->did_val;
+    dma_trans_p->rio_addr    = worker_info->rio_addr;
+    dma_trans_p->buf_size    = worker_info->rdma_buff_size;
+    dma_trans_p->num_trans   = worker_info->num_trans;
+    dma_trans_p->wr          = worker_info->wr;
+    dma_trans_p->user_data   = worker_info->user_data;
+    dma_trans_p->ib_handle   = worker_info->ib_handle;
+    dma_trans_p->ib_ptr      = worker_info->ib_ptr;
 
-     if(umd_allo_tx_buf(info,index))
-     {
-         ret  = -1;
-         goto exit;
-     }
+    // Check for allocated inbound window
+    if (!worker_info->ib_valid || !worker_info->ib_ptr)
+    {
+        LOGMSG(info->env, "FAILED: inbound window was not allocated\n");
+        ret = -1;
+        goto exit;
+    }
 
+    printf("Inbound window ok\n");
+    memset(dma_trans_p->ib_ptr, 0x0, dma_trans_p->ib_byte_cnt);
+
+    printf("tx_ptr %p, allocate buffer\n",dma_trans_p->tx_ptr);
+    if(!dma_trans_p->tx_ptr && umd_allo_tx_buf(info,index) != 0)
+    {
+        ret  = -1;
+        goto exit;
+    }
+
+    printf("tx_ptr %p\n",dma_trans_p->tx_ptr);
     if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
     {
         LOGMSG(info->env, "FAILED: rio_addr, buf_size is 0!\n");
@@ -448,6 +377,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
         goto exit;
     }
 
+    printf("num_trans %d\n",dma_trans_p->num_trans);
     if(dma_trans_p->num_trans != 0)
     {
         loops = dma_trans_p->num_trans;
@@ -506,8 +436,14 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             rc = tsi721_umd_send(&(info->engine), prefix_phys, sizeof(data_prefix), dma_trans_p->rio_addr, dma_trans_p->dest_id);
             if(rc == 0)
             {
+                int printed = 0;
                 while(status->xfer_check == 0)
                 {
+                    if (!printed)
+                    {
+                        printf("waiting for xfer_check to change\n");
+                        printed = 1;
+                    }
                     sleep(0.25);
                 }
 
@@ -644,10 +580,12 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
         }
     }
 
+    while (!worker_info->stop_req) {
+        sleep(0);
+    }
 
 
 exit:
-    umd_free_ibw(info,index);
     umd_free_tx_buf(info, index);
     if( ret == 0)
     {
