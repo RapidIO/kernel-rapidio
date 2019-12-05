@@ -463,7 +463,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
         uint32_t payload_size = dma_trans_p->buf_size - sizeof(data_prefix) - sizeof(data_suffix);
         prefix = (data_prefix*)dma_trans_p->tx_ptr;
         status = (data_status*)dma_trans_p->ib_ptr;
-        payload_phys = (void*)((uintptr_t)dma_trans_p->tx_mem_h + sizeof(prefix));
+        payload_phys = (void*)(dma_trans_p->tx_mem_h + sizeof(data_prefix));
         prefix_phys  = (void*)dma_trans_p->tx_mem_h;
 
         for(i=0; i<loops; i++)
