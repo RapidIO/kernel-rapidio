@@ -328,7 +328,7 @@ int umd_config(struct UMDEngineInfo *info)
 
             if(!tsi721_umd_queue_config_multi(&(info->engine), info->chan_mask, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
             {
-                LOGMSG(info->env, "SUCC: UDM queue is configured. Channel mask 0x%x\n", info->chan_mask);  
+                LOGMSG(info->env, "SUCC: UMD queue is configured. Channel mask 0x%x\n", info->chan_mask);  
                 info->stat = ENGINE_CONFIGURED;
                 return 0;
             }
@@ -421,13 +421,13 @@ int umd_close(struct UMDEngineInfo *info)
 
 int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
 {
-    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
     data_status *status;
     data_prefix *prefix;
     data_suffix *suffix = NULL;
     int32_t ret = 0, rc;
     uint32_t i;
     uint32_t loops;
+    DmaTransfer* dma_trans_p = &info->dma_trans[index];
 
      if(umd_allo_ibw(info, index))
      {

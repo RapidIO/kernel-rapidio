@@ -43,6 +43,8 @@ extern struct cli_cmd UMDConfig;
 extern struct cli_cmd UMDStart;
 extern struct cli_cmd UMDStop;
 extern struct cli_cmd UMDClose;
+
+int umd_dma_tx_num_cmd(struct worker *info, int index);
     
 
 #ifdef __cplusplus

@@ -104,8 +104,7 @@ extern int umd_stop(struct UMDEngineInfo *info);
 
 extern int umd_close(struct UMDEngineInfo *info);
 
-extern int umd_dma_num_cmd(struct UMDEngineInfo *info, int index);
-
+extern int umd_dma_num_cmd(struct UMDEngineInfo *info, int idx);
 
 #ifdef __cplusplus
 }

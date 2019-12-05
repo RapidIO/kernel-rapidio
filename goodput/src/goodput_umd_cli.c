@@ -105,10 +105,55 @@ static int gp_parse_did(struct cli_env *env, char *tok, did_val_t *did_val)
     return 0;
 }
 
+// Parse the token ensuring it is within the range for a worker index and
+// check the status of the worker thread.
+static int gp_parse_worker_index(struct cli_env *env, char *tok, uint16_t *idx)
+{
+    if (tok_parse_ushort(tok, idx, 0, MAX_WORKER_IDX, 0)) {
+        LOGMSG(env, "\n");
+        LOGMSG(env, TOK_ERR_USHORT_MSG_FMT, "<idx>", 0, MAX_WORKER_IDX);
+        return 1;
+    }
+    return 0;
+}
+
+// Parse the token ensuring it is within the range for a worker index and
+// check the status of the worker thread.
+static int gp_parse_worker_index_check_thread(struct cli_env *env, char *tok,
+        uint16_t *idx, int want_halted)
+{
+    if (gp_parse_worker_index(env, tok, idx)) {
+        goto err;
+    }
+
+    switch (want_halted) {
+    case 0: if (2 == wkr[*idx].stat) {
+            LOGMSG(env, "\nWorker halted\n");
+            goto err;
+        }
+        break;
+
+    case 1: if (2 != wkr[*idx].stat) {
+            LOGMSG(env, "\nWorker not halted\n");
+            goto err;
+        }
+        break;
+    case 2: if (1 != wkr[*idx].stat) {
+            LOGMSG(env, "\nWorker not running\n");
+            goto err;
+        }
+        break;
+    default: goto err;
+    }
+    return 0;
+err:
+    return 1;
+}
+
 
 int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
 {
-    int idx;
+    uint16_t idx;
     uint64_t ib_size;
     uint64_t ib_rio_addr = RIO_MAP_ANY_ADDR;
     did_val_t did_val;
@@ -118,19 +163,13 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     uint32_t num_trans;
     uint64_t user_data = DMA_USER_DATA_PATTERN;
     struct UMDEngineInfo *engine_p = &umd_engine;
-    struct DmaTransfer *dma_trans_p;
     int ret = -1;
     int n = 0;
     engine_p->env = env;
 
-    if(tok_parse_long(argv[n++], &idx, 0, MAX_UDM_USER_THREAD, 0))
-    {
-        LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UDM_USER_THREAD);
+    if (gp_parse_worker_index_check_thread(env, argv[n++], &idx, 1)) {
         goto exit;
     }
-    dma_trans_p = &(engine_p->dma_trans[idx]);
-
 
     if (gp_parse_ull_pw2(env, argv[n++], "<ib_size>", &ib_size, FOUR_KB, 4 * SIXTEEN_MB))
     {
@@ -192,31 +231,65 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         LOGMSG(env, "User data 0x%lx\n",user_data);
     }
 
-    if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use)
-    {
-        //Will a mutex to lock this section if there is no plan to use woker thread infrastructure
-        dma_trans_p->is_in_use = true;
-        dma_trans_p->ib_byte_cnt = ib_size;
-        dma_trans_p->ib_rio_addr = ib_rio_addr;
-        dma_trans_p->dest_id = did_val;
-        dma_trans_p->rio_addr = rio_addr;
-        dma_trans_p->buf_size = buf_sz;
-        dma_trans_p->num_trans = num_trans;
-        dma_trans_p->wr = wr;
-        dma_trans_p->user_data = user_data;
-        dma_trans_p->ib_handle = RIO_MAP_ANY_ADDR;
-        ret = umd_dma_num_cmd(engine_p, idx);
-        dma_trans_p->is_in_use = false;
-    }
-    else
-    {
-        LOGMSG(env, "FAILED: User thread state %d . Engine state %d\n",dma_trans_p->is_in_use, engine_p->stat);
-    }   
+    wkr[idx].action = dma_tx_num;
+    wkr[idx].action_mode = user_mode_action;
+    wkr[idx].did_val = did_val;
+    wkr[idx].rio_addr = rio_addr;
+    wkr[idx].byte_cnt = buf_sz;
+    //wkr[idx].acc_size = acc_sz;
+    wkr[idx].acc_size = 0;
+    wkr[idx].wr = (int)wr;
+    //wkr[idx].use_kbuf = (int)kbuf;
+    wkr[idx].use_kbuf = 1;
+    //wkr[idx].dma_trans_type = convert_int_to_riomp_dma_directio_type(trans);
+    wkr[idx].dma_trans_type = RIO_EXCHANGE_NWRITE;
+    wkr[idx].dma_sync_type = RIO_TRANSFER_ASYNC;
+    wkr[idx].rdma_buff_size = ib_size;
+    wkr[idx].num_trans = (int)num_trans;
+    wkr[idx].user_data = user_data;
+    LOGMSG(env, "Wr %x kbuf %x trans %x sync %x num %x\n",
+        wkr[idx].wr, wkr[idx].use_kbuf,
+        wkr[idx].dma_trans_type, wkr[idx].dma_sync_type,
+        wkr[idx].num_trans);
+
+    wkr[idx].stop_req = 0;
+    sem_post(&wkr[idx].run);
 
 exit:
     return ret;
-
 }
+
+int umd_dma_tx_num_cmd(struct worker *info, int idx)
+{
+    UMDEngineInfo* engine_p = info->umd_engine;
+    DmaTransfer *dma_trans_p = &engine_p->dma_trans[idx];
+    dma_trans_p->ib_byte_cnt = info->byte_cnt;
+    dma_trans_p->ib_rio_addr = info->rio_addr;
+    dma_trans_p->dest_id = info->did_val;
+    dma_trans_p->rio_addr = info->rio_addr;
+    dma_trans_p->buf_size = info->rdma_buff_size;
+    dma_trans_p->num_trans = info->num_trans;
+    dma_trans_p->wr = info->wr;
+    dma_trans_p->user_data = info->user_data;
+    dma_trans_p->ib_handle = RIO_MAP_ANY_ADDR;
+
+
+    if (engine_p->stat == ENGINE_READY)
+    {
+        printf("Starting umd_dma_num_cmd\n");
+        umd_dma_num_cmd(engine_p, idx);
+        printf("Ending umd_dma_num_cmd\n");
+    }
+    else
+    {
+        printf("FAILED: User thread state %d . Engine state %d\n",dma_trans_p->is_in_use, engine_p->stat);
+        return -1;
+    }
+
+    return 0;
+}
+
+
 
 struct cli_cmd UMDDmaNum =
 {

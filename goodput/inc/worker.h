@@ -63,6 +63,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "libtime_utils.h"
 #include "RapidIO_Device_Access_Routines_API.h"
 #include "liblist.h"
+#include "tsi721_umd.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -230,6 +231,9 @@ struct worker {
 	uint32_t seven_test_err_resp_time;
 	uint32_t seven_test_resp_to_time;
 	float seven_test_delay;
+
+	struct UMDEngineInfo *umd_engine;
+    uint64_t user_data;
 };
 
 /**

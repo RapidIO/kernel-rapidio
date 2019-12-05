@@ -106,6 +106,7 @@ int32_t tsi721_umd_open(struct tsi721_umd* h, uint32_t mport_id)
 	}
 
 	h->state = TSI721_UMD_STATE_UNCONFIGURED;
+	printf("engine %p state now %d\n",h,h->state);
 
 	return 0;
 }
@@ -227,6 +228,8 @@ int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t channel_mask
 		return -1;
 
 	h->state = TSI721_UMD_STATE_CONFIGURED;
+	printf("engine %p state now %d\n",h,h->state);
+
 	return 0;
 }
 
@@ -251,6 +254,7 @@ int32_t tsi721_umd_start(struct tsi721_umd* h)
 	}
 
 	h->state = TSI721_UMD_STATE_READY;
+	printf("engine %p state now %d\n",h,h->state);
 
 	return 0;
 }
@@ -369,6 +373,7 @@ int32_t tsi721_umd_stop(struct tsi721_umd* h)
 	}
 
 	h->state = TSI721_UMD_STATE_CONFIGURED;
+	printf("engine %p state now %d\n",h,h->state);
 
 	return 0;
 }
@@ -385,6 +390,7 @@ int32_t tsi721_umd_close(struct tsi721_umd* h)
 	close(h->dev_fd);
 
 	h->state = TSI721_UMD_STATE_UNALLOCATED;
+	printf("engine %p state now %d\n",h,h->state);
 
 	return 0;
 }
