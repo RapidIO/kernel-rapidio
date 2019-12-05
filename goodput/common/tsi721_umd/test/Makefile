@@ -36,7 +36,7 @@ CFLAGS+=-D$(DEBUG_CTL) -DRDMA_LL=$(LOG_LEVEL) -Lpthread
 CFLAGS+=-I../../../inc -lpthread
 CFLAGS+=-lumd -l:libmport.a -L../../libs_a -L../../../../libmport -I../../../../libmport/include -I../../../inc -O0
 
-.PHONY: all clean test
+.PHONY: all clean test basic
 
 TARGETS:=basic
 

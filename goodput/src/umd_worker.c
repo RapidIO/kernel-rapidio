@@ -326,7 +326,7 @@ int umd_config(struct UMDEngineInfo *info)
         {
             LOGMSG(info->env, "SUCC: queue mem is allocated.\n");
 
-        if(!tsi721_umd_queue_config_multi(&(info->engine), 0xFF, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
+        if(!tsi721_umd_queue_config_multi(&(info->engine), 0x40, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
             {
                 LOGMSG(info->env, "SUCC: udm queue is configured.\n");  
                 info->stat = ENGINE_CONFIGURED;
@@ -402,7 +402,7 @@ int umd_close(struct UMDEngineInfo *info)
     {
         umd_free_queue_mem(info);
 
-        if(tsi721_close(&(info->engine)) == 0)
+        if(tsi721_umd_close(&(info->engine)) == 0)
         {
             info->stat = ENGINE_UNALLOCATED;
             return 0;
@@ -429,17 +429,17 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
     uint32_t i;
     uint32_t loops;
 
-    if(umd_allo_ibw(info, index))
-    {
-        ret = -1;
-        goto exit;
-    }
+     if(umd_allo_ibw(info, index))
+     {
+         ret = -1;
+         goto exit;
+     }
 
-    if(umd_allo_tx_buf(info,index))
-    {
-        ret  = -1;
-        goto exit;
-    }
+     if(umd_allo_tx_buf(info,index))
+     {
+         ret  = -1;
+         goto exit;
+     }
 
     if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
     {

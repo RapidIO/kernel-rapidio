@@ -69,6 +69,7 @@ struct dma_channel
 	uint32_t *dma_engine_regs;
 	uint32_t  queue_mem_size;    // total size for all queues
 	uint32_t  req_count;
+	uint32_t  status_count;
 	void     *reg_base;          // DMA register base address for this channel
 };
 
@@ -77,6 +78,7 @@ struct tsi721_umd
 	int32_t dev_fd;     // rio_mport device handle
 	int32_t regs_fd;    // handle from mmap of register memory
 	volatile void *all_regs;  // register memory pointer
+	uint32_t regs_map_size; // size of the BAR0 register mapping
 	uint8_t chan_count; // count of channels used
 	uint8_t chan_mask;  // bitfield, allocated channels
 	struct dma_channel chan[TSI721_DMA_CHNUM]; // channel descriptors
@@ -92,11 +94,10 @@ extern int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t chann
 extern int32_t tsi721_umd_start(struct tsi721_umd* h);
 extern int32_t tsi721_umd_send(struct tsi721_umd* h, void *phys_addr, uint32_t num_bytes, uint64_t rio_addr, uint16_t dest_id);
 extern int32_t tsi721_umd_stop(struct tsi721_umd* h);
-extern int32_t tsi721_close(struct tsi721_umd* h);
+extern int32_t tsi721_umd_close(struct tsi721_umd* h);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* __TSI721_UMD_H__ */
-
