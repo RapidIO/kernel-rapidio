@@ -622,6 +622,19 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                 prefix->pattern[7] == 0xF1)
             {
                suffix = (data_suffix*)((uint64_t)(dma_trans_p->ib_ptr) + prefix->xfer_offset + prefix->xfer_size);
+
+               while(suffix->pattern[0] == 00 &&
+                    suffix->pattern[1] == 00 &&
+                    suffix->pattern[2] == 00 &&
+                    suffix->pattern[3] == 00 &&
+                    suffix->pattern[4] == 00 &&
+                    suffix->pattern[5] == 00 &&
+                    suffix->pattern[6] == 00 &&
+                    suffix->pattern[7] == 00)
+               {
+                   sleep(0.25);
+               }
+                    
                if(suffix->pattern[0] == 0x1a &&
                     suffix->pattern[1] == 0x2b &&
                     suffix->pattern[2] == 0x3c &&
