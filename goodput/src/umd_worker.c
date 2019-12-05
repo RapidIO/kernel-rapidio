@@ -459,8 +459,10 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
 
     if(dma_trans_p->wr)
     {
+		void* payload;
         prefix = (data_prefix*)dma_trans_p->tx_ptr;
         status = (data_status*)dma_trans_p->ib_ptr;
+	    payload = (void*)((uintptr_t)prefix + sizeof(prefix));
 
         for(i=0; i<loops; i++)
         {
@@ -490,7 +492,17 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             suffix->pattern[6] = 0xc3;
             suffix->pattern[7] = 0xd4;
 
-            rc = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, dma_trans_p->buf_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
+			// Send payload before prefix, as prefix is used to check for completion
+            rc = tsi721_umd_send(&(info->engine), payload, dma_trans_p->buf_size-sizeof(data_prefix), dma_trans_p->rio_addr+sizeof(data_prefix), dma_trans_p->dest_id);
+			if (rc != 0)
+			{
+				LOGMSG(info->env, "FAILED: dma transfer returned %d\n",ret);
+				ret = -1;
+				goto exit;
+			}
+
+			// Update prefix
+            rc = tsi721_umd_send(&(info->engine), prefix, sizeof(data_prefix), dma_trans_p->rio_addr, dma_trans_p->dest_id);
             if(rc == 0)
             {
                 while(status->xfer_check == 0)
