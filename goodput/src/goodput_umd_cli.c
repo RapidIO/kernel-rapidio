@@ -68,6 +68,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
+#define DMA_USER_DATA_PATTERN 0xFEB6FEB5C9D8C9D7
+
 struct UMDEngineInfo umd_engine;
 
 
@@ -114,7 +116,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     uint64_t buf_sz;
     uint16_t wr;
     uint32_t num_trans;
-    char *user_data_p = NULL;
+    uint64_t user_data = DMA_USER_DATA_PATTERN;
     struct UMDEngineInfo *engine_p = &umd_engine;
     struct DmaTransfer *dma_trans_p;
     int ret = -1;
@@ -179,9 +181,15 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         goto exit;
     }
 
-    if( argc > 8)
+    if( argc > 8 && tok_parse_ull(argv[n], &user_data,0))
     {
-        user_data_p = argv[n];
+        LOGMSG(env, "\n");
+        LOGMSG(env, TOK_ERR_ULL_HEX_MSG_FMT, "<user_data>");
+        user_data = DMA_USER_DATA_PATTERN;
+    }
+    else
+    {
+        LOGMSG(env, "User data 0x/%lu\n",user_data);
     }
 
     if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use)
@@ -193,17 +201,14 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         dma_trans_p->buf_size = buf_sz;
         dma_trans_p->num_trans = num_trans;
         dma_trans_p->wr = wr;
+        dma_trans_p->user_data = user_data;
         dma_trans_p->ib_handle = RIO_MAP_ANY_ADDR;
-        if(user_data_p)
-        {
-            memcpy(dma_trans_p->user_data, user_data_p,8);
-        }
         ret = umd_dma_num_cmd(engine_p, idx);
         dma_trans_p->is_in_use = false;
     }
     else
     {
-        LOGMSG(env, "FAILED: User thread %d is in use.\n",idx);
+        LOGMSG(env, "FAILED: User thread state %d . Engine state %d\n",dma_trans_p->is_in_use, engine_p->stat);
     }   
 
 exit:

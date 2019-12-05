@@ -83,27 +83,27 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
-#define PATTERN_SIZE  4
+#define PATTERN_SIZE  8
 #define UDM_QUEUE_SIZE  (8 * 8192)
 
 struct data_prefix
 {
-    int trans_nth; /*current transaction index*/
+    uint64_t trans_nth; /*current transaction index*/
     uint64_t xferf_offset; /* Transfer occurs at xfer_offset bytes from the start of the target buffer */
     uint64_t xfer_size; /* Transfer consists of xfer_size*/
-    char pattern[PATTERN_SIZE]; /*Predefined pattern*/
+    uint8_t pattern[PATTERN_SIZE]; /*Predefined pattern*/
 };
 
 struct data_suffix
 {
-    char pattern[PATTERN_SIZE]; /*Predefined pattern*/
+    uint8_t pattern[PATTERN_SIZE]; /*Predefined pattern*/
 };
 
 struct data_status
 {
     int trans_nth; /*current transaction index*/
     int xfer_check; /* 0 – waiting for transfer check, 1 – passed 2 – failed */
-    char pattern[PATTERN_SIZE]; /*Predefined pattern*/
+    uint8_t pattern[PATTERN_SIZE]; /*Predefined pattern*/
 };
 
 static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
@@ -328,13 +328,13 @@ int umd_config(struct UMDEngineInfo *info)
 
             if(!tsi721_umd_queue_config_multi(&(info->engine), info->chan_mask, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
             {
-                LOGMSG(info->env, "SUCC: UDM queue is configured. Channel mask 0x/%x\n", info->chan_mask);  
+                LOGMSG(info->env, "SUCC: UDM queue is configured. Channel mask 0x%x\n", info->chan_mask);  
                 info->stat = ENGINE_CONFIGURED;
                 return 0;
             }
             else
             {
-                LOGMSG(info->env, "FAILED: Engine configure error. Channel mask 0x/%x\n", info->chan_mask);
+                LOGMSG(info->env, "FAILED: Engine configure error. Channel mask 0x%x\n", info->chan_mask);
                 umd_free_queue_mem(info);
             }
         }
@@ -454,14 +454,13 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
     }
     else
     {
-        loops = 0x3FFFFFFF;
+        loops = 0xFFFFFFFF;
     }
 
     if(dma_trans_p->wr)
     {
         prefix = (data_prefix*)dma_trans_p->tx_ptr;
         status = (data_status*)dma_trans_p->ib_ptr;
-        //status = (data_status*)malloc(sizeof(data_status));
 
         for(i=0; i<loops; i++)
         {
@@ -473,6 +472,10 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             prefix->pattern[1] = 0x34;
             prefix->pattern[2] = 0x56;
             prefix->pattern[3] = 0x78;
+            prefix->pattern[4] = 0x9A;
+            prefix->pattern[5] = 0xBC;
+            prefix->pattern[6] = 0xDE;
+            prefix->pattern[7] = 0xF1;
             prefix->xferf_offset = sizeof(data_prefix);
             prefix->xfer_size = dma_trans_p->buf_size - sizeof(data_prefix) - sizeof(data_suffix);
 
@@ -482,6 +485,10 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             suffix->pattern[1] = 0x2b;
             suffix->pattern[2] = 0x3c;
             suffix->pattern[3] = 0x4d;
+            suffix->pattern[4] = 0xa1;
+            suffix->pattern[5] = 0xb2;
+            suffix->pattern[6] = 0xc3;
+            suffix->pattern[7] = 0xd4;
 
             rc = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, dma_trans_p->buf_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
             if(rc == 0)
@@ -496,15 +503,24 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                     status->pattern[0] != 0x11 ||
                     status->pattern[1] != 0x22 ||
                     status->pattern[2] != 0x33 ||
-                    status->pattern[3] != 0x44 )
+                    status->pattern[3] != 0x44 ||
+                    status->pattern[4] != 0x55 ||
+                    status->pattern[5] != 0x66 ||
+                    status->pattern[6] != 0x77 ||
+                    status->pattern[7] != 0x88)
                 {
-                    LOGMSG(info->env, "FAILED: Writer status(from Reader) pattern check error: loop %u\n, xfer_check %d, data 0x%x 0x%x 0x%x 0x%x\n",
+                    LOGMSG(info->env, "FAILED: Writer status(from Reader) pattern check error: loop %u\n" 
+                        "xfer_check %d, data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
                         i,
                         status->xfer_check,
                         status->pattern[0],
                         status->pattern[1],
                         status->pattern[2],
-                        status->pattern[3]);
+                        status->pattern[3],
+                        status->pattern[4],
+                        status->pattern[5],
+                        status->pattern[6],
+                        status->pattern[7]);
                     ret  = -1;
                     break;
                 }
@@ -533,18 +549,30 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             status->pattern[1] = 0x22;
             status->pattern[2] = 0x33;
             status->pattern[3] = 0x44;
+            status->pattern[4] = 0x55;
+            status->pattern[5] = 0x66;
+            status->pattern[6] = 0x77;
+            status->pattern[7] = 0x88;
             status->trans_nth = prefix->trans_nth;
 
-            if(prefix->pattern[0] == 0x12 &&
+            if( prefix->pattern[0] == 0x12 &&
                 prefix->pattern[1] == 0x34 &&
                 prefix->pattern[2] == 0x56 &&
-                prefix->pattern[3] == 0x78)
+                prefix->pattern[3] == 0x78 &&
+                prefix->pattern[4] == 0x9A &&
+                prefix->pattern[5] == 0xBC &&
+                prefix->pattern[6] == 0xDE &&
+                prefix->pattern[7] == 0xF1)
             {
                suffix = (data_suffix*)((uint64_t)(dma_trans_p->ib_ptr) + dma_trans_p->ib_byte_cnt -  sizeof(data_suffix));
                if(suffix->pattern[0] == 0x1a &&
-                  suffix->pattern[1] == 0x2b &&
-                  suffix->pattern[2] == 0x3c &&
-                  suffix->pattern[3] == 0x4d)
+                    suffix->pattern[1] == 0x2b &&
+                    suffix->pattern[2] == 0x3c &&
+                    suffix->pattern[3] == 0x4d &&
+                    suffix->pattern[4] == 0xa1 &&
+                    suffix->pattern[5] == 0xb2 &&
+                    suffix->pattern[6] == 0xc3 &&
+                    suffix->pattern[7] == 0xd4)
                {
                   status->xfer_check = 1;
                }
@@ -552,12 +580,17 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                {
                    ret = -1;
                    
-                   LOGMSG(info->env, "FAILED: Reader suffix validation error, loop %u\n data 0x%x 0x%x 0x%x 0x%x\n",
+                   LOGMSG(info->env, "FAILED: Reader suffix validation error, loop %u\n" 
+                    "data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
                         i,
                         suffix->pattern[0],
                         suffix->pattern[1],
                         suffix->pattern[2],
-                        suffix->pattern[3]);
+                        suffix->pattern[3],
+                        suffix->pattern[4],
+                        suffix->pattern[5],
+                        suffix->pattern[6],
+                        suffix->pattern[7]);
                    
                    status->xfer_check = 2;
                }
@@ -566,12 +599,17 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             {
                 ret = -1;
             
-                LOGMSG(info->env, "FAILED: Reader prefix validation error, loop %u\n data 0x%x 0x%x 0x%x 0x%x\n",
+                LOGMSG(info->env, "FAILED: Reader prefix validation error, loop %u\n"
+                    "data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
                     i,
                     prefix->pattern[0],
                     prefix->pattern[1],
                     prefix->pattern[2],
-                    prefix->pattern[3]);
+                    prefix->pattern[3],
+                    prefix->pattern[4],
+                    prefix->pattern[5],
+                    prefix->pattern[6],
+                    prefix->pattern[7]);
                 
                 status->xfer_check = 2;
             }
