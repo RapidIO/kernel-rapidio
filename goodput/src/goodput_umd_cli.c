@@ -289,7 +289,7 @@ int umdConfigCmd(struct cli_env *env, int argc, char **argv)
         }
     }
 
-    engine_p->chan_mask = (uint_8)chan_mask;
+    engine_p->chan_mask = (uint8_t)chan_mask;
     if(!umd_config(engine_p))
     {
         ret = 0;
