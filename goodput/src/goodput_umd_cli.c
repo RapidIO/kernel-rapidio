@@ -162,6 +162,7 @@ static int UMDdmaCmd(struct cli_env *env, int UNUSED(argc), char **argv)
         dma_trans_p->dest_id = did_val;
         dma_trans_p->rio_addr = rio_addr;
         dma_trans_p->buf_size = buf_sz;
+        dma_trans_p->acc_size = acc_sz;
         ret = umd_goodput(engine_p, idx);
         dma_trans_p->is_in_use = false;
     }

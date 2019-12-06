@@ -777,19 +777,19 @@ exit:
         uint64_t byte_cnt;
     
         LOGMSG(info->env, "INFO: Throughput completed. %u loops of UDM DMA send!!!\n", loops);
-        LOGMSG(info->env, "INFO: Total tranfer size 0x%lx\n", byte_cnt = loops * dma_trans_p->acc_size );
-        LOGMSG(info->env, "INFO: Each DMA access size 0x%lx.\n", dma_trans_p->acc_size );
-        LOGMSG(info->env, "INFO: start time %lu s:%lu ns\n", dma_trans_p->st_time.tv_sec, dma_trans_p->st_time.tv_nsec);
-        LOGMSG(info->env, "INFO: end time %lu s:%lu ns\n",dma_trans_p->end_time.tv_sec, dma_trans_p->end_time.tv_nsec);
+        LOGMSG(info->env, "INFO: Total tranfer size: 0x%lx bytes\n", byte_cnt = loops * dma_trans_p->acc_size );
+        LOGMSG(info->env, "INFO: Each DMA access size: 0x%lx bytes\n", dma_trans_p->acc_size );
+        LOGMSG(info->env, "INFO: Start time sec:%lu ns:%lu\n", dma_trans_p->st_time.tv_sec, dma_trans_p->st_time.tv_nsec);
+        LOGMSG(info->env, "INFO: End time sec:%lu ns:%lu\n",dma_trans_p->end_time.tv_sec, dma_trans_p->end_time.tv_nsec);
 
-        elapsed_time = time_difference(dma_trans_p->st_time, dma_trans_p->st_time);
+        elapsed_time = time_difference(dma_trans_p->st_time, dma_trans_p->end_time);
         nsec = elapsed_time.tv_nsec + (elapsed_time.tv_sec * 1000000000);
 
         //1000 or 1024???
         MBps = (float)(byte_cnt / (1024*1024)) / ((float)nsec / 1000000000.0);
         Gbps = (MBps * 1024.0 * 1024.0 * 8.0) / 1000000000.0;
-        LOGMSG(info->env, "INFO: duration %lu ns\n", nsec);
-        LOGMSG(info->env, "INFO: Goodput %4.3f MBps, %2.3f Gbp\n", MBps, Gbps);
+        LOGMSG(info->env, "INFO: duration ns:%lu\n", nsec);
+        LOGMSG(info->env, "INFO: Goodput %4.4fMBps, %2.4fGbp\n", MBps, Gbps);
     }   
     return ret;
 }
