@@ -287,6 +287,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     LOGMSG(env, "Wr %x rio 0x%lx num_trans %d sz 0x%lx\n",
         wr, rio_addr, num_trans, buf_sz);
 
+    wkr[idx].stop_req = 0;
     sem_post(&wkr[idx].run);
 
 exit:
