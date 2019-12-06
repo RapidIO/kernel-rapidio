@@ -85,11 +85,13 @@ extern "C" {
 
 #define PATTERN_SIZE  8
 #define UDM_QUEUE_SIZE  (8 * 8192)
+#define INIT_CRC32 0xFF00FF00
 
 struct data_prefix
 {
-    uint64_t trans_nth; /*current transaction index*/
-    uint64_t xferf_offset; /* Transfer occurs at xfer_offset bytes from the start of the target buffer */
+    uint32_t trans_nth; /*current transaction index*/
+    uint32_t CRC32;
+    uint64_t xfer_offset; /* Transfer occurs at xfer_offset bytes from the start of the target buffer */
     uint64_t xfer_size; /* Transfer consists of xfer_size*/
     uint8_t pattern[PATTERN_SIZE]; /*Predefined pattern*/
 };
@@ -197,9 +199,59 @@ static int umd_free_queue_mem(struct UMDEngineInfo *info)
     return 0;
 }
 
+static uint32_t crc32_table[256];
+
+static uint32_t crc32(uint32_t crc, void *buffer, uint32_t size)  
+{  
+    uint32_t i; 
+    uint8_t *data_p = (uint8_t *)buffer;
+    for (i = 0; i < size; i++)
+    {  
+        crc = crc32_table[(crc ^ data_p[i]) & 0xff] ^ (crc >> 8);  
+    }  
+    return crc ;  
+}
+
+static void umd_init_crc_table(void)  
+{  
+    uint32_t c;  
+    uint32_t i, j;  
+      
+    for (i = 0; i < 256; i++)
+    {  
+        c = (uint32_t)i;  
+        for (j = 0; j < 8; j++) 
+        {  
+            if (c & 1)
+            {
+                c = 0xedb88320L ^ (c >> 1);  
+            }
+            else
+            {
+                c = c >> 1;
+            }
+        }  
+        crc32_table[i] = c;  
+    }  
+}  
+
+static void umd_copy_xfer_data(void *buf, uint32_t size, uint64_t user_data)
+{
+    uint64_t *data_p =  (uint64_t *)buf; //Assume 64 byte alignment.
+    uint32_t count = size / 4;
+    uint32_t i;
+    for(i = 0; i < count; i++)
+    {
+        *data_p =  user_data;
+        data_p++;
+    }
+}
+
 int umd_init_engine(struct UMDEngineInfo *info)
 {
     memset(info, 0x0, sizeof(struct UMDEngineInfo));
+
+    umd_init_crc_table();
 
     return 0;
 }
@@ -331,6 +383,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
 {
     data_status *status;
     data_prefix *prefix;
+    void *xfer_p;
     data_suffix *suffix = NULL;
     int32_t ret = 0, rc;
     UMDEngineInfo* info = worker_info->umd_engine;
@@ -398,10 +451,14 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
             prefix->pattern[5] = 0xBC;
             prefix->pattern[6] = 0xDE;
             prefix->pattern[7] = 0xF1;
-            prefix->xferf_offset = sizeof(data_prefix);
+            prefix->xfer_offset = sizeof(data_prefix);
             prefix->xfer_size = dma_trans_p->buf_size - sizeof(data_prefix) - sizeof(data_suffix);
 
-            suffix = (data_suffix*)((uintptr_t)prefix + sizeof(data_prefix) + payload_size);
+            xfer_p = (void *)((uint8_t *)(dma_trans_p->tx_ptr) + prefix->xfer_offset);
+            umd_copy_xfer_data(xfer_p, prefix->xfer_size, dma_trans_p->user_data);
+            prefix->CRC32 = crc32(INIT_CRC32, xfer_p, prefix->xfer_size);
+
+            suffix = (data_suffix*)((uint64_t)(dma_trans_p->tx_ptr)  +   prefix->xfer_offset + prefix->xfer_size);
             memset(suffix, 0, sizeof(data_suffix));
             suffix->pattern[0] = 0x1a;
             suffix->pattern[1] = 0x2b;
@@ -503,7 +560,20 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
                 prefix->pattern[6] == 0xDE &&
                 prefix->pattern[7] == 0xF1)
             {
-               suffix = (data_suffix*)((uint64_t)(dma_trans_p->ib_ptr) + dma_trans_p->ib_byte_cnt -  sizeof(data_suffix));
+               suffix = (data_suffix*)((uint64_t)(dma_trans_p->ib_ptr) + prefix->xfer_offset + prefix->xfer_size);
+
+               while(suffix->pattern[0] == 00 &&
+                    suffix->pattern[1] == 00 &&
+                    suffix->pattern[2] == 00 &&
+                    suffix->pattern[3] == 00 &&
+                    suffix->pattern[4] == 00 &&
+                    suffix->pattern[5] == 00 &&
+                    suffix->pattern[6] == 00 &&
+                    suffix->pattern[7] == 00)
+               {
+                   sleep(0.25);
+               }
+                    
                if(suffix->pattern[0] == 0x1a &&
                     suffix->pattern[1] == 0x2b &&
                     suffix->pattern[2] == 0x3c &&
@@ -513,7 +583,16 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
                     suffix->pattern[6] == 0xc3 &&
                     suffix->pattern[7] == 0xd4)
                {
-                  status->xfer_check = 1;
+                   xfer_p = (void *)((uint8_t *)(dma_trans_p->ib_ptr) + prefix->xfer_offset);   
+                   if(prefix->CRC32 != crc32(INIT_CRC32, xfer_p, prefix->xfer_size))
+                   {
+                       status->xfer_check = -1;
+                       LOGMSG(info->env, "FAILED: Reader user data CRC32 validation error\n");
+                   }
+                   else
+                   {
+                       status->xfer_check = 1;
+                   }
                }
                else
                {
