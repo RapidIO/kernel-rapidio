@@ -4655,6 +4655,7 @@ struct cli_cmd *goodput_cmds[] = {
     &UMDStart,
     &UMDStop,
     &UMDClose,
+    &UMDDma,
 };
 
 int bind_goodput_cmds(void)

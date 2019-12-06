@@ -722,6 +722,42 @@ exit:
     return ret;
 }
 
+int umd_dma_cmd(struct UMDEngineInfo *info, int index)
+{
+    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
+    int32_t ret = 0;
+    uint32_t loops=0;
+
+     if(umd_allo_ibw(info, index))
+     {
+         ret = -1;
+         goto exit;
+     }
+
+     if(umd_allo_tx_buf(info,index))
+     {
+         ret  = -1;
+         goto exit;
+     }
+
+    if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
+    {
+        LOGMSG(info->env, "FAILED: rio_addr, buf_size is 0!\n");
+        ret = -1;
+        goto exit;
+    }
+
+exit:
+    umd_free_ibw(info,index);
+    umd_free_tx_buf(info, index);
+    if( ret == 0)
+    {
+        LOGMSG(info->env,"INFO: Writer/Reader %d completed %u loops of UDM DMA test successfully!!!\n", dma_trans_p->wr, loops);
+    }
+    return ret;
+}
+
+
 #ifdef __cplusplus
 }
 #endif

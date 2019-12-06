@@ -105,6 +105,121 @@ static int gp_parse_did(struct cli_env *env, char *tok, did_val_t *did_val)
     return 0;
 }
 
+static int UMDdmaCmd(struct cli_env *env, int argc, char **argv)
+{
+    int idx;
+    uint64_t ib_size;
+    uint64_t ib_rio_addr = RIO_MAP_ANY_ADDR;
+    did_val_t did_val;
+    uint64_t rio_addr;
+    uint64_t buf_sz;
+    uint64_t user_data = DMA_USER_DATA_PATTERN;
+    struct UMDEngineInfo *engine_p = &umd_engine;
+    struct DmaTransfer *dma_trans_p;
+    int ret = -1;
+    int n = 0;
+    engine_p->env = env;
+
+    if(tok_parse_long(argv[n++], &idx, 0, MAX_UDM_USER_THREAD, 0))
+    {
+        LOGMSG(env, "\n");
+        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UDM_USER_THREAD);
+        goto exit;
+    }
+    dma_trans_p = &(engine_p->dma_trans[idx]);
+
+
+    if (gp_parse_ull_pw2(env, argv[n++], "<ib_size>", &ib_size, FOUR_KB, 4 * SIXTEEN_MB))
+    {
+        goto exit;
+    }
+
+    if(tok_parse_ulonglong(argv[n++], &ib_rio_addr, 1, UINT64_MAX, 0))
+    {
+        LOGMSG(env, "\n");
+        LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<ib_rio_addr>",
+                (uint64_t )1, (uint64_t)UINT64_MAX);
+        goto exit;
+    }
+
+    if ((ib_rio_addr != RIO_MAP_ANY_ADDR) && ((ib_size-1) & ib_rio_addr))
+    {
+        LOGMSG(env, "\n<addr> not aligned with <size>\n");
+        goto exit;
+    }
+
+    if (gp_parse_did(env, argv[n++], &did_val))
+    {
+        goto exit;
+    }
+
+    if (tok_parse_ulonglong(argv[n++], &rio_addr, 1, UINT64_MAX, 0))
+    {
+        LOGMSG(env, "\n");
+        LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<rio_addr>",
+                (uint64_t)1, (uint64_t)UINT64_MAX);
+        goto exit;
+    }
+
+    if (gp_parse_ull_pw2(env, argv[n++], "<buf_size>", &buf_sz, FOUR_KB, 4 * SIXTEEN_MB))
+    {
+        goto exit;
+    }
+
+    if( argc > 6 && tok_parse_ull(argv[n], &user_data,0))
+    {
+        LOGMSG(env, "\n");
+        LOGMSG(env, TOK_ERR_ULL_HEX_MSG_FMT, "<user_data>");
+        user_data = DMA_USER_DATA_PATTERN;
+    }
+    else
+    {
+        LOGMSG(env, "User data 0x%lx\n",user_data);
+    }
+
+    if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use)
+    {
+        //Will a mutex to lock this section if there is no plan to use woker thread infrastructure
+        dma_trans_p->is_in_use = true;
+        dma_trans_p->ib_byte_cnt = ib_size;
+        dma_trans_p->ib_rio_addr = ib_rio_addr;
+        dma_trans_p->dest_id = did_val;
+        dma_trans_p->rio_addr = rio_addr;
+        dma_trans_p->buf_size = buf_sz;
+        dma_trans_p->user_data = user_data;
+        dma_trans_p->ib_handle = RIO_MAP_ANY_ADDR;
+        ret = umd_dma_num_cmd(engine_p, idx);
+        dma_trans_p->is_in_use = false;
+    }
+    else
+    {
+        LOGMSG(env, "FAILED: User thread state %d . Engine state %d\n",dma_trans_p->is_in_use, engine_p->stat);
+    }   
+
+exit:
+    return ret;
+
+}
+
+
+struct cli_cmd UMDDma = {
+    "Udma",
+    3,
+    9,
+    "Measure goodput of UMD DMA reads/writes",
+    "Udma <idx> <ib_size> <ib_rio_addr> <did> <rio_addr> <buf_sz> <data>\n"
+        "<idx>      User DMA test thread index: 0 to 7\n"
+        "<ib_size>  inbound window size. Must be a power of two from 0x1000 to 0x01000000\n"
+        "<ib_rio_addr> is the RapidIO address fo the inbound window\n"
+        "       NOTE: <addr> must be aligned to <size>\n"
+        "<did>      target device ID\n"
+        "<rio_addr> is target RapidIO memory address to access\n"
+        "<buf_sz>   target buffer size, must be a power of two from 0x1000 to 0x01000000\n"
+        "<data>     RND, or constant data value, written every 8 bytes",
+    UMDdmaCmd,
+    ATTR_NONE
+};
+
 
 int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
 {
