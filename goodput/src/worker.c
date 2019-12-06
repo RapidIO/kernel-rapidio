@@ -73,6 +73,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "worker.h"
 #include "pw_handling.h"
 #include "goodput.h"
+#include "umd_worker.h"
 #include "Tsi721.h"
 #include "CPS1848.h"
 #include "rio_misc.h"
@@ -1649,6 +1650,9 @@ void *worker_thread(void *parm)
         case maint_traffic:
             do_maint_traffic(info);
             break;
+	case umd_dma_thru:
+	    umd_goodput(info);
+	    break;
         case no_action:
         case last_action:
         default:

@@ -87,6 +87,10 @@ extern "C" {
 #define UDM_QUEUE_SIZE  (8 * 8192)
 #define INIT_CRC32 0xFF00FF00
 
+#define ADDR_L(x,y) ((uint64_t)((uint64_t)x + (uint64_t)y))
+#define ADDR_P(x,y) ((void *)((uint64_t)x + (uint64_t)y))
+
+
 struct data_prefix
 {
     uint32_t trans_nth; /*current transaction index*/
@@ -594,6 +598,46 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
 exit:
 
     return ret;
+}
+
+void umd_goodput(struct worker *info)
+{
+    if (alloc_dma_tx_buffer(info))
+        goto exit;
+
+    zero_stats(info);
+    clock_gettime(CLOCK_MONOTONIC, &info->st_time);
+
+    while (!info->stop_req) {
+        start_iter_stats(info);
+        for (uint64_t count = 0; (count < info->byte_cnt) && !info->stop_req;
+			 count += info->acc_size)
+        {
+            int rc = 0;
+            rc = tsi721_umd_send(&info->umd_engine->engine,
+                                 ADDR_P(info->rdma_kbuff, count),
+                                 info->acc_size,
+                                 ADDR_L(info->rio_addr, count),
+                                 info->did_val
+                                );
+            if(rc)
+            {
+                ERR("FAILED: rc %d src 0x%p dest_id %d dest 0x%x size 0x%x\n",
+                     rc,
+                     ADDR_P(info->rdma_kbuff, count),
+                     info->did_val,
+                     ADDR_L(info->rio_addr, count),
+                     info->acc_size)
+                break;
+            }
+	}
+        info->perf_byte_cnt += info->byte_cnt;
+        finish_iter_stats(info);
+        clock_gettime(CLOCK_MONOTONIC, &info->end_time);
+    }
+
+exit:
+    dealloc_dma_tx_buffer(info);
 }
 
 #ifdef __cplusplus

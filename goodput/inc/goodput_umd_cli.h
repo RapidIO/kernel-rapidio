@@ -43,6 +43,7 @@ extern struct cli_cmd UMDConfig;
 extern struct cli_cmd UMDStart;
 extern struct cli_cmd UMDStop;
 extern struct cli_cmd UMDClose;
+extern struct cli_cmd UMDDma;    
 
 #ifdef __cplusplus
 }

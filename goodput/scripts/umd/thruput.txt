@@ -1,0 +1,7 @@
+// Start the UMD, then do the throughput test
+
+Uopen
+Uconfig 0x20
+Ustart
+t 3 -1 0
+Udma 3 5 0x200000000 0x100000 0x100000

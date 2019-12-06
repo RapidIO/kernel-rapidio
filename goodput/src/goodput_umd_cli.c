@@ -108,51 +108,79 @@ static int gp_parse_did(struct cli_env *env, char *tok, did_val_t *did_val)
     return 0;
 }
 
-// Parse the token ensuring it is within the range for a worker index and
-// check the status of the worker thread.
-static int gp_parse_worker_index(struct cli_env *env, char *tok, uint16_t *idx)
+static int UMDdmaCmd(struct cli_env *env, int UNUSED(argc), char **argv)
 {
-    if (tok_parse_ushort(tok, idx, 0, MAX_WORKER_IDX, 0)) {
+    uint16_t idx;
+    did_val_t did_val;
+    uint64_t rio_addr;
+    uint64_t buf_sz;
+    uint64_t acc_sz;
+    int n = 0;
+
+    if (gp_parse_worker_index_check_thread(env, argv[n++], &idx, 1)) {
+        goto exit;
+    }
+
+    if (gp_parse_did(env, argv[n++], &did_val))
+    {
+        goto exit;
+    }
+
+    if (tok_parse_ulonglong(argv[n++], &rio_addr, 1, UINT64_MAX, 0))
+    {
         LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_USHORT_MSG_FMT, "<idx>", 0, MAX_WORKER_IDX);
-        return 1;
+        LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<rio_addr>",
+                (uint64_t)1, (uint64_t)UINT64_MAX);
+        goto exit;
     }
+
+    if (gp_parse_ull_pw2(env, argv[n++], "<buf_size>", &buf_sz, FOUR_KB, 4 * SIXTEEN_MB))
+    {
+        goto exit;
+    }
+
+    if (gp_parse_ull_pw2(env, argv[n++], "<acc_size>", &acc_sz, FOUR_KB, 4 * SIXTEEN_MB))
+    {
+        goto exit;
+    }
+
+    if(acc_sz > buf_sz /2)
+    {
+        acc_sz = buf_sz;
+    }
+
+    wkr[idx].action = umd_dma_thru;
+    wkr[idx].umd_engine = &umd_engine;
+    wkr[idx].did_val = did_val;
+    wkr[idx].rio_addr = rio_addr;
+    wkr[idx].byte_cnt = buf_sz;
+    wkr[idx].acc_size = acc_sz;
+    wkr[idx].wr = 1;
+    wkr[idx].use_kbuf = 1;
+    wkr[idx].rdma_buff_size = buf_sz;
+
+    wkr[idx].stop_req = 0;
+    sem_post(&wkr[idx].run);
+
+exit:
     return 0;
 }
 
-// Parse the token ensuring it is within the range for a worker index and
-// check the status of the worker thread.
-static int gp_parse_worker_index_check_thread(struct cli_env *env, char *tok,
-        uint16_t *idx, int want_halted)
-{
-    if (gp_parse_worker_index(env, tok, idx)) {
-        goto err;
-    }
 
-    switch (want_halted) {
-    case 0: if (2 == wkr[*idx].stat) {
-            LOGMSG(env, "\nWorker halted\n");
-            goto err;
-        }
-        break;
-
-    case 1: if (2 != wkr[*idx].stat) {
-            LOGMSG(env, "\nWorker not halted\n");
-            goto err;
-        }
-        break;
-    case 2: if (1 != wkr[*idx].stat) {
-            LOGMSG(env, "\nWorker not running\n");
-            goto err;
-        }
-        break;
-    default: goto err;
-    }
-    return 0;
-err:
-    return 1;
-}
-
+struct cli_cmd UMDDma = {
+    "Udma",
+    3,
+    5,
+    "Measure goodput of UMD DMA writes",
+    "Udma <idx> <did> <rio_addr> <buf_sz> <acc_size>\n"
+        "<idx>      User DMA test thread index: 0 to 7\n"
+        "<did>      target device ID\n"
+        "<rio_addr> is target RapidIO memory address to access\n"
+        "<buf_size> is target buffer size. Must be a power of two from 0x1000 to 0x01000000\n"
+        "<acc_size> is access size of one DMA iteration. Must be a power of two from 0x1000 to 0x01000000\n", 
+    UMDdmaCmd,
+    ATTR_NONE
+};
 
 int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
 {
@@ -347,12 +375,10 @@ int umdConfigCmd(struct cli_env *env, int argc, char **argv)
     }
 
     engine_p->chan_mask = (uint8_t)chan_mask;
-    if(!umd_config(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_config(engine_p);
+    LOGMSG(env, "\nOpen returned %d\n", ret);
 
-    return ret;
+    return 0;
 }
 
 struct cli_cmd UMDConfig =
@@ -372,16 +398,14 @@ struct cli_cmd UMDConfig =
 
 int umdStartCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
-    int ret = -1;
+    int ret;
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(!umd_start(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_start(engine_p);
+    LOGMSG(env, "\nStart returned %d\n", ret);
 
-    return ret;
+    return 0;
 }
 
 struct cli_cmd UMDStart =
@@ -399,16 +423,14 @@ struct cli_cmd UMDStart =
 
 int umdStopCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
-    int ret = -1;
+    int ret;
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(!umd_stop(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_stop(engine_p);
+    LOGMSG(env, "\nStop returned %d\n", ret);
 
-    return ret;
+    return 0;
 
 }
 
@@ -428,16 +450,14 @@ struct cli_cmd UMDStop =
 
 int umdCloseCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
-    int ret = -1;
+    int ret;
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(!umd_close(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_close(engine_p);
+    LOGMSG(env, "\nClose returned %d\n", ret);
 
-    return ret;
+    return 0;
 
 }
 
