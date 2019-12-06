@@ -204,8 +204,8 @@ exit:
 
 struct cli_cmd UMDDma = {
     "Udma",
-    3,
-    9,
+    2,
+    6,
     "Measure goodput of UMD DMA reads/writes",
     "Udma <idx> <ib_size> <ib_rio_addr> <did> <rio_addr> <buf_sz> <data>\n"
         "<idx>      User DMA test thread index: 0 to 7\n"
