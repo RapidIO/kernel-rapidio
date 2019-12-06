@@ -371,12 +371,10 @@ int umdConfigCmd(struct cli_env *env, int argc, char **argv)
     }
 
     engine_p->chan_mask = (uint8_t)chan_mask;
-    if(!umd_config(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_config(engine_p);
+    LOGMSG(env, "\nOpen returned %d\n", ret);
 
-    return ret;
+    return 0;
 }
 
 struct cli_cmd UMDConfig =
@@ -396,16 +394,14 @@ struct cli_cmd UMDConfig =
 
 int umdStartCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
-    int ret = -1;
+    int ret;
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(!umd_start(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_start(engine_p);
+    LOGMSG(env, "\nStart returned %d\n", ret);
 
-    return ret;
+    return 0;
 }
 
 struct cli_cmd UMDStart =
@@ -423,16 +419,14 @@ struct cli_cmd UMDStart =
 
 int umdStopCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
-    int ret = -1;
+    int ret;
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(!umd_stop(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_stop(engine_p);
+    LOGMSG(env, "\nStop returned %d\n", ret);
 
-    return ret;
+    return 0;
 
 }
 
@@ -452,16 +446,14 @@ struct cli_cmd UMDStop =
 
 int umdCloseCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
-    int ret = -1;
+    int ret;
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(!umd_close(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_close(engine_p);
+    LOGMSG(env, "\nClose returned %d\n", ret);
 
-    return ret;
+    return 0;
 
 }
 
