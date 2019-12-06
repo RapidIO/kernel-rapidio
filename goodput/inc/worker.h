@@ -63,6 +63,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "libtime_utils.h"
 #include "RapidIO_Device_Access_Routines_API.h"
 #include "liblist.h"
+#include "tsi721_umd.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -108,6 +109,7 @@ enum req_type {
 	cps_test_switch_lock,
 	maint_traffic,
 	umd_dma_num,
+	umd_dma_thru,
 	last_action
 };
 
@@ -230,6 +232,9 @@ struct worker {
 	uint32_t seven_test_err_resp_time;
 	uint32_t seven_test_resp_to_time;
 	float seven_test_delay;
+
+	struct UMDEngineInfo *umd_engine;
+    uint64_t user_data;
 };
 
 /**
@@ -321,6 +326,12 @@ uint32_t disable_switch_port(DAR_DEV_INFO_t *dev_h,
 extern sem_t tsi721_mutex;
 
 uint32_t tsi721_link_req(uint32_t *response);
+
+extern int alloc_dma_tx_buffer(struct worker *info);
+extern void dealloc_dma_tx_buffer(struct worker *info);
+extern void zero_stats(struct worker *info);
+extern void start_iter_stats(struct worker *info);
+extern void finish_iter_stats(struct worker *info);
 
 #ifdef __cplusplus
 }

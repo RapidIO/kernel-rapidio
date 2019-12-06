@@ -227,6 +227,7 @@ int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t channel_mask
 		return -1;
 
 	h->state = TSI721_UMD_STATE_CONFIGURED;
+
 	return 0;
 }
 

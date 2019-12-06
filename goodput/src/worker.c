@@ -73,6 +73,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "worker.h"
 #include "pw_handling.h"
 #include "goodput.h"
+#include "umd_worker.h"
 #include "Tsi721.h"
 #include "CPS1848.h"
 #include "rio_misc.h"
@@ -82,6 +83,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "RapidIO_Port_Config_API.h"
 #include "RapidIO_Routing_Table_API.h"
 
+#include "umd_worker.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -89,6 +92,8 @@ extern "C" {
 volatile int devid_status[MAX_DEVID_STATUS];
 
 sem_t tsi721_mutex;
+
+extern struct UMDEngineInfo umd_engine;
 
 void init_worker_info(struct worker *info, int first_time)
 {
@@ -160,9 +165,7 @@ void init_worker_info(struct worker *info, int first_time)
     info->dsdist = 0;
     info->dssize = 0;
 
-    //info->umd_engine_h = 0;
-    //info->umd_queue_h = 0;
-
+    info->umd_engine = NULL;
 }
 
 void msg_cleanup_con_skt(struct worker *info);
@@ -900,23 +903,40 @@ void dma_tx_num_cmd(struct worker *info)
 
     for (trans_count = 0; trans_count < info->num_trans; trans_count++) {
         ts_now_mark(&info->meas_ts, 5);
-        dma_rc = single_dma_access(info, 0);
-        if (dma_rc < 0) {
-            ERR("FAILED: dma_rc %d on trans %d!\n",
-                dma_rc, trans_count);
-            return;
-        }
-        if (RIO_TRANSFER_ASYNC == info->dma_sync_type) {
-            dma_rc = rio_wait_async(info->mp_h, dma_rc, 0);
-            if (dma_rc) {
-                ERR("FAILED: DMA WAIT RC %d\n", dma_rc);
-                goto exit;
+
+        if (info->action_mode == user_mode_action) {
+            dma_rc = umd_dma_num_cmd(info, trans_count);
+            if (dma_rc < 0) {
+                ERR("FAILED: dma_rc %d on trans %d!\n",
+                    dma_rc, trans_count);
+                return;
             }
         }
+        else {
+            dma_rc = single_dma_access(info, 0);
+            if (dma_rc < 0) {
+                ERR("FAILED: dma_rc %d on trans %d!\n",
+                    dma_rc, trans_count);
+                return;
+            }
+            if (RIO_TRANSFER_ASYNC == info->dma_sync_type) {
+                dma_rc = rio_wait_async(info->mp_h, dma_rc, 0);
+                if (dma_rc) {
+                    ERR("FAILED: DMA WAIT RC %d\n", dma_rc);
+                    goto exit;
+                }
+            }
+        }
+            
         ts_now_mark(&info->meas_ts, 555);
     }
 
     clock_gettime(CLOCK_MONOTONIC, &info->end_time);
+
+    if (info->action_mode == user_mode_action)
+    {
+        printf("Success for %d transfers\n",trans_count);
+    }
 
     while (!info->stop_req) {
         sleep(0);
@@ -1630,6 +1650,9 @@ void *worker_thread(void *parm)
         case maint_traffic:
             do_maint_traffic(info);
             break;
+	case umd_dma_thru:
+	    umd_goodput(info);
+	    break;
         case no_action:
         case last_action:
         default:
@@ -1663,6 +1686,9 @@ void start_worker_thread(struct worker *info, int new_mp_h, int cpu)
     } else {
         info->mp_h = mp_h;
     }
+
+    info->umd_engine = &umd_engine;
+
     info->mp_num = mp_h_num;
     info->wkr_thr.cpu_req = cpu;
 

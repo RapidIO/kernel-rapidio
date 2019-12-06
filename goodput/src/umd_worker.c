@@ -85,11 +85,17 @@ extern "C" {
 
 #define PATTERN_SIZE  8
 #define UDM_QUEUE_SIZE  (8 * 8192)
+#define INIT_CRC32 0xFF00FF00
+
+#define ADDR_L(x,y) ((uint64_t)((uint64_t)x + (uint64_t)y))
+#define ADDR_P(x,y) ((void *)((uint64_t)x + (uint64_t)y))
+
 
 struct data_prefix
 {
-    uint64_t trans_nth; /*current transaction index*/
-    uint64_t xferf_offset; /* Transfer occurs at xfer_offset bytes from the start of the target buffer */
+    uint32_t trans_nth; /*current transaction index*/
+    uint32_t CRC32;
+    uint64_t xfer_offset; /* Transfer occurs at xfer_offset bytes from the start of the target buffer */
     uint64_t xfer_size; /* Transfer consists of xfer_size*/
     uint8_t pattern[PATTERN_SIZE]; /*Predefined pattern*/
 };
@@ -105,156 +111,6 @@ struct data_status
     int xfer_check; /* 0 – waiting for transfer check, 1 – passed 2 – failed */
     uint8_t pattern[PATTERN_SIZE]; /*Predefined pattern*/
 };
-
-static int umd_allo_ibw(struct UMDEngineInfo *info, int index)
-{
-    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
-    int rc;
-
-    LOGMSG(info->env, "INFO: ib_rio_addr 0x%lx, ib_size 0x%lx\n", dma_trans_p->ib_rio_addr, dma_trans_p->ib_byte_cnt);
-
-    if (!dma_trans_p->ib_byte_cnt || dma_trans_p->ib_valid)
-    {
-        LOGMSG(info->env, "FAILED: window size of 0 or ibwin already exists\n");
-        return -1;
-    }
-
-    rc = rio_ibwin_map(info->engine.dev_fd, &dma_trans_p->ib_rio_addr,
-                    dma_trans_p->ib_byte_cnt, &dma_trans_p->ib_handle);
-    LOGMSG(info->env, "INFO: ib_handle 0x%lx\n", dma_trans_p->ib_handle);
-    
-    if (rc)
-    {
-        LOGMSG(info->env, "FAILED: rio_ibwin_map rc %d:%s\n",
-                    rc, strerror(errno));
-        return -1;
-    }
-    if (dma_trans_p->ib_handle == 0)
-    {
-        LOGMSG(info->env, "FAILED: rio_ibwin_map failed silently with info->ib_handle==0!\n");
-        return -1;
-    }
-
-
-    dma_trans_p->ib_ptr = NULL;
-    dma_trans_p->ib_ptr = mmap(NULL, dma_trans_p->ib_byte_cnt, PROT_READ | PROT_WRITE,
-                MAP_SHARED, info->engine.dev_fd, dma_trans_p->ib_handle);
-    // rc = riomp_dma_map_memory(info->mp_h, info->ib_byte_cnt,
-    //              info->ib_handle, &info->ib_ptr);
-    if (dma_trans_p->ib_ptr == MAP_FAILED)
-    {
-        dma_trans_p->ib_ptr = NULL;
-    }
-
-    if (NULL == dma_trans_p->ib_ptr)
-    {
-        LOGMSG(info->env, "FAILED: riomp_dma_map_memory errno %d:%s\n",
-                    errno, strerror(errno));
-        rio_ibwin_free(info->engine.dev_fd, &dma_trans_p->ib_handle);
-        return -1;
-    }
-
-    memset(dma_trans_p->ib_ptr, 0x0, dma_trans_p->ib_byte_cnt);
-
-    dma_trans_p->ib_valid = 1;
-
-    return 0;
-}
-
-static int umd_free_ibw(struct UMDEngineInfo *info, int index)
-{
-    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
-    int ret = -1, rc;
-
-    if (!dma_trans_p->ib_valid)
-    {
-        LOGMSG(info->env, "No valid inbound window. User thread %d\n", index);
-        return ret;
-    }
-
-    if (dma_trans_p->ib_ptr && dma_trans_p->ib_valid) {
-        rc = munmap(dma_trans_p->ib_ptr, dma_trans_p->ib_byte_cnt);
-        dma_trans_p->ib_ptr = NULL;
-        if (rc)
-        {
-            LOGMSG(info->env, "munmap ib rc %d: %s\n",
-                rc, strerror(errno));
-            ret = -1;
-        }
-    }
-
-    rc = rio_ibwin_free(info->engine.dev_fd, &dma_trans_p->ib_handle);
-    if (rc)
-    {
-        LOGMSG(info->env, "FAILED: rio_ibwin_free rc %d:%s\n",
-                    rc, strerror(errno));
-        ret = -1;
-    }
-
-    dma_trans_p->ib_valid = 0;
-    dma_trans_p->ib_handle = 0;
-
-    return 0;
-}
-
-static int umd_allo_tx_buf(struct UMDEngineInfo *info, int index)
-{
-    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
-    int rc, ret = 0;
-
-
-    dma_trans_p->tx_mem_h = RIO_MAP_ANY_ADDR;
-
-    rc = rio_dbuf_alloc(info->engine.dev_fd, dma_trans_p->buf_size, &dma_trans_p->tx_mem_h);
-
-    if (rc)
-    {
-        LOGMSG(info->env, "FAILED: riomp_dma_dbuf_alloc tx buffer rc %d:%s\n",
-                        rc, strerror(errno));
-        ret = -1;
-        goto exit;
-    }
-
-    dma_trans_p->tx_ptr = NULL;
-    dma_trans_p->tx_ptr = mmap(NULL, dma_trans_p->buf_size,
-            PROT_READ | PROT_WRITE, MAP_SHARED,
-            info->engine.dev_fd, dma_trans_p->tx_mem_h);
-
-    if (dma_trans_p->tx_ptr == MAP_FAILED)
-    {
-        dma_trans_p->tx_ptr = NULL;
-    }
-
-    if (NULL == dma_trans_p->tx_ptr)
-    {
-        LOGMSG(info->env, "FAILED: mmap tx buffer errno %d:%s\n",
-                 errno, strerror(errno));
-        ret = -1;
-        goto exit;
-    }
-
-exit:
-    return ret;
-}
-
-static int umd_free_tx_buf(struct UMDEngineInfo *info, int index)
-{
-    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
-
-    if (dma_trans_p->tx_ptr)
-    {
-        munmap(dma_trans_p->tx_ptr, dma_trans_p->buf_size);
-        dma_trans_p->tx_ptr = NULL;
-    }
-
-    if (dma_trans_p->tx_mem_h)
-    {
-        rio_dbuf_free(info->engine.dev_fd, &dma_trans_p->tx_mem_h);
-        dma_trans_p->tx_mem_h = 0;
-    }
-
-    return 0;
-}
 
 static int umd_allo_queue_mem(struct UMDEngineInfo *info)
 {
@@ -289,9 +145,59 @@ static int umd_free_queue_mem(struct UMDEngineInfo *info)
     return 0;
 }
 
+static uint32_t crc32_table[256];
+
+static uint32_t crc32(uint32_t crc, void *buffer, uint32_t size)  
+{  
+    uint32_t i; 
+    uint8_t *data_p = (uint8_t *)buffer;
+    for (i = 0; i < size; i++)
+    {  
+        crc = crc32_table[(crc ^ data_p[i]) & 0xff] ^ (crc >> 8);  
+    }  
+    return crc ;  
+}
+
+static void umd_init_crc_table(void)  
+{  
+    uint32_t c;  
+    uint32_t i, j;  
+      
+    for (i = 0; i < 256; i++)
+    {  
+        c = (uint32_t)i;  
+        for (j = 0; j < 8; j++) 
+        {  
+            if (c & 1)
+            {
+                c = 0xedb88320L ^ (c >> 1);  
+            }
+            else
+            {
+                c = c >> 1;
+            }
+        }  
+        crc32_table[i] = c;  
+    }  
+}  
+
+static void umd_copy_xfer_data(void *buf, uint32_t size, uint64_t user_data)
+{
+    uint64_t *data_p =  (uint64_t *)buf; //Assume 64 byte alignment.
+    uint32_t count = size / 4;
+    uint32_t i;
+    for(i = 0; i < count; i++)
+    {
+        *data_p =  user_data;
+        data_p++;
+    }
+}
+
 int umd_init_engine(struct UMDEngineInfo *info)
 {
     memset(info, 0x0, sizeof(struct UMDEngineInfo));
+
+    umd_init_crc_table();
 
     return 0;
 }
@@ -328,7 +234,7 @@ int umd_config(struct UMDEngineInfo *info)
 
             if(!tsi721_umd_queue_config_multi(&(info->engine), info->chan_mask, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
             {
-                LOGMSG(info->env, "SUCC: UDM queue is configured. Channel mask 0x%x\n", info->chan_mask);  
+                LOGMSG(info->env, "SUCC: UMD queue is configured. Channel mask 0x%x\n", info->chan_mask);  
                 info->stat = ENGINE_CONFIGURED;
                 return 0;
             }
@@ -419,42 +325,57 @@ int umd_close(struct UMDEngineInfo *info)
     return -1;
 }
 
-int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
+int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
 {
-    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
     data_status *status;
     data_prefix *prefix;
+    void *xfer_p;
     data_suffix *suffix = NULL;
     int32_t ret = 0, rc;
-    uint32_t i;
-    uint32_t loops;
+    UMDEngineInfo* info = worker_info->umd_engine;
+    int index = worker_info->idx;
+    DmaTransfer* dma_trans_p = &info->dma_trans[index];
 
-     if(umd_allo_ibw(info, index))
-     {
-         ret = -1;
-         goto exit;
-     }
+    dma_trans_p->ib_byte_cnt = worker_info->ib_byte_cnt;
+    dma_trans_p->ib_rio_addr = worker_info->ib_rio_addr;
+    dma_trans_p->dest_id     = worker_info->did_val;
+    dma_trans_p->rio_addr    = worker_info->rio_addr;
+    dma_trans_p->buf_size    = worker_info->rdma_buff_size;
+    dma_trans_p->num_trans   = worker_info->num_trans;
+    dma_trans_p->wr          = worker_info->wr;
+    dma_trans_p->user_data   = worker_info->user_data;
+    dma_trans_p->ib_handle   = worker_info->ib_handle;
+    dma_trans_p->ib_ptr      = worker_info->ib_ptr;
+    
+    if (worker_info->stop_req)
+        goto exit;
 
-     if(umd_allo_tx_buf(info,index))
-     {
-         ret  = -1;
-         goto exit;
-     }
+    // Check for allocated inbound window
+    if (!worker_info->ib_valid || !worker_info->ib_ptr)
+    {
+        LOGMSG(info->env, "FAILED: inbound window was not allocated\n");
+        ret = -1;
+        goto exit;
+    }
+
+    if (iter == 0)
+        memset(dma_trans_p->ib_ptr, 0x0, dma_trans_p->ib_byte_cnt);
+
+    if (!worker_info->rdma_ptr || !worker_info->rdma_kbuff)
+    {
+        LOGMSG(info->env, "FAILED: kernel DMA tx buffer not allocated\n");
+        ret  = -1;
+        goto exit;
+    }
+
+    dma_trans_p->tx_mem_h = worker_info->rdma_kbuff;
+    dma_trans_p->tx_ptr   = worker_info->rdma_ptr;
 
     if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
     {
         LOGMSG(info->env, "FAILED: rio_addr, buf_size is 0!\n");
         ret = -1;
         goto exit;
-    }
-
-    if(dma_trans_p->num_trans != 0)
-    {
-        loops = dma_trans_p->num_trans;
-    }
-    else
-    {
-        loops = 0xFFFFFFFF;
     }
 
     if(dma_trans_p->wr)
@@ -466,12 +387,13 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
         prefix_phys  = (void*)dma_trans_p->tx_mem_h;
         payload_phys = (void*)((uintptr_t)dma_trans_p->tx_mem_h + sizeof(data_prefix));
 
-        for(i=0; i<loops; i++)
         {
+            if (worker_info->stop_req)
+                goto exit;
 
             memset(status, 0, sizeof(data_status));
             memset(prefix, 0, sizeof(data_prefix));
-            prefix->trans_nth = i+1;
+            prefix->trans_nth = iter+1;
             prefix->pattern[0] = 0x12;
             prefix->pattern[1] = 0x34;
             prefix->pattern[2] = 0x56;
@@ -480,10 +402,14 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             prefix->pattern[5] = 0xBC;
             prefix->pattern[6] = 0xDE;
             prefix->pattern[7] = 0xF1;
-            prefix->xferf_offset = sizeof(data_prefix);
+            prefix->xfer_offset = sizeof(data_prefix);
             prefix->xfer_size = dma_trans_p->buf_size - sizeof(data_prefix) - sizeof(data_suffix);
 
-            suffix = (data_suffix*)((uintptr_t)prefix + sizeof(data_prefix) + payload_size);
+            xfer_p = (void *)((uint8_t *)(dma_trans_p->tx_ptr) + prefix->xfer_offset);
+            umd_copy_xfer_data(xfer_p, prefix->xfer_size, dma_trans_p->user_data);
+            prefix->CRC32 = crc32(INIT_CRC32, xfer_p, prefix->xfer_size);
+
+            suffix = (data_suffix*)((uint64_t)(dma_trans_p->tx_ptr)  +   prefix->xfer_offset + prefix->xfer_size);
             memset(suffix, 0, sizeof(data_suffix));
             suffix->pattern[0] = 0x1a;
             suffix->pattern[1] = 0x2b;
@@ -499,7 +425,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             if (rc != 0)
             {
                 LOGMSG(info->env, "FAILED: payload dma transfer returned %d\n",ret);
-                continue;
+                goto exit;
             }
 
             // Update prefix
@@ -508,6 +434,9 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             {
                 while(status->xfer_check == 0)
                 {
+                    if (worker_info->stop_req)
+                        goto exit;
+
                     sleep(0.25);
                 }
 
@@ -524,7 +453,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                 {
                     LOGMSG(info->env, "FAILED: Writer status(from Reader) pattern check error: loop %u\n" 
                         "xfer_check %d, data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-                        i,
+                        iter,
                         status->xfer_check,
                         status->pattern[0],
                         status->pattern[1],
@@ -535,14 +464,14 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                         status->pattern[6],
                         status->pattern[7]);
                     ret  = -1;
-                    break;
+                    goto exit;
                 }
             }
             else
             {
                 LOGMSG(info->env, "FAILED: Writer UMD send failed\n");
                 ret = -1;
-                break;
+                goto exit;
             }
         }
     }
@@ -551,10 +480,15 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
         status = (data_status*)dma_trans_p->tx_ptr;
         prefix = (data_prefix*)dma_trans_p->ib_ptr;
 
-        for(i=0; i<loops; i++)
         {
-            while(prefix->trans_nth != i+1 )
+            if (worker_info->stop_req)
+                goto exit;
+
+            while(prefix->trans_nth != iter+1 )
             {
+                if (worker_info->stop_req)
+                    goto exit;
+
                 sleep(0.25);
             }
 
@@ -577,7 +511,20 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                 prefix->pattern[6] == 0xDE &&
                 prefix->pattern[7] == 0xF1)
             {
-               suffix = (data_suffix*)((uint64_t)(dma_trans_p->ib_ptr) + dma_trans_p->ib_byte_cnt -  sizeof(data_suffix));
+               suffix = (data_suffix*)((uint64_t)(dma_trans_p->ib_ptr) + prefix->xfer_offset + prefix->xfer_size);
+
+               while(suffix->pattern[0] == 00 &&
+                    suffix->pattern[1] == 00 &&
+                    suffix->pattern[2] == 00 &&
+                    suffix->pattern[3] == 00 &&
+                    suffix->pattern[4] == 00 &&
+                    suffix->pattern[5] == 00 &&
+                    suffix->pattern[6] == 00 &&
+                    suffix->pattern[7] == 00)
+               {
+                   sleep(0.25);
+               }
+                    
                if(suffix->pattern[0] == 0x1a &&
                     suffix->pattern[1] == 0x2b &&
                     suffix->pattern[2] == 0x3c &&
@@ -587,7 +534,16 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                     suffix->pattern[6] == 0xc3 &&
                     suffix->pattern[7] == 0xd4)
                {
-                  status->xfer_check = 1;
+                   xfer_p = (void *)((uint8_t *)(dma_trans_p->ib_ptr) + prefix->xfer_offset);   
+                   if(prefix->CRC32 != crc32(INIT_CRC32, xfer_p, prefix->xfer_size))
+                   {
+                       status->xfer_check = -1;
+                       LOGMSG(info->env, "FAILED: Reader user data CRC32 validation error\n");
+                   }
+                   else
+                   {
+                       status->xfer_check = 1;
+                   }
                }
                else
                {
@@ -595,7 +551,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
                    
                    LOGMSG(info->env, "FAILED: Reader suffix validation error, loop %u\n" 
                     "data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-                        i,
+                        iter,
                         suffix->pattern[0],
                         suffix->pattern[1],
                         suffix->pattern[2],
@@ -614,7 +570,7 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             
                 LOGMSG(info->env, "FAILED: Reader prefix validation error, loop %u\n"
                     "data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-                    i,
+                    iter,
                     prefix->pattern[0],
                     prefix->pattern[1],
                     prefix->pattern[2],
@@ -634,26 +590,54 @@ int umd_dma_num_cmd(struct UMDEngineInfo *info, int index)
             if (rc !=0 )                
             {
                 ret = -1;
-                LOGMSG(info->env, "FAILED: Reader loop %u, UMD send failed\n", i);
-            }
-
-            if(ret)
-            {
-                break;
+                LOGMSG(info->env, "FAILED: Reader loop %u, UMD send failed\n", iter);
             }
         }
     }
 
+exit:
 
+    return ret;
+}
+
+void umd_goodput(struct worker *info)
+{
+    if (alloc_dma_tx_buffer(info))
+        goto exit;
+
+    zero_stats(info);
+    clock_gettime(CLOCK_MONOTONIC, &info->st_time);
+
+    while (!info->stop_req) {
+        start_iter_stats(info);
+        for (uint64_t count = 0; (count < info->byte_cnt) && !info->stop_req;
+			 count += info->acc_size)
+        {
+            int rc = 0;
+            rc = tsi721_umd_send(&info->umd_engine->engine,
+                                 ADDR_P(info->rdma_kbuff, count),
+                                 info->acc_size,
+                                 ADDR_L(info->rio_addr, count),
+                                 info->did_val
+                                );
+            if(rc)
+            {
+                ERR("FAILED: rc %d src 0x%p dest_id %d dest 0x%x size 0x%x\n",
+                     rc,
+                     ADDR_P(info->rdma_kbuff, count),
+                     info->did_val,
+                     ADDR_L(info->rio_addr, count),
+                     info->acc_size)
+                break;
+            }
+	}
+        info->perf_byte_cnt += info->byte_cnt;
+        finish_iter_stats(info);
+        clock_gettime(CLOCK_MONOTONIC, &info->end_time);
+    }
 
 exit:
-    umd_free_ibw(info,index);
-    umd_free_tx_buf(info, index);
-    if( ret == 0)
-    {
-        LOGMSG(info->env,"INFO: Writer/Reader %d completed %u loops of UDM DMA test successfully!!!\n", dma_trans_p->wr, loops);
-    }
-    return ret;
+    dealloc_dma_tx_buffer(info);
 }
 
 #ifdef __cplusplus

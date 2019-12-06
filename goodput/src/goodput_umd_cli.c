@@ -72,6 +72,9 @@ extern "C" {
 
 struct UMDEngineInfo umd_engine;
 
+int umdOpenCmd(struct cli_env *env, int argc, char **argv);
+int umdConfigCmd(struct cli_env *env, int argc, char **argv);
+int umdStartCmd(struct cli_env *env, int argc, char **argv);
 
 // Parse the token ensuring it is within the provided range. Further ensure it
 // is a power of 2
@@ -105,10 +108,83 @@ static int gp_parse_did(struct cli_env *env, char *tok, did_val_t *did_val)
     return 0;
 }
 
+static int UMDdmaCmd(struct cli_env *env, int UNUSED(argc), char **argv)
+{
+    uint16_t idx;
+    did_val_t did_val;
+    uint64_t rio_addr;
+    uint64_t buf_sz;
+    uint64_t acc_sz;
+    int n = 0;
+
+    if (gp_parse_worker_index_check_thread(env, argv[n++], &idx, 1)) {
+        goto exit;
+    }
+
+    if (gp_parse_did(env, argv[n++], &did_val))
+    {
+        goto exit;
+    }
+
+    if (tok_parse_ulonglong(argv[n++], &rio_addr, 1, UINT64_MAX, 0))
+    {
+        LOGMSG(env, "\n");
+        LOGMSG(env, TOK_ERR_ULONGLONG_HEX_MSG_FMT, "<rio_addr>",
+                (uint64_t)1, (uint64_t)UINT64_MAX);
+        goto exit;
+    }
+
+    if (gp_parse_ull_pw2(env, argv[n++], "<buf_size>", &buf_sz, FOUR_KB, 4 * SIXTEEN_MB))
+    {
+        goto exit;
+    }
+
+    if (gp_parse_ull_pw2(env, argv[n++], "<acc_size>", &acc_sz, FOUR_KB, 4 * SIXTEEN_MB))
+    {
+        goto exit;
+    }
+
+    if(acc_sz > buf_sz /2)
+    {
+        acc_sz = buf_sz;
+    }
+
+    wkr[idx].action = umd_dma_thru;
+    wkr[idx].umd_engine = &umd_engine;
+    wkr[idx].did_val = did_val;
+    wkr[idx].rio_addr = rio_addr;
+    wkr[idx].byte_cnt = buf_sz;
+    wkr[idx].acc_size = acc_sz;
+    wkr[idx].wr = 1;
+    wkr[idx].use_kbuf = 1;
+    wkr[idx].rdma_buff_size = buf_sz;
+
+    wkr[idx].stop_req = 0;
+    sem_post(&wkr[idx].run);
+
+exit:
+    return 0;
+}
+
+
+struct cli_cmd UMDDma = {
+    "Udma",
+    3,
+    5,
+    "Measure goodput of UMD DMA writes",
+    "Udma <idx> <did> <rio_addr> <buf_sz> <acc_size>\n"
+        "<idx>      User DMA test thread index: 0 to 7\n"
+        "<did>      target device ID\n"
+        "<rio_addr> is target RapidIO memory address to access\n"
+        "<buf_size> is target buffer size. Must be a power of two from 0x1000 to 0x01000000\n"
+        "<acc_size> is access size of one DMA iteration. Must be a power of two from 0x1000 to 0x01000000\n", 
+    UMDdmaCmd,
+    ATTR_NONE
+};
 
 int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
 {
-    int idx;
+    uint16_t idx;
     uint64_t ib_size;
     uint64_t ib_rio_addr = RIO_MAP_ANY_ADDR;
     did_val_t did_val;
@@ -118,19 +194,13 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     uint32_t num_trans;
     uint64_t user_data = DMA_USER_DATA_PATTERN;
     struct UMDEngineInfo *engine_p = &umd_engine;
-    struct DmaTransfer *dma_trans_p;
     int ret = -1;
     int n = 0;
     engine_p->env = env;
 
-    if(tok_parse_long(argv[n++], &idx, 0, MAX_UDM_USER_THREAD, 0))
-    {
-        LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UDM_USER_THREAD);
+    if (gp_parse_worker_index_check_thread(env, argv[n++], &idx, 1)) {
         goto exit;
     }
-    dma_trans_p = &(engine_p->dma_trans[idx]);
-
 
     if (gp_parse_ull_pw2(env, argv[n++], "<ib_size>", &ib_size, FOUR_KB, 4 * SIXTEEN_MB))
     {
@@ -192,30 +262,38 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         LOGMSG(env, "User data 0x%lx\n",user_data);
     }
 
-    if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use)
+    // For convenience, if the engine is unallocated then open and allocate it now
+    // Assume mport 0
+    if (umd_engine.stat == ENGINE_UNALLOCATED)
     {
-        //Will a mutex to lock this section if there is no plan to use woker thread infrastructure
-        dma_trans_p->is_in_use = true;
-        dma_trans_p->ib_byte_cnt = ib_size;
-        dma_trans_p->ib_rio_addr = ib_rio_addr;
-        dma_trans_p->dest_id = did_val;
-        dma_trans_p->rio_addr = rio_addr;
-        dma_trans_p->buf_size = buf_sz;
-        dma_trans_p->num_trans = num_trans;
-        dma_trans_p->wr = wr;
-        dma_trans_p->user_data = user_data;
-        dma_trans_p->ib_handle = RIO_MAP_ANY_ADDR;
-        ret = umd_dma_num_cmd(engine_p, idx);
-        dma_trans_p->is_in_use = false;
+        printf("UMD worker started without engine ready. Opening with default mport and channels\n");
+        umdOpenCmd(env, 0, NULL);
+        umdConfigCmd(env, 0, NULL);
+        umdStartCmd(env, 0, NULL);
     }
-    else
-    {
-        LOGMSG(env, "FAILED: User thread state %d . Engine state %d\n",dma_trans_p->is_in_use, engine_p->stat);
-    }   
+
+    wkr[idx].action = dma_tx_num;
+    wkr[idx].action_mode = user_mode_action;
+    wkr[idx].did_val = did_val;
+    wkr[idx].rio_addr = rio_addr;
+    wkr[idx].byte_cnt = buf_sz;
+    wkr[idx].acc_size = buf_sz;
+    wkr[idx].wr = (int)wr;
+    wkr[idx].use_kbuf = 1;
+    wkr[idx].dma_trans_type = RIO_EXCHANGE_NWRITE;
+    wkr[idx].dma_sync_type = RIO_TRANSFER_ASYNC;
+    wkr[idx].rdma_buff_size = buf_sz;
+    wkr[idx].num_trans = (int)num_trans;
+    wkr[idx].user_data = user_data;
+    LOGMSG(env, "Wr %x rio 0x%lx num_trans %d sz 0x%lx\n",
+        wr, rio_addr, num_trans, buf_sz);
+
+    ret = 0;
+
+    sem_post(&wkr[idx].run);
 
 exit:
     return ret;
-
 }
 
 struct cli_cmd UMDDmaNum =
@@ -297,12 +375,10 @@ int umdConfigCmd(struct cli_env *env, int argc, char **argv)
     }
 
     engine_p->chan_mask = (uint8_t)chan_mask;
-    if(!umd_config(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_config(engine_p);
+    LOGMSG(env, "\nOpen returned %d\n", ret);
 
-    return ret;
+    return 0;
 }
 
 struct cli_cmd UMDConfig =
@@ -322,16 +398,14 @@ struct cli_cmd UMDConfig =
 
 int umdStartCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
-    int ret = -1;
+    int ret;
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(!umd_start(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_start(engine_p);
+    LOGMSG(env, "\nStart returned %d\n", ret);
 
-    return ret;
+    return 0;
 }
 
 struct cli_cmd UMDStart =
@@ -349,16 +423,14 @@ struct cli_cmd UMDStart =
 
 int umdStopCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
-    int ret = -1;
+    int ret;
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(!umd_stop(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_stop(engine_p);
+    LOGMSG(env, "\nStop returned %d\n", ret);
 
-    return ret;
+    return 0;
 
 }
 
@@ -378,16 +450,14 @@ struct cli_cmd UMDStop =
 
 int umdCloseCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
-    int ret = -1;
+    int ret;
     struct UMDEngineInfo *engine_p = &umd_engine;
     engine_p->env = env;
 
-    if(!umd_close(engine_p))
-    {
-        ret = 0;
-    }
+    ret = umd_close(engine_p);
+    LOGMSG(env, "\nClose returned %d\n", ret);
 
-    return ret;
+    return 0;
 
 }
 

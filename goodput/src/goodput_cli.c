@@ -98,6 +98,8 @@ char *req_type_str[(int)last_action+1] = {
     (char *)"Pol4PW",
     (char *)"SwLock",
     (char *)"Maint ",
+    (char *)"UDnum ",
+    (char *)"UDthru",
     (char *)"LAST"
 };
 
@@ -115,7 +117,7 @@ static int gp_parse_worker_index(struct cli_env *env, char *tok, uint16_t *idx)
 
 // Parse the token ensuring it is within the range for a worker index and
 // check the status of the worker thread.
-static int gp_parse_worker_index_check_thread(struct cli_env *env, char *tok,
+int gp_parse_worker_index_check_thread(struct cli_env *env, char *tok,
         uint16_t *idx, int want_halted)
 {
     if (gp_parse_worker_index(env, tok, idx)) {
@@ -477,6 +479,7 @@ static int IBAllocCmd(struct cli_env *env, int argc, char **argv)
         goto exit;
     }
 
+    printf("IBallocCmd: RIO %lx sz %lx handle %p\n",ib_rio_addr,ib_size,(void*)ib_phys_addr);
     wkr[idx].action = alloc_ibwin;
     wkr[idx].ib_byte_cnt = ib_size;
     wkr[idx].ib_rio_addr = ib_rio_addr;
@@ -4655,6 +4658,7 @@ struct cli_cmd *goodput_cmds[] = {
     &UMDStart,
     &UMDStop,
     &UMDClose,
+    &UMDDma,
 };
 
 int bind_goodput_cmds(void)
