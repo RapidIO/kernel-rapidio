@@ -412,7 +412,8 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
         goto exit;
     }
 
-    memset(dma_trans_p->ib_ptr, 0x0, dma_trans_p->ib_byte_cnt);
+    if (iter == 0)
+        memset(dma_trans_p->ib_ptr, 0x0, dma_trans_p->ib_byte_cnt);
 
     if(!dma_trans_p->tx_ptr && umd_allo_tx_buf(info,index) != 0)
     {
