@@ -1,7 +1,6 @@
 /*
 ****************************************************************************
-Copyright (c) 2015, Integrated Device Technology Inc.
-Copyright (c) 2015, RapidIO Trade Association
+Copyright (c) 2019, Renesas Electronics Corporation.
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification,
@@ -31,29 +30,24 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *************************************************************************
 */
 
-#ifndef __GOODPUT_CLI_H__
-#define __GOODPUT_CLI_H__
-
-#include "libcli.h"
-#include "goodput.h"
-#include "worker.h"
+#ifndef __GOODPUT_UMD_CLI_H__
+#define __GOODPUT_UMD_CLI_H__
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define FOUR_KB (4*1024)
-#define SIXTEEN_MB (16*1024*1024)
-
-/**
- * @brief Bind goodput commands into CLI base
- *
- */
-
-int bind_goodput_cmds(void);
+extern struct cli_cmd UMDDmaNum;
+extern struct cli_cmd UMDOpen;
+extern struct cli_cmd UMDConfig;
+extern struct cli_cmd UMDStart;
+extern struct cli_cmd UMDStop;
+extern struct cli_cmd UMDClose;
+    
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __GOODPUT_CLI_H__ */
+#endif /* __GOODPUT_UMD_CLI_H__ */
+

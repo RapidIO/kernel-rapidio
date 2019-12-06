@@ -107,6 +107,7 @@ enum req_type {
 	cps_poll_for_pw,
 	cps_test_switch_lock,
 	maint_traffic,
+	umd_dma_num,
 	last_action
 };
 
@@ -266,6 +267,8 @@ void start_worker_thread(struct worker *info, int new_mp_h, int cpu);
  */
 
 void shutdown_worker_thread(struct worker *info);
+
+void *worker_thread(void *parm);
 
 bool dma_alloc_ibwin(struct worker *info);
 

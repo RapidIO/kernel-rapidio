@@ -60,6 +60,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "libcli.h"
 #include "liblog.h"
 #include "worker.h"
+#include "umd_worker.h"
 #include "goodput.h"
 #include "goodput_cli.h"
 #include "rio_mport_lib.h"
@@ -125,6 +126,7 @@ int main(int argc, char *argv[])
 
 	char* rc_script = NULL;
 	struct cli_env t_env;
+	int cli_rc;
 
 	signal(SIGINT, sig_handler);
 	signal(SIGHUP, sig_handler);
@@ -163,15 +165,25 @@ int main(int argc, char *argv[])
 	for (int i = 0; i < MAX_WORKERS; i++)
 		init_worker_info(&wkr[i], 1);
 
-	cli_init_base(goodput_thread_shutdown);
-	bind_goodput_cmds();
-	liblog_bind_cli_cmds();
+	umd_init_engine(&umd_engine);
+
+	cli_rc = cli_init_base(goodput_thread_shutdown);
+	cli_rc |= liblog_bind_cli_cmds();
+	cli_rc |= bind_goodput_cmds();
+	if (cli_rc) {
+		printf(	"\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+			"\n!!!                                          !!!"
+			"\n!!!  WARNING: CLI initialization had errors! !!!"
+			"\n!!!                                          !!!"
+			"\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+			"\n");
+	}
 
 	// INFW: Temporary script path for hot swap testing.
 	//
 	// char script_path[10] = {0};
 	// snprintf(script_path, sizeof(script_path), "mport%d", mport_num);
-	set_script_path((char *)"scripts/cps_hs");
+	set_script_path((char *)"scripts/umd");
 
 	init_cli_env(&t_env);
 	splashScreen(&t_env, (char *)"Goodput Evaluation Application");
