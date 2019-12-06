@@ -904,7 +904,7 @@ void dma_tx_num_cmd(struct worker *info)
         ts_now_mark(&info->meas_ts, 5);
 
         if (info->action_mode == user_mode_action) {
-            umd_dma_num_cmd(info);
+            umd_dma_num_cmd(info, trans_count);
         }
         else {
             dma_rc = single_dma_access(info, 0);

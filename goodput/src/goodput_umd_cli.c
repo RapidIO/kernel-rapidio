@@ -251,20 +251,15 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     wkr[idx].byte_cnt = buf_sz;
     wkr[idx].acc_size = buf_sz;
     wkr[idx].wr = (int)wr;
-    //wkr[idx].use_kbuf = (int)kbuf;
     wkr[idx].use_kbuf = 1;
-    //wkr[idx].dma_trans_type = convert_int_to_riomp_dma_directio_type(trans);
     wkr[idx].dma_trans_type = RIO_EXCHANGE_NWRITE;
     wkr[idx].dma_sync_type = RIO_TRANSFER_ASYNC;
     wkr[idx].rdma_buff_size = ib_size;
     wkr[idx].num_trans = (int)num_trans;
     wkr[idx].user_data = user_data;
-    LOGMSG(env, "Wr %x kbuf %x trans %x sync %x num %x\n",
-        wkr[idx].wr, wkr[idx].use_kbuf,
-        wkr[idx].dma_trans_type, wkr[idx].dma_sync_type,
-        wkr[idx].num_trans);
 
-    wkr[idx].stop_req = 1; // TBD - add continuous test
+    ret = 0;
+
     sem_post(&wkr[idx].run);
 
 exit:

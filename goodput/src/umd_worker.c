@@ -327,19 +327,16 @@ int umd_close(struct UMDEngineInfo *info)
     return -1;
 }
 
-int umd_dma_num_cmd(struct worker *worker_info)
+int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
 {
     data_status *status;
     data_prefix *prefix;
     data_suffix *suffix = NULL;
     int32_t ret = 0, rc;
-    uint32_t i;
-    uint32_t loops;
     UMDEngineInfo* info = worker_info->umd_engine;
     int index = worker_info->idx;
     DmaTransfer* dma_trans_p = &info->dma_trans[index];
 
-    printf("umd_dma_num_cmd: wr %d worker ib_byte_cnt %lx byte_cnt %lx\n",worker_info->wr,worker_info->ib_byte_cnt,worker_info->byte_cnt);
     dma_trans_p->ib_byte_cnt = worker_info->ib_byte_cnt;
     dma_trans_p->ib_rio_addr = worker_info->ib_rio_addr;
     dma_trans_p->dest_id     = worker_info->did_val;
@@ -350,6 +347,9 @@ int umd_dma_num_cmd(struct worker *worker_info)
     dma_trans_p->user_data   = worker_info->user_data;
     dma_trans_p->ib_handle   = worker_info->ib_handle;
     dma_trans_p->ib_ptr      = worker_info->ib_ptr;
+    
+    if (worker_info->stop_req)
+        goto exit;
 
     // Check for allocated inbound window
     if (!worker_info->ib_valid || !worker_info->ib_ptr)
@@ -374,16 +374,6 @@ int umd_dma_num_cmd(struct worker *worker_info)
         goto exit;
     }
 
-    printf("num_trans %d\n",dma_trans_p->num_trans);
-    if(dma_trans_p->num_trans != 0)
-    {
-        loops = dma_trans_p->num_trans;
-    }
-    else
-    {
-        loops = 0xFFFFFFFF;
-    }
-
     if(dma_trans_p->wr)
     {
         void *payload_phys, *prefix_phys;
@@ -393,12 +383,13 @@ int umd_dma_num_cmd(struct worker *worker_info)
         prefix_phys  = (void*)dma_trans_p->tx_mem_h;
         payload_phys = (void*)((uintptr_t)dma_trans_p->tx_mem_h + sizeof(data_prefix));
 
-        for(i=0; i<loops; i++)
         {
+            if (worker_info->stop_req)
+                goto exit;
 
             memset(status, 0, sizeof(data_status));
             memset(prefix, 0, sizeof(data_prefix));
-            prefix->trans_nth = i+1;
+            prefix->trans_nth = iter+1;
             prefix->pattern[0] = 0x12;
             prefix->pattern[1] = 0x34;
             prefix->pattern[2] = 0x56;
@@ -426,21 +417,18 @@ int umd_dma_num_cmd(struct worker *worker_info)
             if (rc != 0)
             {
                 LOGMSG(info->env, "FAILED: payload dma transfer returned %d\n",ret);
-                continue;
+                goto exit;
             }
 
             // Update prefix
             rc = tsi721_umd_send(&(info->engine), prefix_phys, sizeof(data_prefix), dma_trans_p->rio_addr, dma_trans_p->dest_id);
             if(rc == 0)
             {
-                int printed = 0;
                 while(status->xfer_check == 0)
                 {
-                    if (!printed)
-                    {
-                        printf("waiting for xfer_check to change\n");
-                        printed = 1;
-                    }
+                    if (worker_info->stop_req)
+                        goto exit;
+
                     sleep(0.25);
                 }
 
@@ -457,7 +445,7 @@ int umd_dma_num_cmd(struct worker *worker_info)
                 {
                     LOGMSG(info->env, "FAILED: Writer status(from Reader) pattern check error: loop %u\n" 
                         "xfer_check %d, data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-                        i,
+                        iter,
                         status->xfer_check,
                         status->pattern[0],
                         status->pattern[1],
@@ -468,14 +456,14 @@ int umd_dma_num_cmd(struct worker *worker_info)
                         status->pattern[6],
                         status->pattern[7]);
                     ret  = -1;
-                    break;
+                    goto exit;
                 }
             }
             else
             {
                 LOGMSG(info->env, "FAILED: Writer UMD send failed\n");
                 ret = -1;
-                break;
+                goto exit;
             }
         }
     }
@@ -483,12 +471,16 @@ int umd_dma_num_cmd(struct worker *worker_info)
     {
         status = (data_status*)dma_trans_p->tx_ptr;
         prefix = (data_prefix*)dma_trans_p->ib_ptr;
-        printf("UMD worker: receiver, status %p prefix %p\n",dma_trans_p->tx_ptr,dma_trans_p->ib_ptr);
 
-        for(i=0; i<loops; i++)
         {
-            while(prefix->trans_nth != i+1 )
+            if (worker_info->stop_req)
+                goto exit;
+
+            while(prefix->trans_nth != iter+1 )
             {
+                if (worker_info->stop_req)
+                    goto exit;
+
                 sleep(0.25);
             }
 
@@ -529,7 +521,7 @@ int umd_dma_num_cmd(struct worker *worker_info)
                    
                    LOGMSG(info->env, "FAILED: Reader suffix validation error, loop %u\n" 
                     "data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-                        i,
+                        iter,
                         suffix->pattern[0],
                         suffix->pattern[1],
                         suffix->pattern[2],
@@ -548,7 +540,7 @@ int umd_dma_num_cmd(struct worker *worker_info)
             
                 LOGMSG(info->env, "FAILED: Reader prefix validation error, loop %u\n"
                     "data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-                    i,
+                    iter,
                     prefix->pattern[0],
                     prefix->pattern[1],
                     prefix->pattern[2],
@@ -568,27 +560,19 @@ int umd_dma_num_cmd(struct worker *worker_info)
             if (rc !=0 )                
             {
                 ret = -1;
-                LOGMSG(info->env, "FAILED: Reader loop %u, UMD send failed\n", i);
-            }
-
-            if(ret)
-            {
-                break;
+                LOGMSG(info->env, "FAILED: Reader loop %u, UMD send failed\n", iter);
             }
         }
     }
 
-    while (!worker_info->stop_req) {
-        sleep(0);
-    }
-
-
 exit:
     umd_free_tx_buf(info, index);
+
     if( ret == 0)
     {
-        LOGMSG(info->env,"INFO: Writer/Reader %d completed %u loops of UDM DMA test successfully!!!\n", dma_trans_p->wr, loops);
+        LOGMSG(info->env,"INFO: %s completed loop %u of UDM DMA test successfully!!!\n", dma_trans_p->wr ? "Writer" : "Reader", iter);
     }
+    
     return ret;
 }
 
