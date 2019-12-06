@@ -61,9 +61,12 @@ struct DmaTransfer
     bool wr;
     int  dest_id;
     uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
-    uint64_t buf_size; /* Number of bytes to access for direct IO and DMA */
+    uint64_t buf_size; /* Total mumber of bytes to access for direct IO and DMA */
+    uint64_t acc_size; /* Access size of one DMA iteratioin*/
     uint32_t num_trans; /* Number of loops for data transfer. 0 indicates infinite number of loops*/
     uint64_t user_data; /*User predinfed data*/
+    struct timespec st_time; /* Start of the run, for throughput */
+    struct timespec end_time; /* End of the run, for throughput*/
 
     int ib_valid;
     uint64_t ib_handle; /* Inbound window RapidIO handle */
@@ -106,7 +109,7 @@ extern int umd_close(struct UMDEngineInfo *info);
 
 extern int umd_dma_num_cmd(struct UMDEngineInfo *info, int index);
 
-extern int umd_dma_cmd(struct UMDEngineInfo *info, int index);
+extern int umd_goodput(struct UMDEngineInfo *info, int index);
 
 #ifdef __cplusplus
 }

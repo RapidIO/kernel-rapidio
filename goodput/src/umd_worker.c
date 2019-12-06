@@ -87,6 +87,10 @@ extern "C" {
 #define UDM_QUEUE_SIZE  (8 * 8192)
 #define INIT_CRC32 0xFF00FF00
 
+#define ADDR_L(x,y) ((uint64_t)((uint64_t)x + (uint64_t)y))
+#define ADDR_P(x,y) ((void *)((uint64_t)x + (uint64_t)y))
+
+
 struct data_prefix
 {
     uint32_t trans_nth; /*current transaction index*/
@@ -722,38 +726,71 @@ exit:
     return ret;
 }
 
-int umd_dma_cmd(struct UMDEngineInfo *info, int index)
+int umd_goodput(struct UMDEngineInfo *info, int index)
 {
     struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
-    int32_t ret = 0;
-    uint32_t loops=0;
+    int32_t ret = 0, rc;
+    uint32_t loops = 0;
+    uint64_t count = 0;
 
-     if(umd_allo_ibw(info, index))
-     {
-         ret = -1;
-         goto exit;
-     }
-
-     if(umd_allo_tx_buf(info,index))
-     {
-         ret  = -1;
-         goto exit;
-     }
-
-    if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
+    if(umd_allo_tx_buf(info,index))
     {
-        LOGMSG(info->env, "FAILED: rio_addr, buf_size is 0!\n");
+        ret  = -1;
+        goto exit;
+    }
+
+    if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size || !dma_trans_p->acc_size)
+    {
+        LOGMSG(info->env, "FAILED: rio_addr, buf_size or access size is 0!\n");
         ret = -1;
         goto exit;
     }
 
+    clock_gettime(CLOCK_MONOTONIC, &dma_trans_p->st_time);
+    for(count = 0; count < dma_trans_p->buf_size; count += dma_trans_p->acc_size)
+    {
+
+        loops++;
+        rc = tsi721_umd_send(&(info->engine), 
+            ADDR_P(dma_trans_p->tx_mem_h,count), 
+            dma_trans_p->acc_size,
+            ADDR_L(dma_trans_p->rio_addr, count),
+            dma_trans_p->dest_id
+            );
+        if(rc)
+        {
+            ret = -1;
+            LOGMSG(info->env, "FAILED: in the %u loop of DMA send in\n", loops);
+            break;
+        }
+    }
+    clock_gettime(CLOCK_MONOTONIC, &dma_trans_p->end_time);
+
 exit:
-    umd_free_ibw(info,index);
     umd_free_tx_buf(info, index);
     if( ret == 0)
     {
-        LOGMSG(info->env,"INFO: Writer/Reader %d completed %u loops of UDM DMA test successfully!!!\n", dma_trans_p->wr, loops);
-    }
+        struct timespec elapsed_time;
+        float MBps;
+        float Gbps;
+        uint64_t nsec;
+        uint64_t byte_cnt;
+    
+        LOGMSG(info->env, "INFO: Throughput completed. %u loops of UDM DMA send!!!\n", loops);
+        LOGMSG(info->env, "INFO: Total tranfer size 0x%lx\n", byte_cnt = loops * dma_trans_p->acc_size );
+        LOGMSG(info->env, "INFO: Each DMA access size 0x%lx.\n", dma_trans_p->acc_size );
+        LOGMSG(info->env, "INFO: start time %lu s:%lu ns\n", dma_trans_p->st_time.tv_sec, dma_trans_p->st_time.tv_nsec);
+        LOGMSG(info->env, "INFO: end time %lu s:%lu ns\n",dma_trans_p->end_time.tv_sec, dma_trans_p->end_time.tv_nsec);
+
+        elapsed_time = time_difference(dma_trans_p->st_time, dma_trans_p->st_time);
+        nsec = elapsed_time.tv_nsec + (elapsed_time.tv_sec * 1000000000);
+
+        //1000 or 1024???
+        MBps = (float)(byte_cnt / (1024*1024)) / ((float)nsec / 1000000000.0);
+        Gbps = (MBps * 1024.0 * 1024.0 * 8.0) / 1000000000.0;
+        LOGMSG(info->env, "INFO: duration %lu ns\n", nsec);
+        LOGMSG(info->env, "INFO: Goodput %4.3f MBps, %2.3f Gbp\n", MBps, Gbps);
+    }   
     return ret;
 }
 
