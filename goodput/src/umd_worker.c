@@ -339,7 +339,7 @@ int umd_dma_num_cmd(struct worker *worker_info)
     int index = worker_info->idx;
     DmaTransfer* dma_trans_p = &info->dma_trans[index];
 
-    printf("umd_dma_num_cmd: worker ib_byte_cnt %lx byte_cnt %lx\n",worker_info->ib_byte_cnt,worker_info->byte_cnt);
+    printf("umd_dma_num_cmd: wr %d worker ib_byte_cnt %lx byte_cnt %lx\n",worker_info->wr,worker_info->ib_byte_cnt,worker_info->byte_cnt);
     dma_trans_p->ib_byte_cnt = worker_info->ib_byte_cnt;
     dma_trans_p->ib_rio_addr = worker_info->ib_rio_addr;
     dma_trans_p->dest_id     = worker_info->did_val;
@@ -359,17 +359,14 @@ int umd_dma_num_cmd(struct worker *worker_info)
         goto exit;
     }
 
-    printf("Inbound window ok\n");
     memset(dma_trans_p->ib_ptr, 0x0, dma_trans_p->ib_byte_cnt);
 
-    printf("tx_ptr %p, allocate buffer\n",dma_trans_p->tx_ptr);
     if(!dma_trans_p->tx_ptr && umd_allo_tx_buf(info,index) != 0)
     {
         ret  = -1;
         goto exit;
     }
 
-    printf("tx_ptr %p\n",dma_trans_p->tx_ptr);
     if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
     {
         LOGMSG(info->env, "FAILED: rio_addr, buf_size is 0!\n");
@@ -486,6 +483,7 @@ int umd_dma_num_cmd(struct worker *worker_info)
     {
         status = (data_status*)dma_trans_p->tx_ptr;
         prefix = (data_prefix*)dma_trans_p->ib_ptr;
+        printf("UMD worker: receiver, status %p prefix %p\n",dma_trans_p->tx_ptr,dma_trans_p->ib_ptr);
 
         for(i=0; i<loops; i++)
         {

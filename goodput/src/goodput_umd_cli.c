@@ -72,6 +72,9 @@ extern "C" {
 
 struct UMDEngineInfo umd_engine;
 
+int umdOpenCmd(struct cli_env *env, int argc, char **argv);
+int umdConfigCmd(struct cli_env *env, int argc, char **argv);
+int umdStartCmd(struct cli_env *env, int argc, char **argv);
 
 // Parse the token ensuring it is within the provided range. Further ensure it
 // is a power of 2
@@ -229,6 +232,16 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     else
     {
         LOGMSG(env, "User data 0x%lx\n",user_data);
+    }
+
+    // For convenience, if the engine is unallocated then open and allocate it now
+    // Assume mport 0
+    if (umd_engine.stat == ENGINE_UNALLOCATED)
+    {
+        printf("UMD worker started without engine ready. Opening with default mport and channels\n");
+        umdOpenCmd(env, 0, NULL);
+        umdConfigCmd(env, 0, NULL);
+        umdStartCmd(env, 0, NULL);
     }
 
     wkr[idx].action = dma_tx_num;

@@ -265,8 +265,6 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 	int8_t chan = -1;
 	tsi721_dma_desc descriptor;
 
-    printf("tsi721_umd_send phys %p sz %x rio %lx dest %d\n",phys_addr,num_bytes,rio_addr,dest_id);
-
 	// Form descriptor in local mem
 	tsi721_umd_create_dma_descriptor(
 		&descriptor, // dest pointer

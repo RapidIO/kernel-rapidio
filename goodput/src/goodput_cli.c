@@ -477,6 +477,7 @@ static int IBAllocCmd(struct cli_env *env, int argc, char **argv)
         goto exit;
     }
 
+    printf("IBallocCmd: RIO %lx sz %lx handle %p\n",ib_rio_addr,ib_size,(void*)ib_phys_addr);
     wkr[idx].action = alloc_ibwin;
     wkr[idx].ib_byte_cnt = ib_size;
     wkr[idx].ib_rio_addr = ib_rio_addr;
