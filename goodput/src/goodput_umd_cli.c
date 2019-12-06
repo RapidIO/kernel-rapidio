@@ -107,25 +107,16 @@ static int gp_parse_did(struct cli_env *env, char *tok, did_val_t *did_val)
 
 static int UMDdmaCmd(struct cli_env *env, int UNUSED(argc), char **argv)
 {
-    int idx;
+    uint16_t idx;
     did_val_t did_val;
     uint64_t rio_addr;
     uint64_t buf_sz;
     uint64_t acc_sz;
-    struct UMDEngineInfo *engine_p = &umd_engine;
-    struct DmaTransfer *dma_trans_p;
-    int ret = -1;
     int n = 0;
-    engine_p->env = env;
 
-    if(tok_parse_long(argv[n++], &idx, 0, MAX_UDM_USER_THREAD, 0))
-    {
-        LOGMSG(env, "\n");
-        LOGMSG(env, TOK_ERR_LONG_MSG_FMT,"<idx>", 0, MAX_UDM_USER_THREAD);
+    if (gp_parse_worker_index_check_thread(env, argv[n++], &idx, 1)) {
         goto exit;
     }
-    dma_trans_p = &(engine_p->dma_trans[idx]);
-
 
     if (gp_parse_did(env, argv[n++], &did_val))
     {
@@ -155,25 +146,21 @@ static int UMDdmaCmd(struct cli_env *env, int UNUSED(argc), char **argv)
         acc_sz = buf_sz;
     }
 
-    if (engine_p->stat == ENGINE_READY && !dma_trans_p->is_in_use)
-    {
-        //Will a mutex to lock this section if there is no plan to use woker thread infrastructure
-        dma_trans_p->is_in_use = true;
-        dma_trans_p->dest_id = did_val;
-        dma_trans_p->rio_addr = rio_addr;
-        dma_trans_p->buf_size = buf_sz;
-        dma_trans_p->acc_size = acc_sz;
-        ret = umd_goodput(engine_p, idx);
-        dma_trans_p->is_in_use = false;
-    }
-    else
-    {
-        LOGMSG(env, "FAILED: User thread state %d . Engine state %d\n",dma_trans_p->is_in_use, engine_p->stat);
-    }   
+    wkr[idx].action = umd_dma_thru;
+    wkr[idx].umd_engine = &umd_engine;
+    wkr[idx].did_val = did_val;
+    wkr[idx].rio_addr = rio_addr;
+    wkr[idx].byte_cnt = buf_sz;
+    wkr[idx].acc_size = acc_sz;
+    wkr[idx].wr = 1;
+    wkr[idx].use_kbuf = 1;
+    wkr[idx].rdma_buff_size = buf_sz;
+
+    wkr[idx].stop_req = 0;
+    sem_post(&wkr[idx].run);
 
 exit:
-    return ret;
-
+    return 0;
 }
 
 

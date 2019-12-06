@@ -51,6 +51,7 @@ extern "C" {
  */
 
 int bind_goodput_cmds(void);
+extern int gp_parse_worker_index_check_thread(struct cli_env *env, char *tok, uint16_t *idx, int want_halted);
 
 #ifdef __cplusplus
 }

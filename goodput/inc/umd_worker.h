@@ -34,6 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __UMD_WORKER_H__
 #define __UMD_WORKER_H__
 
+#include "worker.h"
 #include "tsi721_umd.h"
 
 #ifdef __cplusplus
@@ -109,7 +110,7 @@ extern int umd_close(struct UMDEngineInfo *info);
 
 extern int umd_dma_num_cmd(struct UMDEngineInfo *info, int index);
 
-extern int umd_goodput(struct UMDEngineInfo *info, int index);
+extern void umd_goodput(struct worker *info);
 
 #ifdef __cplusplus
 }

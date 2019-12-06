@@ -98,6 +98,8 @@ char *req_type_str[(int)last_action+1] = {
     (char *)"Pol4PW",
     (char *)"SwLock",
     (char *)"Maint ",
+    (char *)"UDnum ",
+    (char *)"UDthru",
     (char *)"LAST"
 };
 
@@ -115,7 +117,7 @@ static int gp_parse_worker_index(struct cli_env *env, char *tok, uint16_t *idx)
 
 // Parse the token ensuring it is within the range for a worker index and
 // check the status of the worker thread.
-static int gp_parse_worker_index_check_thread(struct cli_env *env, char *tok,
+int gp_parse_worker_index_check_thread(struct cli_env *env, char *tok,
         uint16_t *idx, int want_halted)
 {
     if (gp_parse_worker_index(env, tok, idx)) {
