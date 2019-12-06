@@ -305,7 +305,7 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 	uint32_t status = TSI721_RD32(TSI721_DMACXSTS(chan));
 	while(status & TSI721_DMACXSTS_RUN)
 	{
-		usleep(100);
+		usleep(1);
 		status = TSI721_RD32(TSI721_DMACXSTS(chan));
 	}
 	
