@@ -335,6 +335,8 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
 	h->chan[chan].in_use = false;
 	sem_post(&h->chan_sem); // mark a dma engine is free for use
 
+    usleep(0); // avoid this thread monopolizing, if there is a waiting sender thread allow it to run
+
 	return 0;
 }
 
