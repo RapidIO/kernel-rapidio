@@ -330,6 +330,7 @@ uint32_t tsi721_link_req(uint32_t *response);
 extern int alloc_dma_tx_buffer(struct worker *info);
 extern void dealloc_dma_tx_buffer(struct worker *info);
 extern void zero_stats(struct worker *info);
+extern void start_iter_stats(struct worker *info);
 extern void finish_iter_stats(struct worker *info);
 
 #ifdef __cplusplus

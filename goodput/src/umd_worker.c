@@ -735,6 +735,7 @@ void umd_goodput(struct worker *info)
     clock_gettime(CLOCK_MONOTONIC, &info->st_time);
 
     while (!info->stop_req) {
+        start_iter_stats(info);
         for (uint64_t count = 0; (count < info->byte_cnt) && !info->stop_req;
 			 count += info->acc_size)
         {
@@ -757,6 +758,7 @@ void umd_goodput(struct worker *info)
             }
 	}
         info->perf_byte_cnt += info->byte_cnt;
+        finish_iter_stats(info);
         clock_gettime(CLOCK_MONOTONIC, &info->end_time);
     }
 
