@@ -194,7 +194,6 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     uint32_t num_trans;
     uint64_t user_data = DMA_USER_DATA_PATTERN;
     struct UMDEngineInfo *engine_p = &umd_engine;
-    int ret = -1;
     int n = 0;
     engine_p->env = env;
 
@@ -288,12 +287,10 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     LOGMSG(env, "Wr %x rio 0x%lx num_trans %d sz 0x%lx\n",
         wr, rio_addr, num_trans, buf_sz);
 
-    ret = 0;
-
     sem_post(&wkr[idx].run);
 
 exit:
-    return ret;
+    return 0;
 }
 
 struct cli_cmd UMDDmaNum =
