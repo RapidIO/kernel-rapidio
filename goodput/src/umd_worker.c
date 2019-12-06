@@ -108,64 +108,6 @@ struct data_status
     uint8_t pattern[PATTERN_SIZE]; /*Predefined pattern*/
 };
 
-static int umd_allo_tx_buf(struct UMDEngineInfo *info, int index)
-{
-    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
-    int rc, ret = 0;
-
-    dma_trans_p->tx_mem_h = RIO_MAP_ANY_ADDR;
-
-    rc = rio_dbuf_alloc(info->engine.dev_fd, dma_trans_p->buf_size, &dma_trans_p->tx_mem_h);
-
-    if (rc)
-    {
-        LOGMSG(info->env, "FAILED: riomp_dma_dbuf_alloc tx buffer rc %d:%s\n",
-                        rc, strerror(errno));
-        ret = -1;
-        goto exit;
-    }
-
-    dma_trans_p->tx_ptr = NULL;
-    dma_trans_p->tx_ptr = mmap(NULL, dma_trans_p->buf_size,
-            PROT_READ | PROT_WRITE, MAP_SHARED,
-            info->engine.dev_fd, dma_trans_p->tx_mem_h);
-
-    if (dma_trans_p->tx_ptr == MAP_FAILED)
-    {
-        dma_trans_p->tx_ptr = NULL;
-    }
-
-    if (NULL == dma_trans_p->tx_ptr)
-    {
-        LOGMSG(info->env, "FAILED: mmap tx buffer errno %d:%s\n",
-                 errno, strerror(errno));
-        ret = -1;
-        goto exit;
-    }
-
-exit:
-    return ret;
-}
-
-static int umd_free_tx_buf(struct UMDEngineInfo *info, int index)
-{
-    struct DmaTransfer *dma_trans_p = &info->dma_trans[index];
-
-    if (dma_trans_p->tx_ptr)
-    {
-        munmap(dma_trans_p->tx_ptr, dma_trans_p->buf_size);
-        dma_trans_p->tx_ptr = NULL;
-    }
-
-    if (dma_trans_p->tx_mem_h)
-    {
-        rio_dbuf_free(info->engine.dev_fd, &dma_trans_p->tx_mem_h);
-        dma_trans_p->tx_mem_h = 0;
-    }
-
-    return 0;
-}
-
 static int umd_allo_queue_mem(struct UMDEngineInfo *info)
 {
     int rc, ret = 0;
@@ -415,11 +357,15 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
     if (iter == 0)
         memset(dma_trans_p->ib_ptr, 0x0, dma_trans_p->ib_byte_cnt);
 
-    if(!dma_trans_p->tx_ptr && umd_allo_tx_buf(info,index) != 0)
+    if (!worker_info->rdma_ptr || !worker_info->rdma_kbuff)
     {
+        LOGMSG(info->env, "FAILED: kernel DMA tx buffer not allocated\n");
         ret  = -1;
         goto exit;
     }
+
+    dma_trans_p->tx_mem_h = worker_info->rdma_kbuff;
+    dma_trans_p->tx_ptr   = worker_info->rdma_ptr;
 
     if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
     {
@@ -646,13 +592,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
     }
 
 exit:
-    umd_free_tx_buf(info, index);
 
-    if( ret == 0)
-    {
-        LOGMSG(info->env,"INFO: %s completed loop %u of UDM DMA test successfully!!!\n", dma_trans_p->wr ? "Writer" : "Reader", iter);
-    }
-    
     return ret;
 }
 

@@ -904,7 +904,12 @@ void dma_tx_num_cmd(struct worker *info)
         ts_now_mark(&info->meas_ts, 5);
 
         if (info->action_mode == user_mode_action) {
-            umd_dma_num_cmd(info, trans_count);
+            dma_rc = umd_dma_num_cmd(info, trans_count);
+            if (dma_rc < 0) {
+                ERR("FAILED: dma_rc %d on trans %d!\n",
+                    dma_rc, trans_count);
+                return;
+            }
         }
         else {
             dma_rc = single_dma_access(info, 0);
@@ -926,6 +931,11 @@ void dma_tx_num_cmd(struct worker *info)
     }
 
     clock_gettime(CLOCK_MONOTONIC, &info->end_time);
+
+    if (info->action_mode == user_mode_action)
+    {
+        printf("Success for %d transfers\n",trans_count);
+    }
 
     while (!info->stop_req) {
         sleep(0);

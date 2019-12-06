@@ -254,9 +254,11 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     wkr[idx].use_kbuf = 1;
     wkr[idx].dma_trans_type = RIO_EXCHANGE_NWRITE;
     wkr[idx].dma_sync_type = RIO_TRANSFER_ASYNC;
-    wkr[idx].rdma_buff_size = ib_size;
+    wkr[idx].rdma_buff_size = buf_sz;
     wkr[idx].num_trans = (int)num_trans;
     wkr[idx].user_data = user_data;
+    LOGMSG(env, "Wr %x rio 0x%lx num_trans %d sz 0x%lx\n",
+        wr, rio_addr, num_trans, buf_sz);
 
     ret = 0;
 
