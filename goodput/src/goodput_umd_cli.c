@@ -219,14 +219,14 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
         goto exit;
     }
 
-    if (argc > 7 && tok_parse_ul(argv[n++], &num_trans, 0))
+    if (argc > 5 && tok_parse_ul(argv[n++], &num_trans, 0))
     {
         LOGMSG(env, "\n");
         LOGMSG(env, TOK_ERR_UL_HEX_MSG_FMT, "<num>");
         goto exit;
     }
 
-    if( argc > 8 && tok_parse_ull(argv[n], &user_data,0))
+    if( argc > 6 && tok_parse_ull(argv[n], &user_data,0))
     {
         LOGMSG(env, "\n");
         LOGMSG(env, TOK_ERR_ULL_HEX_MSG_FMT, "<user_data>");
@@ -276,7 +276,7 @@ struct cli_cmd UMDDmaNum =
     2,
     7,
     "Send a specified number of DMA reads/writes",
-    "Udnum <idx> <ib_size> <ib_rio_addr> <did> <rio_addr> <buf_sz> <wr> <num> <data>\n"
+    "Udnum <idx> <did> <rio_addr> <buf_sz> <wr> <num> <data>\n"
         "<idx>      User DMA test thread index: 0 to 7\n"
         "<did>      target device ID\n"
         "<rio_addr> is target RapidIO memory address to access\n"
