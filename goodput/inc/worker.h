@@ -79,161 +79,161 @@ extern "C" {
  */
 
 enum req_type {
-	no_action,
-	direct_io,
-	direct_io_tx_lat,
-	direct_io_rx_lat,
-	dma_tx,
-	dma_tx_num,
-	dma_tx_lat,
-	dma_rx_lat,
-	dma_rx_gp,
-	message_tx,
-	message_tx_lat,
-	message_tx_oh,
-	message_rx,
-	message_rx_lat,
-	message_rx_oh,
-	alloc_ibwin,
-	free_ibwin,
-	shutdown_worker,
-	reg_scrub,
-	seven_test_switch_mgmt,
-	seven_test_721I,
-	seven_test_721_recovery,
-	seven_handle_link_init,
-	seven_test_pw_rx,
-	cps_handle_cps_pw,
-	cps_handle_721_pw,
-	cps_poll_for_pw,
-	cps_test_switch_lock,
-	maint_traffic,
-	umd_dma_num,
-	umd_dma_thru,
-	last_action
+    no_action,
+    direct_io,
+    direct_io_tx_lat,
+    direct_io_rx_lat,
+    dma_tx,
+    dma_tx_num,
+    dma_tx_lat,
+    dma_rx_lat,
+    dma_rx_gp,
+    message_tx,
+    message_tx_lat,
+    message_tx_oh,
+    message_rx,
+    message_rx_lat,
+    message_rx_oh,
+    alloc_ibwin,
+    free_ibwin,
+    shutdown_worker,
+    reg_scrub,
+    seven_test_switch_mgmt,
+    seven_test_721I,
+    seven_test_721_recovery,
+    seven_handle_link_init,
+    seven_test_pw_rx,
+    cps_handle_cps_pw,
+    cps_handle_721_pw,
+    cps_poll_for_pw,
+    cps_test_switch_lock,
+    maint_traffic,
+    umd_dma_num,
+    umd_dma_thru,
+    last_action
 };
 
 enum req_mode {
-	kernel_action,
-	user_mode_action
+    kernel_action,
+    user_mode_action
 };
 
 #define MIN_RDMA_BUFF_SIZE 0x10000
 
 struct thread_cpu {
-	int cpu_req; /* Requested CPU, -1 means no CPU affinity */
-	int cpu_run; /* Currently running on this CPU */
-	pthread_t thr; /* Thread being migrated... */
+    int cpu_req; /* Requested CPU, -1 means no CPU affinity */
+    int cpu_run; /* Currently running on this CPU */
+    pthread_t thr; /* Thread being migrated... */
 };
 
 struct worker {
-	int idx; /* index of this worker thread */
-	struct thread_cpu wkr_thr;
-	sem_t started;
-	int stat; /* 0 - dead, 1 - running, 2 stopped */
-	volatile int stop_req; /* 0 - continue, 1 - stop 2 - shutdown, SOFT_RESTART */
-	volatile int port_ok; // True if endpoint's link is in working order,
-				// False if DMA must wait for links return.
-	sem_t run;  /* Managed by controller, post this sem to start a stopped woker */
-	enum req_type action;
-	enum req_mode action_mode;
-	did_val_t did_val;
-	did_val_t prev_did_val;
-	hc_t hc;
+    int idx; /* index of this worker thread */
+    struct thread_cpu wkr_thr;
+    sem_t started;
+    int stat; /* 0 - dead, 1 - running, 2 stopped */
+    volatile int stop_req; /* 0 - continue, 1 - stop 2 - shutdown, SOFT_RESTART */
+    volatile int port_ok; // True if endpoint's link is in working order,
+                // False if DMA must wait for links return.
+    sem_t run;  /* Managed by controller, post this sem to start a stopped woker */
+    enum req_type action;
+    enum req_mode action_mode;
+    did_val_t did_val;
+    did_val_t prev_did_val;
+    hc_t hc;
 
-	uint16_t ignore_dma_errs; // 0 - halt on DMA error, 1: continue
-	uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
-	uint64_t byte_cnt; /* Number of bytes to access for direct IO and DMA */
-	uint64_t acc_size; /* Bytes per transfer for direct IO and DMA */
-	int      max_iter; /* For infinite loop tests make this the upper bound of loops*/
+    uint16_t ignore_dma_errs; // 0 - halt on DMA error, 1: continue
+    uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
+    uint64_t byte_cnt; /* Number of bytes to access for direct IO and DMA */
+    uint64_t acc_size; /* Bytes per transfer for direct IO and DMA */
+    int      max_iter; /* For infinite loop tests make this the upper bound of loops*/
 
-	int wr;
-	int mp_num;	/* Mport index */
-	int mp_h_is_mine; /* 0 - common mp_h, 1 - worker specific mp_h */
-	int mp_h;
+    int wr;
+    int mp_num; /* Mport index */
+    int mp_h_is_mine; /* 0 - common mp_h, 1 - worker specific mp_h */
+    int mp_h;
 
-	int ob_valid;
-	uint64_t ob_handle; /* Outbound window RapidIO address */
-	uint64_t ob_byte_cnt; /* Outbound window size */
-	void *ob_ptr; /* Pointer to mapped ob_handle */
+    int ob_valid;
+    uint64_t ob_handle; /* Outbound window RapidIO address */
+    uint64_t ob_byte_cnt; /* Outbound window size */
+    void *ob_ptr; /* Pointer to mapped ob_handle */
 
-	int ib_valid;
-	uint64_t ib_handle; /* Inbound window RapidIO handle */
-	uint64_t ib_rio_addr; /* Inbound window RapidIO address */
-	uint64_t ib_byte_cnt; /* Inbound window size */
-	void *ib_ptr; /* Pointer to mapped ib_handle */
+    int ib_valid;
+    uint64_t ib_handle; /* Inbound window RapidIO handle */
+    uint64_t ib_rio_addr; /* Inbound window RapidIO address */
+    uint64_t ib_byte_cnt; /* Inbound window size */
+    void *ib_ptr; /* Pointer to mapped ib_handle */
 
-	uint8_t data8_tx;
-	uint16_t data16_tx;
-	uint32_t data32_tx;
-	uint64_t data64_tx;
+    uint8_t data8_tx;
+    uint16_t data16_tx;
+    uint32_t data32_tx;
+    uint64_t data64_tx;
 
-	uint8_t data8_rx;
-	uint16_t data16_rx;
-	uint32_t data32_rx;
-	uint64_t data64_rx;
+    uint8_t data8_rx;
+    uint16_t data16_rx;
+    uint32_t data32_rx;
+    uint64_t data64_rx;
 
-	int use_kbuf;
-	enum rio_exchange dma_trans_type;
-	enum rio_transfer_sync dma_sync_type;
-	uint64_t rdma_kbuff;
-	uint64_t rdma_buff_size;
-	void *rdma_ptr;
-	int num_trans;
+    int use_kbuf;
+    enum rio_exchange dma_trans_type;
+    enum rio_transfer_sync dma_sync_type;
+    uint64_t rdma_kbuff;
+    uint64_t rdma_buff_size;
+    void *rdma_ptr;
+    int num_trans;
 
-	int mb_valid;
-	rio_mailbox_t mb;
-	rio_socket_t acc_skt;
-	int acc_skt_valid;
-	rio_socket_t con_skt;
-	int con_skt_valid;
-	int msg_size;  /* Minimum 20 bytes for CM messaging!!! */
-	uint16_t sock_num; /* RIO CM socket to connect to */
-	void *sock_tx_buf;
-	void *sock_rx_buf;
+    int mb_valid;
+    rio_mailbox_t mb;
+    rio_socket_t acc_skt;
+    int acc_skt_valid;
+    rio_socket_t con_skt;
+    int con_skt_valid;
+    int msg_size;  /* Minimum 20 bytes for CM messaging!!! */
+    uint16_t sock_num; /* RIO CM socket to connect to */
+    void *sock_tx_buf;
+    void *sock_rx_buf;
 
-	uint64_t perf_msg_cnt; /* Messages read/written */
-	uint64_t perf_byte_cnt; /* bytes read/written */
-	struct timespec st_time; /* Start of the run, for throughput */
-	struct timespec end_time; /* End of the run, for throughput*/
+    uint64_t perf_msg_cnt; /* Messages read/written */
+    uint64_t perf_byte_cnt; /* bytes read/written */
+    struct timespec st_time; /* Start of the run, for throughput */
+    struct timespec end_time; /* End of the run, for throughput*/
 
-	uint64_t perf_iter_cnt; /* Number of repetitions */
-	struct timespec iter_st_time; /* Start of the iteration, latency */
-	struct timespec iter_end_time; /* End of the iteration, latency */
-	struct timespec tot_iter_time; /* Total time for all iterations */
-	struct timespec min_iter_time; /* Minimum time over all iterations */
-	struct timespec max_iter_time; /* Maximum time over all iterations */
-	struct timespec iter_time_lim; /* Maximum time for an iteration. */
-					/* Drop all times above this limit */
+    uint64_t perf_iter_cnt; /* Number of repetitions */
+    struct timespec iter_st_time; /* Start of the iteration, latency */
+    struct timespec iter_end_time; /* End of the iteration, latency */
+    struct timespec tot_iter_time; /* Total time for all iterations */
+    struct timespec min_iter_time; /* Minimum time over all iterations */
+    struct timespec max_iter_time; /* Maximum time over all iterations */
+    struct timespec iter_time_lim; /* Maximum time for an iteration. */
+                    /* Drop all times above this limit */
 
-	struct seq_ts desc_ts;
-	struct seq_ts fifo_ts;
-	struct seq_ts meas_ts;
+    struct seq_ts desc_ts;
+    struct seq_ts fifo_ts;
+    struct seq_ts meas_ts;
 
-	uint16_t ssdist;
-	uint16_t sssize;
-	uint16_t dsdist;
-	uint16_t dssize;
+    uint16_t ssdist;
+    uint16_t sssize;
+    uint16_t dsdist;
+    uint16_t dssize;
 
 /* pw mutex, list, and process_pw are only used by the CPS hot swap
  * scheme.
  */
-	void *status;
-	DAR_DEV_INFO_t *dev_h;
-	sem_t pw_mutex;
-	struct l_head_t pw;
-	sem_t process_pw;
+    void *status;
+    DAR_DEV_INFO_t *dev_h;
+    sem_t pw_mutex;
+    struct l_head_t pw;
+    sem_t process_pw;
 #define TSI721_I 0
 #define CPS_I 1
-	struct worker *hs_worker[2];
-	uint32_t tsi721_ct;
-	uint32_t seven_test_period;
-	uint32_t seven_test_downtime;
-	uint32_t seven_test_err_resp_time;
-	uint32_t seven_test_resp_to_time;
-	float seven_test_delay;
+    struct worker *hs_worker[2];
+    uint32_t tsi721_ct;
+    uint32_t seven_test_period;
+    uint32_t seven_test_downtime;
+    uint32_t seven_test_err_resp_time;
+    uint32_t seven_test_resp_to_time;
+    float seven_test_delay;
 
-	struct UMDEngineInfo *umd_engine;
+    struct tsi721_umd *umd_engine_p;
     uint64_t user_data;
 };
 
@@ -256,7 +256,7 @@ void init_worker_info(struct worker *info, int first_time);
  * @brief Starts a worker thread that performs Direct IO, DMA, and/or messaging
  *
  * @param[in] info Pointer to worker info, must have been initialized by
- *		init_worker_info prior to this call.
+ *      init_worker_info prior to this call.
  * @param[in] new_mp_h If <> 0, open mport again to get new DMA channel
  * @param[in] cpu The cpu that should run the thread, -1 for all cpus
  * @return Null pointer, no return status

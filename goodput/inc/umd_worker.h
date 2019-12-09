@@ -45,70 +45,16 @@ extern "C" {
 #define MAX_UDM_USER_THREAD_IDX 7
 #define MAX_UDM_USER_THREAD (MAX_UDM_USER_THREAD_IDX + 1)
 
-enum EngineStat
-{
-    ENGINE_UNALLOCATED,
-    ENGINE_UNCONFIGURED,
-    ENGINE_CONFIGURED,
-    ENGINE_READY,
-    ENGINE_STATE_MAX
-};
+extern struct tsi721_umd umd_engine;
 
-struct DmaTransfer
-{
-    int index;
-    bool is_in_use;
+extern int umd_init_engine_handle(struct tsi721_umd *engine_p);
 
-    bool wr;
-    int  dest_id;
-    uint64_t rio_addr; /* Target RapidIO address for direct IO and DMA */
-    uint64_t buf_size; /* Total mumber of bytes to access for direct IO and DMA */
-    uint64_t acc_size; /* Access size of one DMA iteratioin*/
-    uint32_t num_trans; /* Number of loops for data transfer. 0 indicates infinite number of loops*/
-    uint64_t user_data; /*User predinfed data*/
-    struct timespec st_time; /* Start of the run, for throughput */
-    struct timespec end_time; /* End of the run, for throughput*/
+extern int umd_config(struct tsi721_umd *engine_p, uint8_t chan_mask);
 
-    int ib_valid;
-    uint64_t ib_handle; /* Inbound window RapidIO handle */
-    uint64_t ib_rio_addr; /* Inbound window RapidIO address */
-    uint64_t ib_byte_cnt; /* Inbound window size */
-    void *ib_ptr; /* Pointer to mapped ib_handle. Start address of ibw in user space */
-
-    void *tx_ptr;
-    uint64_t tx_mem_h;
-};
-
-struct UMDEngineInfo
-{
-    int mport_id;
-    enum EngineStat stat; //all state transfer will require mutex for pretection. Assume race condition will rarely happen. So no pretection for now.
-    struct tsi721_umd engine;
-    uint8_t chan_mask;
-
-    void *queue_mem_ptr;
-    uint64_t queue_mem_h;
-
-    struct DmaTransfer dma_trans[MAX_UDM_USER_THREAD];
-
-    struct cli_env *env;
-};
-
-extern struct UMDEngineInfo umd_engine;
-
-extern int umd_init_engine(struct UMDEngineInfo *info);
-
-extern int umd_open(struct UMDEngineInfo *info);
-
-extern int umd_config(struct UMDEngineInfo *info);
-
-extern int umd_start(struct UMDEngineInfo *info);
-
-extern int umd_stop(struct UMDEngineInfo *info);
-
-extern int umd_close(struct UMDEngineInfo *info);
+extern int umd_close(struct tsi721_umd *engine_p);
 
 extern int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter);
+
 extern void umd_goodput(struct worker *info);
 
 #ifdef __cplusplus

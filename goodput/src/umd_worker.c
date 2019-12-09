@@ -115,40 +115,45 @@ struct data_status
     uint8_t pattern[PATTERN_SIZE]; /*Predefined pattern*/
 };
 
-static int umd_allo_queue_mem(struct UMDEngineInfo *info)
+static uint64_t queue_mem_h;
+
+static int umd_allo_queue_mem(struct tsi721_umd *umd_engine_p)
 {
-    int rc, ret = 0;
+    int ret = 0;
 
-    info->queue_mem_h = RIO_MAP_ANY_ADDR;
+    queue_mem_h = RIO_MAP_ANY_ADDR;
 
-    rc = rio_dbuf_alloc(info->engine.dev_fd, UDM_QUEUE_SIZE, &info->queue_mem_h);
+    ret = rio_dbuf_alloc(umd_engine_p->dev_fd, UDM_QUEUE_SIZE, &queue_mem_h);
 
-    if (rc)
+    if (ret)
     {
-        LOGMSG(info->env, "FAILED: riomp_dma_dbuf_alloc queue buffer rc %d: %d %s\n",
-                        rc, errno, strerror(errno));
-        ret = -1;
+        ERR("FAILED: riomp_dma_dbuf_alloc queue buffer rc %d: %d %s\n",
+                        ret, errno, strerror(errno));
     }
     else
     {
-        LOGMSG(info->env, "INFO: DMA queue handle 0x%lx\n", info->queue_mem_h);
+        INFO("INFO: DMA queue handle 0x%lx\n", &queue_mem_h);
     }
 
     return ret;
 }
 
-static int umd_free_queue_mem(struct UMDEngineInfo *info)
+static int umd_free_queue_mem(struct tsi721_umd *umd_engine_p)
 {
-    if (info->queue_mem_h)
+    if (queue_mem_h)
     {
-        rio_dbuf_free(info->engine.dev_fd, &info->queue_mem_h);
-        info->queue_mem_h = 0;
+        rio_dbuf_free(umd_engine_p->dev_fd, &queue_mem_h);
+        queue_mem_h = 0;
     }
 
     return 0;
 }
 
+
+
 static uint32_t crc32_table[256];
+
+#if 0
 
 static uint32_t crc32(uint32_t crc, void *buffer, uint32_t size)  
 {  
@@ -160,6 +165,22 @@ static uint32_t crc32(uint32_t crc, void *buffer, uint32_t size)
     }  
     return crc ;  
 }
+
+static void umd_copy_xfer_data(void *buf, uint32_t size, uint64_t user_data)
+{
+    uint64_t *data_p =  (uint64_t *)buf; //Assume 64 byte alignment.
+    uint32_t count = size / 4;
+    uint32_t i;
+    for(i = 0; i < count; i++)
+    {
+        *data_p =  user_data;
+        data_p++;
+    }
+}
+
+
+#endif 
+
 
 static void umd_init_crc_table(void)  
 {  
@@ -184,152 +205,66 @@ static void umd_init_crc_table(void)
     }  
 }  
 
-static void umd_copy_xfer_data(void *buf, uint32_t size, uint64_t user_data)
-{
-    uint64_t *data_p =  (uint64_t *)buf; //Assume 64 byte alignment.
-    uint32_t count = size / 4;
-    uint32_t i;
-    for(i = 0; i < count; i++)
-    {
-        *data_p =  user_data;
-        data_p++;
-    }
-}
 
-int umd_init_engine(struct UMDEngineInfo *info)
+int umd_init_engine_handle(struct tsi721_umd *engine_p)
 {
-    memset(info, 0x0, sizeof(struct UMDEngineInfo));
+    memset(engine_p, 0x0, sizeof(struct tsi721_umd));
 
     umd_init_crc_table();
 
     return 0;
 }
 
-int umd_open(struct UMDEngineInfo *info)
+int umd_config(struct tsi721_umd *engine_p, uint8_t chan_mask)
 {
-    if( info->stat ==  ENGINE_UNALLOCATED)
+    if(!umd_allo_queue_mem(engine_p))
     {
-        if(tsi721_umd_open(&(info->engine), info->mport_id) == 0)
-        {
-            info->stat = ENGINE_UNCONFIGURED;
-            return 0;
-        }
-        else
-        {
-            LOGMSG(info->env, "FAILED: driver returns error.\n");
-        }
+       INFO("Queue mem is allocated.\n");
+
+       if(!tsi721_umd_queue_config_multi(engine_p, chan_mask, (void *)queue_mem_h, UDM_QUEUE_SIZE))
+       {
+           INFO("UMD queue is configured. Channel mask 0x%x\n", chan_mask);  
+           return 0;
+       }
+       else
+       {
+           ERR("FAILED: Engine configure error. Channel mask 0x%x\n", chan_mask);
+           umd_free_queue_mem(engine_p);
+       }
     }
     else
     {
-        LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
+        ERR("Allocate queue memory error.\n");
     }
 
     return -1;
 }
 
-int umd_config(struct UMDEngineInfo *info)
+int umd_close(struct tsi721_umd *engine_p)
 {
-    if(info->stat == ENGINE_UNCONFIGURED)
+    umd_free_queue_mem(engine_p);
+    
+    if(tsi721_umd_close(engine_p) == 0)
     {
-        if(!umd_allo_queue_mem(info))
-        {
-            LOGMSG(info->env, "SUCC: queue mem is allocated.\n");
-
-            if(!tsi721_umd_queue_config_multi(&(info->engine), info->chan_mask, (void *)info->queue_mem_h, UDM_QUEUE_SIZE))
-            {
-                LOGMSG(info->env, "SUCC: UMD queue is configured. Channel mask 0x%x\n", info->chan_mask);  
-                info->stat = ENGINE_CONFIGURED;
-                return 0;
-            }
-            else
-            {
-                LOGMSG(info->env, "FAILED: Engine configure error. Channel mask 0x%x\n", info->chan_mask);
-                umd_free_queue_mem(info);
-            }
-        }
-        else
-        {
-            LOGMSG(info->env, "FAILED: allocate queue memory error.\n");
-        }
+        return 0;
     }
     else
     {
-        LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
+        ERR("FAILED: UMD close returns failure\n");
     }
-
-    return -1;
-}
-
-int umd_start(struct UMDEngineInfo *info)
-{
-    if(info->stat == ENGINE_CONFIGURED)
-    {
-        if(tsi721_umd_start(&(info->engine)) == 0)
-        {
-            info->stat = ENGINE_READY;
-            LOGMSG(info->env, "SUCC: UMD engine started.\n");
-            return 0;
-        }
-        else
-        {
-            LOGMSG(info->env, "FAILED: UMD start returns failure\n");
-        }
-    }
-    else
-    {
-        LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
-    }
-
-    return 0;
-}
-
-int umd_stop(struct UMDEngineInfo *info)
-{
-    if(info->stat == ENGINE_READY)
-    {
-        if(tsi721_umd_stop(&(info->engine)) == 0)
-        {
-            info->stat = ENGINE_CONFIGURED;
-            return 0;
-        }
-        else
-        {
-            LOGMSG(info->env, "FAILED: UMD stop returns failure\n");
-        }
-    }
-    else
-    {
-        LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
-    }
-
-    return -1;
-}
-
-int umd_close(struct UMDEngineInfo *info)
-{
-    if(info->stat == ENGINE_CONFIGURED || info->stat ==  ENGINE_UNCONFIGURED)
-    {
-        umd_free_queue_mem(info);
-
-        if(tsi721_umd_close(&(info->engine)) == 0)
-        {
-            info->stat = ENGINE_UNALLOCATED;
-            return 0;
-        }
-        else
-        {
-            LOGMSG(info->env, "FAILED: UMD close returns failure\n");
-        }
-    }
-    else
-    {
-        LOGMSG(info->env, "FAILED: Engine is in state %d\n", info->stat);
-    }
+    
     return -1;
 }
 
 int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
 {
+    worker_info->acc_size = 1;//to aovid compiling error. 
+    iter = 0;//to aovid compiling error. 
+    if(iter == 1)
+    {
+        return -1;
+    }
+#if 0
     data_status *status;
     data_prefix *prefix;
     void *xfer_p;
@@ -356,7 +291,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
     // Check for allocated inbound window
     if (!worker_info->ib_valid || !worker_info->ib_ptr)
     {
-        LOGMSG(info->env, "FAILED: inbound window was not allocated\n");
+        ERR("FAILED: inbound window was not allocated\n");
         ret = -1;
         goto exit;
     }
@@ -366,7 +301,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
 
     if (!worker_info->rdma_ptr || !worker_info->rdma_kbuff)
     {
-        LOGMSG(info->env, "FAILED: kernel DMA tx buffer not allocated\n");
+        ERR("FAILED: kernel DMA tx buffer not allocated\n");
         ret  = -1;
         goto exit;
     }
@@ -376,7 +311,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
 
     if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
     {
-        LOGMSG(info->env, "FAILED: rio_addr, buf_size is 0!\n");
+        ERR("FAILED: rio_addr, buf_size is 0!\n");
         ret = -1;
         goto exit;
     }
@@ -427,7 +362,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
             rc = tsi721_umd_send(&(info->engine), payload_phys, payload_size + sizeof(data_suffix), dma_trans_p->rio_addr+sizeof(data_prefix), dma_trans_p->dest_id);
             if (rc != 0)
             {
-                LOGMSG(info->env, "FAILED: payload dma transfer returned %d\n",ret);
+                ERR("FAILED: payload dma transfer returned %d\n",ret);
                 goto exit;
             }
 
@@ -454,7 +389,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
                     status->pattern[6] != 0x77 ||
                     status->pattern[7] != 0x88)
                 {
-                    LOGMSG(info->env, "FAILED: Writer status(from Reader) pattern check error: loop %u\n" 
+                    ERR("FAILED: Writer status(from Reader) pattern check error: loop %u\n" 
                         "xfer_check %d, data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
                         iter,
                         status->xfer_check,
@@ -472,7 +407,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
             }
             else
             {
-                LOGMSG(info->env, "FAILED: Writer UMD send failed\n");
+                ERR("FAILED: Writer UMD send failed\n");
                 ret = -1;
                 goto exit;
             }
@@ -541,7 +476,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
                    if(prefix->CRC32 != crc32(INIT_CRC32, xfer_p, prefix->xfer_size))
                    {
                        status->xfer_check = -1;
-                       LOGMSG(info->env, "FAILED: Reader user data CRC32 validation error\n");
+                       ERR("FAILED: Reader user data CRC32 validation error\n");
                    }
                    else
                    {
@@ -552,7 +487,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
                {
                    ret = -1;
                    
-                   LOGMSG(info->env, "FAILED: Reader suffix validation error, loop %u\n" 
+                   ERR("FAILED: Reader suffix validation error, loop %u\n" 
                     "data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
                         iter,
                         suffix->pattern[0],
@@ -571,7 +506,7 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
             {
                 ret = -1;
             
-                LOGMSG(info->env, "FAILED: Reader prefix validation error, loop %u\n"
+                ERR("FAILED: Reader prefix validation error, loop %u\n"
                     "data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
                     iter,
                     prefix->pattern[0],
@@ -593,14 +528,15 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
             if (rc !=0 )                
             {
                 ret = -1;
-                LOGMSG(info->env, "FAILED: Reader loop %u, UMD send failed\n", iter);
+                ERR("FAILED: Reader loop %u, UMD send failed\n", iter);
             }
         }
     }
 
 exit:
+#endif
 
-    return ret;
+    return 0;
 }
 
 void umd_goodput(struct worker *info)
@@ -614,10 +550,10 @@ void umd_goodput(struct worker *info)
     while (!info->stop_req) {
         start_iter_stats(info);
         for (uint64_t count = 0; (count < info->byte_cnt) && !info->stop_req;
-			 count += info->acc_size)
+             count += info->acc_size)
         {
             int rc = 0;
-            rc = tsi721_umd_send(&info->umd_engine->engine,
+            rc = tsi721_umd_send(info->umd_engine_p,
                                  ADDR_P(info->rdma_kbuff, count),
                                  info->acc_size,
                                  ADDR_L(info->rio_addr, count),
@@ -633,7 +569,7 @@ void umd_goodput(struct worker *info)
                      info->acc_size)
                 break;
             }
-	}
+    }
         info->perf_byte_cnt += info->byte_cnt;
         finish_iter_stats(info);
         clock_gettime(CLOCK_MONOTONIC, &info->end_time);

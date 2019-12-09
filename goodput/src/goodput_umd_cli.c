@@ -70,7 +70,7 @@ extern "C" {
 
 #define DMA_USER_DATA_PATTERN 0xFEB6FEB5C9D8C9D7
 
-struct UMDEngineInfo umd_engine;
+struct tsi721_umd umd_engine;
 
 int umdOpenCmd(struct cli_env *env, int argc, char **argv);
 int umdConfigCmd(struct cli_env *env, int argc, char **argv);
@@ -150,7 +150,6 @@ static int UMDdmaCmd(struct cli_env *env, int UNUSED(argc), char **argv)
     }
 
     wkr[idx].action = umd_dma_thru;
-    wkr[idx].umd_engine = &umd_engine;
     wkr[idx].did_val = did_val;
     wkr[idx].rio_addr = rio_addr;
     wkr[idx].byte_cnt = buf_sz;
@@ -193,9 +192,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
     uint16_t wr;
     uint32_t num_trans;
     uint64_t user_data = DMA_USER_DATA_PATTERN;
-    struct UMDEngineInfo *engine_p = &umd_engine;
     int n = 0;
-    engine_p->env = env;
 
     if (gp_parse_worker_index_check_thread(env, argv[n++], &idx, 1)) {
         goto exit;
@@ -263,7 +260,7 @@ int umdDmaNumCmd(struct cli_env *env, int argc, char **argv)
 
     // For convenience, if the engine is unallocated then open and allocate it now
     // Assume mport 0
-    if (umd_engine.stat == ENGINE_UNALLOCATED)
+    if (umd_engine.state == TSI721_UMD_STATE_UNALLOCATED)
     {
         printf("UMD worker started without engine ready. Opening with default mport and channels\n");
         umdOpenCmd(env, 0, NULL);
@@ -318,17 +315,19 @@ struct cli_cmd UMDDmaNum =
 int umdOpenCmd(struct cli_env *env, int argc, char **argv)
 {
     uint32_t mport_id = 0;
-    struct UMDEngineInfo *engine_p = &umd_engine;
-    engine_p->env = env;
+    struct tsi721_umd *engine_p = &umd_engine;
+    int ret = 0;
 
-    if(argc && tok_parse_mport_id(argv[0], &mport_id, 0)) {
-    LOGMSG(env, TOK_ERR_MPORT_MSG_FMT);
+    if(argc && tok_parse_mport_id(argv[0], &mport_id, 0))
+    {
+        LOGMSG(env, TOK_ERR_MPORT_MSG_FMT);
+        ret = -1;
         goto exit;
     }
 
-    engine_p->mport_id = mport_id;
+    ret = tsi721_umd_open(engine_p, mport_id);
 
-    if (umd_open(engine_p))
+    if (ret)
     {
         LOGMSG(env, "Tsi721 UMD Open FAILED.\n");
     }
@@ -336,8 +335,9 @@ int umdOpenCmd(struct cli_env *env, int argc, char **argv)
     {
         LOGMSG(env, "Tsi721 UMD Open PASSED.\n");
     }
+   
 exit:
-    return 0;
+    return ret;
 }
 
 struct cli_cmd UMDOpen =
@@ -357,9 +357,8 @@ struct cli_cmd UMDOpen =
 int umdConfigCmd(struct cli_env *env, int argc, char **argv)
 {
     int ret = -1;
-    struct UMDEngineInfo *engine_p = &umd_engine;
+    struct tsi721_umd *engine_p = &umd_engine;
     uint16_t chan_mask = 0x40;
-    engine_p->env = env;
 
     if(argc)
     {
@@ -372,8 +371,7 @@ int umdConfigCmd(struct cli_env *env, int argc, char **argv)
         }
     }
 
-    engine_p->chan_mask = (uint8_t)chan_mask;
-    ret = umd_config(engine_p);
+    ret = umd_config(engine_p,(uint8_t)chan_mask);
     LOGMSG(env, "\nOpen returned %d\n", ret);
 
     return 0;
@@ -397,10 +395,9 @@ struct cli_cmd UMDConfig =
 int umdStartCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
     int ret;
-    struct UMDEngineInfo *engine_p = &umd_engine;
-    engine_p->env = env;
+    struct tsi721_umd  *engine_p = &umd_engine;
 
-    ret = umd_start(engine_p);
+    ret = tsi721_umd_start(engine_p);
     LOGMSG(env, "\nStart returned %d\n", ret);
 
     return 0;
@@ -422,14 +419,13 @@ struct cli_cmd UMDStart =
 int umdStopCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
     int ret;
-    struct UMDEngineInfo *engine_p = &umd_engine;
-    engine_p->env = env;
+    struct tsi721_umd *engine_p = &umd_engine;
 
-    ret = umd_stop(engine_p);
+    ret = tsi721_umd_stop(engine_p);
+
     LOGMSG(env, "\nStop returned %d\n", ret);
 
     return 0;
-
 }
 
 struct cli_cmd UMDStop =
@@ -449,8 +445,7 @@ struct cli_cmd UMDStop =
 int umdCloseCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(argv))
 {
     int ret;
-    struct UMDEngineInfo *engine_p = &umd_engine;
-    engine_p->env = env;
+    struct tsi721_umd *engine_p = &umd_engine;
 
     ret = umd_close(engine_p);
     LOGMSG(env, "\nClose returned %d\n", ret);

@@ -93,13 +93,12 @@ volatile int devid_status[MAX_DEVID_STATUS];
 
 sem_t tsi721_mutex;
 
-extern struct UMDEngineInfo umd_engine;
-
 void init_worker_info(struct worker *info, int first_time)
 {
     if (first_time) {
         sem_init(&info->started, 0, 0);
         sem_init(&info->run, 0, 0);
+        info->umd_engine_p = &umd_engine;
     }
 
     info->stat = 0;
@@ -165,7 +164,6 @@ void init_worker_info(struct worker *info, int first_time)
     info->dsdist = 0;
     info->dssize = 0;
 
-    info->umd_engine = NULL;
 }
 
 void msg_cleanup_con_skt(struct worker *info);
@@ -1650,9 +1648,9 @@ void *worker_thread(void *parm)
         case maint_traffic:
             do_maint_traffic(info);
             break;
-	case umd_dma_thru:
-	    umd_goodput(info);
-	    break;
+    case umd_dma_thru:
+        umd_goodput(info);
+        break;
         case no_action:
         case last_action:
         default:
@@ -1686,8 +1684,6 @@ void start_worker_thread(struct worker *info, int new_mp_h, int cpu)
     } else {
         info->mp_h = mp_h;
     }
-
-    info->umd_engine = &umd_engine;
 
     info->mp_num = mp_h_num;
     info->wkr_thr.cpu_req = cpu;
