@@ -90,6 +90,9 @@ extern "C" {
 #define ADDR_L(x,y) ((uint64_t)((uint64_t)x + (uint64_t)y))
 #define ADDR_P(x,y) ((void *)((uint64_t)x + (uint64_t)y))
 
+static const uint8_t PREFIX_PATTERN[PATTERN_SIZE]={0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF1};
+static const uint8_t SUFFIX_PATTERN[PATTERN_SIZE]={0x1a, 0x2b, 0x3c, 0x4d, 0xa1, 0xb2, 0xc3, 0xd4};
+static const uint8_t STATUS_PATTERN[PATTERN_SIZE]={0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
 
 struct data_prefix
 {
