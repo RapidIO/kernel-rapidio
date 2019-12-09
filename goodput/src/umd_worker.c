@@ -169,12 +169,12 @@ static uint32_t crc32(uint32_t crc, void *buffer, uint32_t size)
 
 static void umd_copy_xfer_data(void *buf, uint32_t size, uint64_t user_data)
 {
-    uint64_t *data_p =  (uint64_t *)buf; //Assume 64 byte alignment.
-    uint32_t count = size / 4;
+    uint8_t *data_p =  (uint8_t *)buf;
+    uint32_t count = size / 4 - 1;
     uint32_t i;
-    for(i = 0; i < count; i++)
+    for(i = 0; i + 8 < count; i += 8)
     {
-        *data_p =  user_data;
+        memcpy(data_p, (uint8_t*)(&user_data), 8);
         data_p++;
     }
 }
@@ -253,7 +253,7 @@ int umd_close(struct tsi721_umd *engine_p)
     return -1;
 }
 
-static int umd_dma_num_write(struct worker *worker_info, uint32_t iter)
+static int umd_dma_num_writer(struct worker *worker_info, uint32_t iter)
 {
     data_status *status = NULL;
     data_prefix *prefix = NULL;
@@ -282,7 +282,7 @@ static int umd_dma_num_write(struct worker *worker_info, uint32_t iter)
 
     xfer_p = (void *)((uint8_t *)(worker_info->rdma_ptr) + prefix->xfer_offset);
     umd_copy_xfer_data(xfer_p, prefix->xfer_size, worker_info->user_data);
-    prefix->CRC32 = crc32(INIT_CRC32, xfer_p, prefix->xfer_size);
+
 
     suffix = (data_suffix*)((uint64_t)(worker_info->rdma_ptr)  +   prefix->xfer_offset + prefix->xfer_size);
     memset(suffix, 0, sizeof(data_suffix));
@@ -295,6 +295,9 @@ static int umd_dma_num_write(struct worker *worker_info, uint32_t iter)
         ERR("FAILED: payload dma transfer returned %d\n",ret);
         goto exit;
     }
+
+    //Calculate CRC after DMA sending to let H/W have some time to transfer data to the target device. 
+    prefix->CRC32 = crc32(INIT_CRC32, xfer_p, prefix->xfer_size);
 
     // Update prefix
     rc = tsi721_umd_send(worker_info->umd_engine_p, prefix_phys, sizeof(data_prefix), worker_info->rio_addr, worker_info->did_val);
@@ -310,7 +313,7 @@ static int umd_dma_num_write(struct worker *worker_info, uint32_t iter)
 
         if(status->xfer_check == 2 ||
             status->trans_nth != prefix->trans_nth ||
-            !memcmp(status->pattern, STATUS_PATTERN, 8))
+            memcmp(status->pattern, STATUS_PATTERN, 8))
         {
             ERR("FAILED: Writer status(from Reader) pattern check error: loop %u\n" 
                         "xfer_check %d, data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
@@ -338,7 +341,7 @@ exit:
     return ret;
 }
 
-static int umd_dma_num_read(struct worker *worker_info, uint32_t iter)
+static int umd_dma_num_reader(struct worker *worker_info, uint32_t iter)
 {
     data_status *status = NULL;
     data_prefix *prefix = NULL;
@@ -363,7 +366,7 @@ static int umd_dma_num_read(struct worker *worker_info, uint32_t iter)
     memcpy(status->pattern, STATUS_PATTERN, PATTERN_SIZE);
     status->trans_nth = prefix->trans_nth;
 
-    if(memcmp(prefix->pattern, PREFIX_PATTERN, 8))
+    if(!memcmp(prefix->pattern, PREFIX_PATTERN, 8))
     {
         suffix = (data_suffix*)((uint64_t)(worker_info->ib_ptr) + prefix->xfer_offset + prefix->xfer_size);
 
@@ -379,12 +382,13 @@ static int umd_dma_num_read(struct worker *worker_info, uint32_t iter)
             sleep(0.25);
         }
                     
-        if(memcmp(suffix->pattern, SUFFIX_PATTERN, 8))
+        if(!memcmp(suffix->pattern, SUFFIX_PATTERN, 8))
         {
             xfer_p = (void *)((uint8_t *)(worker_info->ib_ptr) + prefix->xfer_offset);   
             if(prefix->CRC32 != crc32(INIT_CRC32, xfer_p, prefix->xfer_size))
             {
-                status->xfer_check = -1;
+                status->xfer_check = 2;
+                ret  = -1;
                 ERR("FAILED: Reader user data CRC32 validation error\n");
             }
             else
@@ -430,8 +434,7 @@ static int umd_dma_num_read(struct worker *worker_info, uint32_t iter)
         status->xfer_check = 2;
     }
 
-    memset(prefix, 0, sizeof(data_prefix));
-    memset(suffix, 0, sizeof(data_suffix));
+    memset(worker_info->ib_ptr, 0x0, worker_info->ib_byte_cnt);
 
     rc = tsi721_umd_send(worker_info->umd_engine_p, (void *)worker_info->rdma_kbuff, worker_info->rdma_buff_size, worker_info->rio_addr, worker_info->did_val);
     if (rc !=0 )                
@@ -479,11 +482,11 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
 
     if(worker_info->wr)
     {
-        ret = umd_dma_num_write(worker_info, iter);
+        ret = umd_dma_num_writer(worker_info, iter);
     }
     else
     {
-        ret = umd_dma_num_read(worker_info, iter);
+        ret = umd_dma_num_reader(worker_info, iter);
     }
 
 exit:
