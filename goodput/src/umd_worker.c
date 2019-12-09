@@ -149,11 +149,7 @@ static int umd_free_queue_mem(struct tsi721_umd *umd_engine_p)
     return 0;
 }
 
-
-
 static uint32_t crc32_table[256];
-
-#if 0
 
 static uint32_t crc32(uint32_t crc, void *buffer, uint32_t size)  
 {  
@@ -177,10 +173,6 @@ static void umd_copy_xfer_data(void *buf, uint32_t size, uint64_t user_data)
         data_p++;
     }
 }
-
-
-#endif 
-
 
 static void umd_init_crc_table(void)  
 {  
@@ -256,140 +248,66 @@ int umd_close(struct tsi721_umd *engine_p)
     return -1;
 }
 
-int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
+static int umd_dma_num_write(struct worker *worker_info, uint32_t iter)
 {
-    worker_info->acc_size = 1;//to aovid compiling error. 
-    iter = 0;//to aovid compiling error. 
-    if(iter == 1)
-    {
-        return -1;
-    }
-#if 0
-    data_status *status;
-    data_prefix *prefix;
-    void *xfer_p;
+    data_status *status = NULL;
+    data_prefix *prefix = NULL;
     data_suffix *suffix = NULL;
+    void *xfer_p;
     int32_t ret = 0, rc;
-    UMDEngineInfo* info = worker_info->umd_engine;
-    int index = worker_info->idx;
-    DmaTransfer* dma_trans_p = &info->dma_trans[index];
+    void *payload_phys, *prefix_phys;
+    uint32_t payload_size = worker_info->rdma_buff_size - sizeof(data_prefix) - sizeof(data_suffix);
+    prefix = (data_prefix*)worker_info->rdma_ptr;
+    status = (data_status*)worker_info->ib_ptr;
+    prefix_phys  = (void*)worker_info->rdma_kbuff;
+    payload_phys = (void*)((uintptr_t)worker_info->rdma_kbuff + sizeof(data_prefix));
 
-    dma_trans_p->ib_byte_cnt = worker_info->ib_byte_cnt;
-    dma_trans_p->ib_rio_addr = worker_info->ib_rio_addr;
-    dma_trans_p->dest_id     = worker_info->did_val;
-    dma_trans_p->rio_addr    = worker_info->rio_addr;
-    dma_trans_p->buf_size    = worker_info->rdma_buff_size;
-    dma_trans_p->num_trans   = worker_info->num_trans;
-    dma_trans_p->wr          = worker_info->wr;
-    dma_trans_p->user_data   = worker_info->user_data;
-    dma_trans_p->ib_handle   = worker_info->ib_handle;
-    dma_trans_p->ib_ptr      = worker_info->ib_ptr;
-    
     if (worker_info->stop_req)
-        goto exit;
-
-    // Check for allocated inbound window
-    if (!worker_info->ib_valid || !worker_info->ib_ptr)
     {
-        ERR("FAILED: inbound window was not allocated\n");
-        ret = -1;
+       ret = -1;
+       goto exit;
+    }
+
+    memset(status, 0, sizeof(data_status));
+    memset(prefix, 0, sizeof(data_prefix));
+    prefix->trans_nth = iter+1;
+    memcpy(prefix->pattern, PREFIX_PATTERN, PATTERN_SIZE);
+    prefix->xfer_offset = sizeof(data_prefix);
+    prefix->xfer_size = worker_info->rdma_buff_size - sizeof(data_prefix) - sizeof(data_suffix);
+
+    xfer_p = (void *)((uint8_t *)(worker_info->rdma_ptr) + prefix->xfer_offset);
+    umd_copy_xfer_data(xfer_p, prefix->xfer_size, worker_info->user_data);
+    prefix->CRC32 = crc32(INIT_CRC32, xfer_p, prefix->xfer_size);
+
+    suffix = (data_suffix*)((uint64_t)(worker_info->rdma_ptr)  +   prefix->xfer_offset + prefix->xfer_size);
+    memset(suffix, 0, sizeof(data_suffix));
+    memcpy(suffix->pattern, SUFFIX_PATTERN, PATTERN_SIZE);
+
+    // Send payload and suffix before prefix, as prefix is used to check for completion
+    rc = tsi721_umd_send(worker_info->umd_engine_p, payload_phys, payload_size + sizeof(data_suffix), worker_info->rio_addr+sizeof(data_prefix), worker_info->did_val);
+    if (rc != 0)
+    {
+        ERR("FAILED: payload dma transfer returned %d\n",ret);
         goto exit;
     }
 
-    if (iter == 0)
-        memset(dma_trans_p->ib_ptr, 0x0, dma_trans_p->ib_byte_cnt);
-
-    if (!worker_info->rdma_ptr || !worker_info->rdma_kbuff)
+    // Update prefix
+    rc = tsi721_umd_send(worker_info->umd_engine_p, prefix_phys, sizeof(data_prefix), worker_info->rio_addr, worker_info->did_val);
+    if(rc == 0)
     {
-        ERR("FAILED: kernel DMA tx buffer not allocated\n");
-        ret  = -1;
-        goto exit;
-    }
-
-    dma_trans_p->tx_mem_h = worker_info->rdma_kbuff;
-    dma_trans_p->tx_ptr   = worker_info->rdma_ptr;
-
-    if (!dma_trans_p->rio_addr || !dma_trans_p->buf_size)
-    {
-        ERR("FAILED: rio_addr, buf_size is 0!\n");
-        ret = -1;
-        goto exit;
-    }
-
-    if(dma_trans_p->wr)
-    {
-        void *payload_phys, *prefix_phys;
-        uint32_t payload_size = dma_trans_p->buf_size - sizeof(data_prefix) - sizeof(data_suffix);
-        prefix = (data_prefix*)dma_trans_p->tx_ptr;
-        status = (data_status*)dma_trans_p->ib_ptr;
-        prefix_phys  = (void*)dma_trans_p->tx_mem_h;
-        payload_phys = (void*)((uintptr_t)dma_trans_p->tx_mem_h + sizeof(data_prefix));
-
+        while(status->xfer_check == 0)
         {
             if (worker_info->stop_req)
                 goto exit;
 
-            memset(status, 0, sizeof(data_status));
-            memset(prefix, 0, sizeof(data_prefix));
-            prefix->trans_nth = iter+1;
-            prefix->pattern[0] = 0x12;
-            prefix->pattern[1] = 0x34;
-            prefix->pattern[2] = 0x56;
-            prefix->pattern[3] = 0x78;
-            prefix->pattern[4] = 0x9A;
-            prefix->pattern[5] = 0xBC;
-            prefix->pattern[6] = 0xDE;
-            prefix->pattern[7] = 0xF1;
-            prefix->xfer_offset = sizeof(data_prefix);
-            prefix->xfer_size = dma_trans_p->buf_size - sizeof(data_prefix) - sizeof(data_suffix);
+            sleep(0.25);
+        }
 
-            xfer_p = (void *)((uint8_t *)(dma_trans_p->tx_ptr) + prefix->xfer_offset);
-            umd_copy_xfer_data(xfer_p, prefix->xfer_size, dma_trans_p->user_data);
-            prefix->CRC32 = crc32(INIT_CRC32, xfer_p, prefix->xfer_size);
-
-            suffix = (data_suffix*)((uint64_t)(dma_trans_p->tx_ptr)  +   prefix->xfer_offset + prefix->xfer_size);
-            memset(suffix, 0, sizeof(data_suffix));
-            suffix->pattern[0] = 0x1a;
-            suffix->pattern[1] = 0x2b;
-            suffix->pattern[2] = 0x3c;
-            suffix->pattern[3] = 0x4d;
-            suffix->pattern[4] = 0xa1;
-            suffix->pattern[5] = 0xb2;
-            suffix->pattern[6] = 0xc3;
-            suffix->pattern[7] = 0xd4;
-
-            // Send payload and suffix before prefix, as prefix is used to check for completion
-            rc = tsi721_umd_send(&(info->engine), payload_phys, payload_size + sizeof(data_suffix), dma_trans_p->rio_addr+sizeof(data_prefix), dma_trans_p->dest_id);
-            if (rc != 0)
-            {
-                ERR("FAILED: payload dma transfer returned %d\n",ret);
-                goto exit;
-            }
-
-            // Update prefix
-            rc = tsi721_umd_send(&(info->engine), prefix_phys, sizeof(data_prefix), dma_trans_p->rio_addr, dma_trans_p->dest_id);
-            if(rc == 0)
-            {
-                while(status->xfer_check == 0)
-                {
-                    if (worker_info->stop_req)
-                        goto exit;
-
-                    sleep(0.25);
-                }
-
-                if(status->xfer_check == 2 ||
-                    status->trans_nth != prefix->trans_nth ||
-                    status->pattern[0] != 0x11 ||
-                    status->pattern[1] != 0x22 ||
-                    status->pattern[2] != 0x33 ||
-                    status->pattern[3] != 0x44 ||
-                    status->pattern[4] != 0x55 ||
-                    status->pattern[5] != 0x66 ||
-                    status->pattern[6] != 0x77 ||
-                    status->pattern[7] != 0x88)
-                {
-                    ERR("FAILED: Writer status(from Reader) pattern check error: loop %u\n" 
+        if(status->xfer_check == 2 ||
+            status->trans_nth != prefix->trans_nth ||
+            !memcmp(status->pattern, STATUS_PATTERN, 8))
+        {
+            ERR("FAILED: Writer status(from Reader) pattern check error: loop %u\n" 
                         "xfer_check %d, data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
                         iter,
                         status->xfer_check,
@@ -403,91 +321,77 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
                         status->pattern[7]);
                     ret  = -1;
                     goto exit;
-                }
-            }
-            else
-            {
-                ERR("FAILED: Writer UMD send failed\n");
-                ret = -1;
-                goto exit;
-            }
         }
     }
     else
     {
-        status = (data_status*)dma_trans_p->tx_ptr;
-        prefix = (data_prefix*)dma_trans_p->ib_ptr;
+        ERR("FAILED: Writer UMD send failed\n");
+        ret = -1;
+        goto exit;
+    }
+exit:    
+    return ret;
+}
 
+static int umd_dma_num_read(struct worker *worker_info, uint32_t iter)
+{
+    data_status *status = NULL;
+    data_prefix *prefix = NULL;
+    void *xfer_p;
+    data_suffix *suffix = NULL;
+    int32_t ret = 0, rc;
+    
+    status = (data_status*)worker_info->rdma_ptr;
+    prefix = (data_prefix*)worker_info->ib_ptr;
+
+    if (worker_info->stop_req)
+        goto exit;
+
+    while(prefix->trans_nth != iter+1 )
+    {
+        if (worker_info->stop_req)
+            goto exit;
+
+        sleep(0.25);
+    }
+
+    memcpy(status->pattern, STATUS_PATTERN, PATTERN_SIZE);
+    status->trans_nth = prefix->trans_nth;
+
+    if(memcmp(prefix->pattern, PREFIX_PATTERN, 8))
+    {
+        suffix = (data_suffix*)((uint64_t)(worker_info->ib_ptr) + prefix->xfer_offset + prefix->xfer_size);
+
+        while(suffix->pattern[0] == 00 &&
+                suffix->pattern[1] == 00 &&
+                suffix->pattern[2] == 00 &&
+                suffix->pattern[3] == 00 &&
+                suffix->pattern[4] == 00 &&
+                suffix->pattern[5] == 00 &&
+                suffix->pattern[6] == 00 &&
+                suffix->pattern[7] == 00)
         {
-            if (worker_info->stop_req)
-                goto exit;
-
-            while(prefix->trans_nth != iter+1 )
-            {
-                if (worker_info->stop_req)
-                    goto exit;
-
-                sleep(0.25);
-            }
-
-            status->pattern[0] = 0x11;
-            status->pattern[1] = 0x22;
-            status->pattern[2] = 0x33;
-            status->pattern[3] = 0x44;
-            status->pattern[4] = 0x55;
-            status->pattern[5] = 0x66;
-            status->pattern[6] = 0x77;
-            status->pattern[7] = 0x88;
-            status->trans_nth = prefix->trans_nth;
-
-            if( prefix->pattern[0] == 0x12 &&
-                prefix->pattern[1] == 0x34 &&
-                prefix->pattern[2] == 0x56 &&
-                prefix->pattern[3] == 0x78 &&
-                prefix->pattern[4] == 0x9A &&
-                prefix->pattern[5] == 0xBC &&
-                prefix->pattern[6] == 0xDE &&
-                prefix->pattern[7] == 0xF1)
-            {
-               suffix = (data_suffix*)((uint64_t)(dma_trans_p->ib_ptr) + prefix->xfer_offset + prefix->xfer_size);
-
-               while(suffix->pattern[0] == 00 &&
-                    suffix->pattern[1] == 00 &&
-                    suffix->pattern[2] == 00 &&
-                    suffix->pattern[3] == 00 &&
-                    suffix->pattern[4] == 00 &&
-                    suffix->pattern[5] == 00 &&
-                    suffix->pattern[6] == 00 &&
-                    suffix->pattern[7] == 00)
-               {
-                   sleep(0.25);
-               }
+            sleep(0.25);
+        }
                     
-               if(suffix->pattern[0] == 0x1a &&
-                    suffix->pattern[1] == 0x2b &&
-                    suffix->pattern[2] == 0x3c &&
-                    suffix->pattern[3] == 0x4d &&
-                    suffix->pattern[4] == 0xa1 &&
-                    suffix->pattern[5] == 0xb2 &&
-                    suffix->pattern[6] == 0xc3 &&
-                    suffix->pattern[7] == 0xd4)
-               {
-                   xfer_p = (void *)((uint8_t *)(dma_trans_p->ib_ptr) + prefix->xfer_offset);   
-                   if(prefix->CRC32 != crc32(INIT_CRC32, xfer_p, prefix->xfer_size))
-                   {
-                       status->xfer_check = -1;
-                       ERR("FAILED: Reader user data CRC32 validation error\n");
-                   }
-                   else
-                   {
-                       status->xfer_check = 1;
-                   }
-               }
-               else
-               {
-                   ret = -1;
+        if(memcmp(suffix->pattern, SUFFIX_PATTERN, 8))
+        {
+            xfer_p = (void *)((uint8_t *)(worker_info->ib_ptr) + prefix->xfer_offset);   
+            if(prefix->CRC32 != crc32(INIT_CRC32, xfer_p, prefix->xfer_size))
+            {
+                status->xfer_check = -1;
+                ERR("FAILED: Reader user data CRC32 validation error\n");
+            }
+            else
+            {
+                status->xfer_check = 1;
+            }
+        }
+        else
+        {
+            ret = -1;
                    
-                   ERR("FAILED: Reader suffix validation error, loop %u\n" 
+            ERR("FAILED: Reader suffix validation error, loop %u\n" 
                     "data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
                         iter,
                         suffix->pattern[0],
@@ -499,14 +403,14 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
                         suffix->pattern[6],
                         suffix->pattern[7]);
                    
-                   status->xfer_check = 2;
-               }
-            }
-            else
-            {
-                ret = -1;
+            status->xfer_check = 2;
+        }
+    }
+    else
+    {
+        ret = -1;
             
-                ERR("FAILED: Reader prefix validation error, loop %u\n"
+       ERR("FAILED: Reader prefix validation error, loop %u\n"
                     "data 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
                     iter,
                     prefix->pattern[0],
@@ -518,26 +422,70 @@ int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
                     prefix->pattern[6],
                     prefix->pattern[7]);
                 
-                status->xfer_check = 2;
-            }
+        status->xfer_check = 2;
+    }
 
-            memset(prefix, 0, sizeof(data_prefix));
-            memset(suffix, 0, sizeof(data_suffix));
+    memset(prefix, 0, sizeof(data_prefix));
+    memset(suffix, 0, sizeof(data_suffix));
 
-            rc = tsi721_umd_send(&(info->engine), (void *)dma_trans_p->tx_mem_h, dma_trans_p->buf_size, dma_trans_p->rio_addr, dma_trans_p->dest_id);
-            if (rc !=0 )                
-            {
-                ret = -1;
-                ERR("FAILED: Reader loop %u, UMD send failed\n", iter);
-            }
-        }
+    rc = tsi721_umd_send(worker_info->umd_engine_p, (void *)worker_info->rdma_kbuff, worker_info->rdma_buff_size, worker_info->rio_addr, worker_info->did_val);
+    if (rc !=0 )                
+    {
+        ret = -1;
+        ERR("FAILED: Reader loop %u, UMD send failed\n", iter);
+    }
+    
+exit:
+    return ret;    
+}
+
+
+int umd_dma_num_cmd(struct worker *worker_info, uint32_t iter)
+{
+    int32_t ret = 0;
+    
+    if (worker_info->stop_req)
+        goto exit;
+
+    // Check for allocated inbound window
+    if (!worker_info->ib_valid || !worker_info->ib_ptr)
+    {
+        ERR("FAILED: inbound window was not allocated\n");
+        ret = -1;
+        goto exit;
+    }
+
+    if (iter == 0)
+        memset(worker_info->ib_ptr, 0x0, worker_info->ib_byte_cnt);
+
+    if (!worker_info->rdma_ptr || !worker_info->rdma_kbuff)
+    {
+        ERR("FAILED: kernel DMA tx buffer not allocated\n");
+        ret  = -1;
+        goto exit;
+    }
+
+    if (!worker_info->rio_addr || !worker_info->rdma_buff_size)
+    {
+        ERR("FAILED: rio_addr, rdma_buff_size is 0!\n");
+        ret = -1;
+        goto exit;
+    }
+
+    if(worker_info->wr)
+    {
+        ret = umd_dma_num_write(worker_info, iter);
+    }
+    else
+    {
+        ret = umd_dma_num_read(worker_info, iter);
     }
 
 exit:
-#endif
 
-    return 0;
+    return ret;
 }
+
 
 void umd_goodput(struct worker *info)
 {
