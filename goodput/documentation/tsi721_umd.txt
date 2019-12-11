@@ -1,0 +1,317 @@
+User-mode RapidIO driver for IDT Tsi721 PCI Express-to-RapidIO bridge
+=====================================================================
+
+I. Overview
+
+The UMD enables applications to write data to a RapidIO memory address
+on another RapidIO device.
+
+II. Known problems
+
+None
+
+III. System prerequisites
+=========================
+
+The UMD requires the Tsi721 mport device driver and rio_mport_cdev module 
+to be loaded. 
+
+Configuration options are found in /etc/modprobe.d/rapidio.conf.
+
+3.1. Tsi721 mport
+-----------------
+
+To avoid conflict, any DMA engine to be used by the UMD should not be 
+selected for use by the tsi721_mport driver.  Ensure that the dma_sel 
+bitfield does not enable any DMA engines that will be used for the UMD.
+For example, dma_sel=0x0 can be used to disable all DMA engines for use
+by the mport driver, allowing all to be used by the UMD.
+
+Note that the mport driver will always use DMA channel 7 for register
+access to remote devices.  Therefore the UMD should not be used with
+channel 7.
+
+3.2. rio_mport_cdev
+-------------------
+
+Buffers used for DMA will need to be allocated by the rio_mport_cdev driver.
+Dynamic allocation of large buffers at runtime will generate errors, so it
+is recommended to pre-allocate a region of physical memory at boot to use
+for the DMA buffer region.  On the Intel/x86 architecutre, the maximum size
+that can be allocated dynamically without error is 4MB (1024 4k pages).
+
+The rio_mport_cdev driver's reserved memory option can be used to reserve
+a larger memory region for use by the Tsi721 UMD for DMA.  To do this, the
+following steps are required:
+
+3.2.1 Reserve a region of physical memory in kernel boot options
+----------------------------------------------------------------
+
+You will need to locate a region of physical memory that is not in use by
+other modules in the system.  This can be found using dmesg, looking for a
+section similar to the following:
+
+[    0.000000] user: [mem 0x000000003898d000-0x0000000038993fff] ACPI NVS
+[    0.000000] user: [mem 0x0000000038994000-0x0000000038df1fff] usable
+[    0.000000] user: [mem 0x0000000038df2000-0x0000000058d40fff] reserved
+
+Areas which are marked as "usable" are available to be reserved.
+
+Next, you will need to set the memmap kernel option to reserve the desired
+region.  For full information on this option, consult 
+https://www.kernel.org/doc/Documentation/admin-guide/kernel-parameters.txt
+
+As an example, the kernel setting memmap=512M$1G can be used to reserve a
+512MB region at the 1G boundary.  The size selected should be 256MB greater
+than the size of DMA buffers required.  In addition, 8 kB of space should
+be allocated for each DMA engine to be used.
+
+If the grub Linux booter is in use, the option can be added either using the
+grubby tool (if available), or by modifying /etc/default/grub.
+
+Example using grubby to add this option to all kernels in grub selection screen
+sudo grubby --args='memmap=512M\\$1G' --update-kernel=ALL
+
+3.2.2 Mark the reserved region for use by the rio_mport_cdev driver
+-------------------------------------------------------------------
+
+The rapidio.conf file should be modified to select the reserved memory address
+and size for rio_mport_cdev.
+
+The rio_res_mem option should be set to 256MB higher than the address selected
+in 3.2.1, because the kernel driver will use the first 256 MB of reserved memory.
+The rio_res_size option should be set to the size of the reserved region, minus
+256 MB.
+
+Following the example above of reserving 512MB at the 1GB address, these 
+settings would be used:
+rio_res_mem=0x50000000 rio_res_size=0x10000000
+
+3.2.3 Set the iomem=relaxed kernel option (kernel 4.5+)
+-------------------------------------------------------
+
+Both the kernel and user-mode driver will be accessing the Tsi721's registers
+via PCIe BAR0.  For Linux kernel 4.5+ this will generate an error under the
+default kernel options.  The iomem=relaxed option should be set to avoid this 
+error.
+
+Example using grubby:
+sudo grubby --args='iomem=relaxed' --update-kernel=ALL
+
+3.2.4 Reboot
+------------
+
+After the above changes are made, the system should be rebooted and the kernel
+option changes will take effect.
+
+IV. UMD compilation instructions
+================================
+
+The user-mode driver is located in directory goodput/common/tsi721_umd.
+
+To compile, do the following:
+cd goodput/common
+make clean
+make
+
+The UMD static library is generated as libs_a/libumd.a.  This library should be
+linked with the user application.
+
+The application must include the following C header file to integrate the UMD:
+goodput/common/include/tsi721_umd.h
+
+V. User-mode driver usage
+=========================
+
+The UMD is structured to enable easy integration into the Open Data Plane (ODP)
+PktIO device framework.  The sequence of steps in the following sections maps
+directly to the interfaces and state changes for ODP PktIO device management.
+
+An example application demonstrating these steps is available at
+goodput/common/tsi721_umd/example/basic.c
+
+5.1 Allocate a user-mode driver data structure, struct tsi721_umd
+
+5.2 Open a handle to the mport device (tsi721_umd_open)
+
+5.3 Allocate DMA buffers and queues (rio_dbuf_alloc, mmap).  If reserved memory
+    is being used, the physical address to be used should be passed in the 
+    handle argument to rio_dbuf_alloc.
+    
+5.4 Configure the UMD to use selected DMA engines 
+    (tsi721_umd_queue_config_multi)
+    
+    The address passed to tsi721_queue_config_multi must be a physical address,
+    which is returned via the handle in rio_dbuf_alloc.
+    
+    NOTE 1: separate user processes cannot share DMA queues.  If multiple 
+    processes require simultaneous access, then each process should use a
+    different subset of the DMA engines.
+
+    NOTE 2: as noted in section 3.1, DMA engine 7 is used by the Tsi721_mport
+    driver and thus bit 7 should not be set.
+    
+    At this point, the user-mode driver is fully ready to conduct DMAs.
+    
+5.5 Conduct transfers (tsi721_umd_send)
+
+    Transfers require a physical source address and size, and the RapidIO address
+    and destination ID of the target.
+    
+    tsi721_umd_send is blocking - the function will block until the DMA engine
+    is complete.  After the function returns, the physical memory location is 
+    free to be overwritten.
+    
+    tsi721_umd_send supports simultaneous calls from multiple threads. When
+    simultaneous calls occur, they are serviced by different DMA engines.  
+    For best throughput, multiple threads should be used if possible to allow 
+    the use of multiple DMA engines.
+    
+5.6 At application close, stop and close the UMD driver 
+   (tsi721_umd_stop, tsi721_umd_close)
+    
+For full description of function arguments, consult the function comments in
+goodput/common/tsi721_umd/src/tsi721_umd.c
+
+VI. Unit tests and profiling
+============================
+
+6.1 UMD unit tests
+------------------
+
+Unit tests checking basic operation of the UMD are available at
+goodput/common/tsi721_umd/tests
+
+To compile, follow these steps:
+cd goodput/common/tsi721_umd
+export TEST=1
+make clean
+make
+unset TEST
+
+The unit tests can then be run as follows:
+sudo test/tsi721_umd_test
+
+These test that the UMD can open the mport device, that the usage sequence 
+described in section V functions properly, that errors are returned when API 
+calls are made out of sequence, and other basic elements of operation.
+
+The expected result is that all tests pass - the final lines should look as 
+follows:
+
+[==========] 10 test(s) run.
+[  PASSED  ] 10 test(s).
+
+Note that the unit test is configured to use device at mport_id 0.  If another 
+device should be used, edit test/tsi721_umd_test.c to change the constant
+"TEST_MPORT" to the desired device and re-compile.
+
+6.2 Goodput bandwidth testing
+-----------------------------
+
+The goodput test application can be used for testing UMD bandwidth.  It 
+provides an infrastructure to start multiple threads all using the UMD driver
+to conduct DMAs, and print the bandwidth obtained.
+
+This application is available in the goodput subdirectory.
+
+To comiple, follow these steps:
+cd goodput
+make clean
+make
+
+Start the application:
+sudo ./goodput
+
+An example script for running multiple DMAs can then be run from the goodput 
+command-line:
+
+script thrumulti.txt
+
+After the script is started, the goodput command can be used to monitor the 
+throughput of each of the threads.
+
+To modify this script, edit file goodput/scripts/umd/thrumulti.txt
+
+Some examples of modifications are given below.
+
+6.2.3 Original script
+---------------------
+
+// Start the UMD, then do the throughput test
+
+Ustop
+Uclose
+
+Uopen
+Uconfig 0x20
+Ustart
+k 3
+k 4
+k 5
+k 6
+k 7
+k 8
+
+w 3 D
+w 4 D
+w 5 D
+w 6 D
+w 7 D
+w 8 D
+
+t 3 -1 0
+t 4 -1 0
+t 5 -1 0
+t 6 -1 0
+t 7 -1 0
+t 8 -1 0
+
+w 3 H
+w 4 H
+w 5 H
+w 6 H
+w 7 H
+w 8 H
+
+Udma 3 5 0x200000000 0x100000 0x100000
+Udma 4 5 0x200000000 0x100000 0x100000
+Udma 5 5 0x200000000 0x100000 0x100000
+Udma 6 5 0x200000000 0x100000 0x100000
+Udma 7 5 0x200000000 0x100000 0x100000
+Udma 8 5 0x200000000 0x100000 0x100000
+
+6.2.3 Use multiple DMA engines
+------------------------------
+
+The original script runs 6 worker threads using a single DMA engine. 
+
+To use multiple DMA engines, change the value for "Uconfig" from 0x20 to
+something else.  This parameter is a bitfield, with one bit for each DMA
+channel.
+
+For example, to use all DMA engines, use 0x7F as the parameter value.
+NOTE: DMA Channel 7 is reserved for the Linux kernel.
+
+When more DMA channels are available, multiple threads can send at the same
+time.  The PCIe and RapidIO bandwidth is shared between all active DMA engines.
+More active DMA engines and threads are necessary to maximize throughput when
+transactions are small.
+
+6.2.4 Use more/less worker threads
+----------------------------------
+
+To use more worker threads, the "k", "w", "t", and "Udma" lines should be
+duplicated.
+
+The first argument for all of these commands is a worker thread index - when a 
+new thread is added, a new unique number should be used for each of these 
+commands.
+
+Similarly, to reduce the worker thread count these lines should be removed.
+
+6.2.5 Change DMA transfer size
+------------------------------
+
+To change the DMA transfer sizes, the final argument to Udma should be modified to
+the desired transfer size.  This is restricted to powers of two.

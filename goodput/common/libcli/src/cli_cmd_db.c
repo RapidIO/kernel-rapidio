@@ -183,9 +183,7 @@ int init_cmd_db(void)
 	struct cli_cmd *help_ptr = &CLIHelp;
 
 	num_valid_cmds = 0;
-	add_commands_to_cmd_db(1, &help_ptr);
-
-	return 0;
+	return add_commands_to_cmd_db(1, &help_ptr);
 }
 
 #ifdef __cplusplus

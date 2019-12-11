@@ -676,9 +676,9 @@ int bind_cli_cmd_line_cmds(void)
 		snprintf(script_path, SCRIPT_PATH_LEN, "%s/scripts/", cwd);
 	}
 
-	add_commands_to_cmd_db(sizeof(cmd_line_cmds) / sizeof(struct cli_cmd *),
+	return add_commands_to_cmd_db(
+			sizeof(cmd_line_cmds) / sizeof(struct cli_cmd *),
 			cmd_line_cmds);
-	return 0;
 }
 
 #ifdef __cplusplus

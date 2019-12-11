@@ -145,9 +145,10 @@ ATTR_NONE};
 
 struct cli_cmd *liblog_cmds[] = {&LogLevel, &DispLevel, &log_dump_cmd};
 
-void liblog_bind_cli_cmds(void)
+int liblog_bind_cli_cmds(void)
 {
-	add_commands_to_cmd_db(sizeof(liblog_cmds) / sizeof(liblog_cmds[0]),
+	return add_commands_to_cmd_db(
+			sizeof(liblog_cmds) / sizeof(liblog_cmds[0]),
 			liblog_cmds);
 }
 
