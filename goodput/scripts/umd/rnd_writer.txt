@@ -1,0 +1,14 @@
+// Start the UMD, then start the writer thread
+level 6
+dlevel 5
+
+Uopen
+Uconfig 0x20
+Ustart
+k 3
+w 3 D
+t 3 -1 0
+IBA 3 0x10000 0x26b000000
+w 3 R
+w 3 H
+Udnum 3 5 0x26b000000 0x1000 1 10000 RND RND

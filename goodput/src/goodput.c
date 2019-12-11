@@ -60,6 +60,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "libcli.h"
 #include "liblog.h"
 #include "worker.h"
+#include "umd_worker.h"
 #include "goodput.h"
 #include "goodput_cli.h"
 #include "rio_mport_lib.h"
@@ -78,113 +79,124 @@ struct worker wkr[MAX_WORKERS];
 
 void goodput_thread_shutdown(struct cli_env *UNUSED(env))
 {
-	printf("\nGoodput Evaluation Application EXITING!!!!\n");
-	exit(EXIT_SUCCESS);
+    printf("\nGoodput Evaluation Application EXITING!!!!\n");
+    exit(EXIT_SUCCESS);
 }
 
 int setup_mport(int mport_num)
 {
-	int rc;
+    int rc;
 
-	if (mp_h_valid) {
-		close(mp_h);
-		mp_h_valid = 0;
-	}
+    if (mp_h_valid) {
+        close(mp_h);
+        mp_h_valid = 0;
+    }
 
-	mp_h_num = mport_num;
-	rc = rio_mport_open(mport_num, 0);
-	if (rc > 0) {
-		mp_h_valid = 1;
-		mp_h = rc;
-	}
+    mp_h_num = mport_num;
+    rc = rio_mport_open(mport_num, 0);
+    if (rc > 0) {
+        mp_h_valid = 1;
+        mp_h = rc;
+    }
 
-	rc = rio_query_mport(mp_h, &qresp);
-	if (!rc)
-		mp_h_qresp_valid = 1;
+    rc = rio_query_mport(mp_h, &qresp);
+    if (!rc)
+        mp_h_qresp_valid = 1;
 
-	return rc;
+    return rc;
 }
 
 void sig_handler(int signo)
 {
-	switch (signo) {
-	case SIGINT:
-	case SIGHUP:
-	case SIGTERM:
-	case SIGUSR1:
-		goodput_thread_shutdown(NULL);
-		break;
-	default:
-		break;
-	}
+    switch (signo) {
+    case SIGINT:
+    case SIGHUP:
+    case SIGTERM:
+    case SIGUSR1:
+        goodput_thread_shutdown(NULL);
+        break;
+    default:
+        break;
+    }
 }
 
 int main(int argc, char *argv[])
 {
-	uint32_t mport_num = 0;
+    uint32_t mport_num = 0;
 
-	char* rc_script = NULL;
-	struct cli_env t_env;
+    char* rc_script = NULL;
+    struct cli_env t_env;
+    int cli_rc;
 
-	signal(SIGINT, sig_handler);
-	signal(SIGHUP, sig_handler);
-	signal(SIGTERM, sig_handler);
-	signal(SIGUSR1, sig_handler);
+    signal(SIGINT, sig_handler);
+    signal(SIGHUP, sig_handler);
+    signal(SIGTERM, sig_handler);
+    signal(SIGUSR1, sig_handler);
 
-	if ((argc > 1) && (tok_parse_mport_id(argv[1], &mport_num, 0))) {
-		printf(TOK_ERR_MPORT_MSG_FMT);
-		exit(EXIT_FAILURE);
-	}
+    if ((argc > 1) && (tok_parse_mport_id(argv[1], &mport_num, 0))) {
+        printf(TOK_ERR_MPORT_MSG_FMT);
+        exit(EXIT_FAILURE);
+    }
 
-	for (int n = 2; n < argc; n++) {
-		const char* arg = argv[n];
-		if (!strcmp(arg, "--rc")) {
-			if (n == (argc - 1)) {
-				continue;
-			}
-			rc_script = argv[++n];
-			continue;
-		}
-		if (!strstr(arg, "=")) {
-			continue;
-		}
-		SetEnvVar((char *)arg);
-	}
+    for (int n = 2; n < argc; n++) {
+        const char* arg = argv[n];
+        if (!strcmp(arg, "--rc")) {
+            if (n == (argc - 1)) {
+                continue;
+            }
+            rc_script = argv[++n];
+            continue;
+        }
+        if (!strstr(arg, "=")) {
+            continue;
+        }
+        SetEnvVar((char *)arg);
+    }
 
-	// INFW: enables log file by default.
-	//       Turn this off for now.
-	// rdma_log_init("goodput_log.txt", 1);
-	rdma_log_init(NULL, 1);
-	if (setup_mport(mport_num)) {
-		printf("\nCould not open mport %d, exiting\n", mport_num);
-		exit(EXIT_FAILURE);
-	}
+    // INFW: enables log file by default.
+    //       Turn this off for now.
+    // rdma_log_init("goodput_log.txt", 1);
+    rdma_log_init(NULL, 1);
+    if (setup_mport(mport_num)) {
+        printf("\nCould not open mport %d, exiting\n", mport_num);
+        exit(EXIT_FAILURE);
+    }
 
-	for (int i = 0; i < MAX_WORKERS; i++)
-		init_worker_info(&wkr[i], 1);
+    for (int i = 0; i < MAX_WORKERS; i++)
+        init_worker_info(&wkr[i], 1);
 
-	cli_init_base(goodput_thread_shutdown);
-	bind_goodput_cmds();
-	liblog_bind_cli_cmds();
+    umd_init_engine_handle(&umd_engine);
 
-	// INFW: Temporary script path for hot swap testing.
-	//
-	// char script_path[10] = {0};
-	// snprintf(script_path, sizeof(script_path), "mport%d", mport_num);
-	set_script_path((char *)"scripts/cps_hs");
+    cli_rc = cli_init_base(goodput_thread_shutdown);
+    cli_rc |= liblog_bind_cli_cmds();
+    cli_rc |= bind_goodput_cmds();
+    if (cli_rc) {
+        printf( "\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+            "\n!!!                                          !!!"
+            "\n!!!  WARNING: CLI initialization had errors! !!!"
+            "\n!!!                                          !!!"
+            "\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+            "\n");
+    }
 
-	init_cli_env(&t_env);
-	splashScreen(&t_env, (char *)"Goodput Evaluation Application");
+    // INFW: Temporary script path for hot swap testing.
+    //
+    // char script_path[10] = {0};
+    // snprintf(script_path, sizeof(script_path), "mport%d", mport_num);
+    set_script_path((char *)"scripts/umd");
 
-	ConsoleRc_t crc;
-	crc.prompt = (char *)"Goodput> ";
-	crc.script = rc_script;
+    init_cli_env(&t_env);
+    splashScreen(&t_env, (char *)"Goodput Evaluation Application");
 
-	console_rc((void *)&crc);
+    ConsoleRc_t crc;
+    crc.prompt = (char *)"Goodput> ";
+    crc.script = rc_script;
 
-	goodput_thread_shutdown(NULL);
+    console_rc((void *)&crc);
 
-	exit(EXIT_SUCCESS);
+    goodput_thread_shutdown(NULL);
+
+    exit(EXIT_SUCCESS);
 }
 
 #ifdef __cplusplus
