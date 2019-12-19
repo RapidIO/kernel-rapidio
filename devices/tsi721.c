@@ -317,6 +317,10 @@ tsi721_port_err_handler(struct tsi721_device *priv)
 	union rio_pw_msg pwmsg;
 	u32 plm_en;
 	u32 plm_stat;
+	/* NOTE: Do NOT include PORT_ERR with the hot swap interrupts below.
+	 * Clearing a PORT_ERR requires resetting the Tsi721 port, which must
+	 * be done under user control.
+	 */
 	u32 hs_ints = TSI721_RIO_PLM_SP_INT_EN_LINK_INIT
 			| TSI721_RIO_PLM_SP_INT_EN_DLT;
 
@@ -357,21 +361,26 @@ tsi721_port_err_handler(struct tsi721_device *priv)
 	if (pwmsg.em.is_port & hs_ints)
 		plm_stat |= hs_ints;
 
-	if (pwmsg.em.is_port & TSI721_RIO_PLM_SP_STATUS_DLT) {
+	if (pwmsg.em.is_port & (TSI721_RIO_PLM_SP_STATUS_DLT |
+                TSI721_RIO_PLM_SP_STATUS_PORT_ERR)) {
 		/* Set PORT_LOCKOUT immediately when the link fails. */
 		u32 ctl;
 		ctl = ioread32(priv->regs + TSI721_CTL);
 		ctl |= RIO_PORT_N_CTL_LOCKOUT;
 		iowrite32(ctl, priv->regs + TSI721_CTL);
+	}
 
+	if (pwmsg.em.is_port & TSI721_RIO_PLM_SP_STATUS_DLT) {
 		/* Enable Link Initialization Events. */
 		plm_en |= TSI721_RIO_PLM_SP_INT_EN_LINK_INIT;
 		plm_en &= ~TSI721_RIO_PLM_SP_INT_EN_DLT;
+		plm_en &= ~TSI721_RIO_PLM_SP_INT_EN_PORT_ERR;
 	}
 	/* Do not clear PORT_LOCKOUT, that is the responsibility
 	 * of the user mode handler for now.
 	 */
 	if (pwmsg.em.is_port & TSI721_RIO_PLM_SP_STATUS_LINK_INIT) {
+		plm_en |= TSI721_RIO_PLM_SP_INT_EN_PORT_ERR;
 		plm_en |= TSI721_RIO_PLM_SP_INT_EN_DLT;
 		plm_en &= ~TSI721_RIO_PLM_SP_INT_EN_LINK_INIT;
 	}
@@ -436,8 +445,9 @@ static int tsi721_pw_enable(struct rio_mport *mport, int enable)
 	/* Disable hot swap interrupts */
 	if (!enable) {
 		enables = ioread32(priv->regs + TSI721_RIO_PLM_SP_INT_EN);
-		enables &= ~TSI721_RIO_PLM_SP_STATUS_LINK_INIT;
-		enables &= ~TSI721_RIO_PLM_SP_STATUS_DLT;
+		enables &= ~TSI721_RIO_PLM_SP_INT_EN_LINK_INIT;
+		enables &= ~TSI721_RIO_PLM_SP_INT_EN_DLT;
+		enables &= ~TSI721_RIO_PLM_SP_INT_EN_PORT_ERR;
 		iowrite32(enables, priv->regs + TSI721_RIO_PLM_SP_INT_EN);
 		iowrite32(0, priv->regs + TSI721_RIO_PLM_SP_ALL_INT_EN);
 		goto exit;
@@ -449,11 +459,15 @@ static int tsi721_pw_enable(struct rio_mport *mport, int enable)
 	rval = ioread32(priv->regs + TSI721_ERR_STAT);
 	enables = ioread32(priv->regs + TSI721_RIO_PLM_SP_INT_EN);
 	if (rval & RIO_PORT_N_ERR_STS_PORT_OK) {
-		enables &= ~TSI721_RIO_PLM_SP_STATUS_LINK_INIT;
-		enables |= TSI721_RIO_PLM_SP_STATUS_DLT;
+		enables &= ~TSI721_RIO_PLM_SP_INT_EN_LINK_INIT;
+		enables |= TSI721_RIO_PLM_SP_INT_EN_DLT;
+		enables |= TSI721_RIO_PLM_SP_INT_EN_PORT_ERR;
+		tsi_info(&priv->pdev->dev, "link port OK, enable DLT and PORT_ERR ints, disable LINK_INIT");
 	} else {
-		enables |= TSI721_RIO_PLM_SP_STATUS_LINK_INIT;
-		enables &= ~TSI721_RIO_PLM_SP_STATUS_DLT;
+		enables |= TSI721_RIO_PLM_SP_INT_EN_LINK_INIT;
+		enables &= ~TSI721_RIO_PLM_SP_INT_EN_DLT;
+		enables &= ~TSI721_RIO_PLM_SP_INT_EN_PORT_ERR;
+		tsi_info(&priv->pdev->dev, "link port NOT_OK, enable LINK_INIT int, disable DLT and PORT_ERR");
 	}
 	iowrite32(enables, priv->regs + TSI721_RIO_PLM_SP_INT_EN);
 	iowrite32(TSI721_RIO_PLM_SP_ALL_INT_EN_IRQ_EN,
