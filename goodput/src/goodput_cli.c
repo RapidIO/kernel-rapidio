@@ -97,6 +97,7 @@ char *req_type_str[(int)last_action+1] = {
 	(char *)"Pol4PW",
 	(char *)"SwLock",
 	(char *)"Maint ",
+	(char *)"CPSAck",
 	(char *)"LAST"
 };
 
@@ -2352,6 +2353,7 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 	float delay = 0;
 	uint16_t idx;
 	req_type req;
+	uint32_t error_types = SEVEN_TEST_ERROR_TYPE_NONE;
 
 	rc = gp_parse_worker_index_check_thread(env, argv[n++], &idx, 1);
 	if (rc) {
@@ -2360,10 +2362,18 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 	}
 	switch (argv[n++][0]) {
 	case 'I':
-	case 'i': req = seven_test_721I;
+	case 'i': 
+		req = seven_test_721I;
 		break;
 	case 'P':
-	case 'p': req = seven_test_pw_rx;
+	case 'p': 
+		req = seven_test_pw_rx;
+		error_types = SEVEN_TEST_ERROR_TYPE_ALL;
+		break;
+	case 'A':
+	case 'a': 
+		req = seven_test_721I;
+		error_types = SEVEN_TEST_ERROR_TYPE_ACKID;
 		break;
 	default:
 		LOGMSG(env, "Unknown action %s\n", argv[n]);
@@ -2378,10 +2388,18 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 	}
 	n++;
 	if (n < argc) {
-		rc = tok_parse_ul(argv[n], &downtime, 10);
-		if (rc) {
-			LOGMSG(env, "Unrecognized downtime value: %s\n", argv[n]);
-			goto exit;
+		if (error_types == SEVEN_TEST_ERROR_TYPE_ACKID) {
+			rc = tok_parse_did(argv[n], &mast_did, 10);
+			if (rc) {
+				LOGMSG(env, "Unrecognized MastDID value: %s\n", argv[n]);
+				goto exit;
+			}
+		} else {
+			rc = tok_parse_ul(argv[n], &downtime, 10);
+			if (rc) {
+				LOGMSG(env, "Unrecognized downtime value: %s\n", argv[n]);
+				goto exit;
+			}
 		}
 	}
 	n++;
@@ -2429,6 +2447,12 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 		}
 	}
 
+	if (error_types == SEVEN_TEST_ERROR_TYPE_ACKID) {
+		downtime = 0;
+		to_time = 0;
+		err_time = 0;
+	}
+
 	if ((err_time + to_time + downtime) >= period) {
 		LOGMSG(env, "Times don't add up.\n");
 		goto exit;
@@ -2449,6 +2473,7 @@ static int SevenTestCmd(struct cli_env *env, int argc, char **argv)
 	wkr[idx].did_val = mast_did;
 	wkr[idx].hc = mast_hc;
 	wkr[idx].seven_test_delay = delay;
+	wkr[idx].seven_test_error_types = error_types;
 
 	wkr[idx].stop_req = 0;
 	sem_post(&wkr[idx].run);
@@ -2461,13 +2486,16 @@ struct cli_cmd SevenTest = {
 2,
 2,
 "Tsi721 Test commands for Tsi721 <=> CPS configuration.",
-"<idx> <option> {<Period> {<DownTime> <TOTime> <ErrTime>}\n"
-"Fault insertion and CPS switch management tasks.\n"
+" <idx> P\n"
+"7Test :  <idx> I <Period> <DownTime> <TOTime> <ErrTime> <M_DID> <M_HC> <Delay>\n"
+"7Test :  <idx> A <Period> <M_DID>\n"
+"\nFault insertion and CPS switch management tasks.\n"
 "<idx>   : halted thread that will run the test.\n"
 "<option>: P : Receive and display all port-writes and local interrupts.\n"
 "              Do not handle the port-writes or interrupts.\n"
 "          I : Tsi721 fault insertion.  Requires <Period>, <DownTime>\n"
 "              <TOTime> <ErrTime> <MasterDid> <MasterHC> <Delay>.\n"
+"          A : Invalid AckID generation.  Requires <Period> and <M_DID>.\n"
 "Period  : Time in seconds between attempts to kill the link, default is 30.\n"
 "          Downtime, TOTime, and ErrTime must add up to less than Period.\n"
 "DownTime: Time in seconds that the link will be down, default is 10.\n"
@@ -2477,8 +2505,8 @@ struct cli_cmd SevenTest = {
 "ErrTime : Time in seconds that other Tsi721s will see error respones.\n"
 "          Corrupts the address of inbound window 0 (offset 0x29000)\n"
 "          Default is 5 seconds.\n"
-"MastDID : Destination ID of first endpoint to run fault insertion.\n"
-"MastHC  : Hopcount to read registers on MastDID device.\n"
+"M_DID   : Destination ID of first endpoint to run fault insertion.\n"
+"M_HC    : Hopcount to read registers on MastDID device.\n"
 "Delay   : Delay from start of Mast DID fault insertion to start of fault\n"
 "          insertion on this device.\n",
 SevenTestCmd,
@@ -4322,6 +4350,71 @@ UTimeCmd,
 ATTR_NONE
 };
 
+static int AckIDFaultCmd(struct cli_env *env, int argc, char **argv)
+{
+	uint16_t idx, cps_wkr;
+	uint32_t period  = 30;
+	uint32_t port;
+	int ret;
+	int n = 0;
+	
+	
+	if (gp_parse_worker_index_check_thread(env, argv[n++], &idx, 1))
+	{
+		goto exit;
+	}
+
+	ret = gp_parse_worker_index_check_thread(env, argv[n++], &cps_wkr, 2);
+	if (ret)
+	{
+		LOGMSG(env, "Need index of a running CPS worker thread.\n");
+		goto exit;	
+	}
+
+	ret = tok_parse_port_num(argv[n++], &port, 10);
+	if (ret)
+	{
+		LOGMSG(env, "Parse port failed : ret = %d.\n", ret);
+		goto exit;
+	}
+
+	if( argc > 3)
+		ret = tok_parse_ul(argv[n], &period, 10);
+	if (ret)
+	{
+		LOGMSG(env, "Unrecognized period value: %s\n", argv[n]);
+		LOGMSG(env, "Use default period value: 30s.\n");
+		period = 30;
+	}
+
+	LOGMSG(env, "AckID faults on Port %d every %d seconds\n", port, period);
+
+	wkr[idx].action = ackfault_on_switch;
+	wkr[idx].action_mode = kernel_action;
+	wkr[idx].ackIDfault_creation_period = period;
+	wkr[idx].ackIDfault_port  = port;
+	wkr[idx].hs_worker[CPS_I] = &wkr[cps_wkr];
+	wkr[idx].stop_req = 0;
+	sem_post(&wkr[idx].run);
+
+exit:
+	return 0;
+}
+
+struct cli_cmd AckIDFault = {
+"AckIDFault",
+4,
+3,
+"Create AckID mismatch on CPS switch port",
+"<idx> <cps_wkr> <port> <period>\n"
+	"<idx>	  : halted thread that will run the test. The index is from 0 to " STR(MAX_WORKER_IDX) "\n"
+	"<cps_wkr>: started 'C' task index. Must run command CHotSwap first to set up switch \n" 
+	"<port>  ：Port that originated AckID mismatch error\n"
+	"<period> : Time in seconds between attempts to create a ACKID mismatch error, default is 10.\n",
+AckIDFaultCmd,
+ATTR_NONE
+};
+
 struct cli_cmd *goodput_cmds[] = {
 	&IBAlloc,
 	&IBDealloc,
@@ -4381,7 +4474,8 @@ struct cli_cmd *goodput_cmds[] = {
 	&CPSReset,
 	&FileRegs,
 	&CPSHotSwap,
-	&MaintTraffic
+	&MaintTraffic,
+	&AckIDFault
 };
 
 void bind_goodput_cmds(void)

@@ -93,12 +93,14 @@ struct librio_status {
 
 uint32_t tsi721_init_no_kernel_scan(struct worker *info);
 void do_tsi721_fault_ins(struct worker *info);
+void do_tsi721_ackid_reset(struct worker *info);
 void do_tsi721_handle_link_init(struct worker *info);
 void do_tsi721_pw_rx(struct worker *info);
 void do_tsi721_handle_tsi_pw(struct worker *info);
 void do_tsi721_handle_cps_pw(struct worker *info);
 void do_tsi721_manage_switch(struct worker *info);
 void do_cps_poll_for_pw(struct worker *info);
+void do_cps_ackfault_creation(struct worker * info);
 void do_tsi721_tsi721_recovery(struct worker *info);
 void do_tsi721_test_switch_lock(struct worker *info);
 

@@ -349,6 +349,7 @@ void do_tsi721_fault_ins(struct worker *info)
 	uint32_t ctl;
 	uint32_t ctl_oset = TSI721_SP_CTL;
 	uint32_t iter = 0;
+	uint32_t error_types = info->seven_test_error_types;
 
 	uint32_t did, dev, vend, devi;
 	rio_port_t port;
@@ -448,7 +449,7 @@ resp_to_time:
 			continue;
 down_time:
 		if (!info->seven_test_downtime)
-			continue;
+			goto ackid;
 		HIGH("7Test: Iter %d Tsi721 DOWNTIME %d seconds\n",
 			iter++, info->seven_test_downtime);
 		// INFW: Test to confirm that switch link partner is correctly
@@ -466,6 +467,7 @@ down_time:
 				CRIT("Port %d not in mask 0x%x\n", port, maskval);
 			}
 		}
+
 		ret |= rio_lcfg_read(info->mp_h, ctl_oset, 4, &ctl);
 		ctl |= TSI721_SP_CTL_PORT_DIS;
 		ret |= rio_lcfg_write(info->mp_h, ctl_oset, 4, ctl);
@@ -481,6 +483,16 @@ down_time:
 		// necessary to prevent port-write handling from occurring
 		// while the link is down.
 		DBG("\tPOST tsi721_mutex\n");
+		sem_post(&tsi721_mutex);
+ackid:
+		if (!(error_types & SEVEN_TEST_ERROR_TYPE_ACKID))
+			continue;
+		DBG("\tWaiting for tsi721_mutex\n");
+		sem_wait(&tsi721_mutex);
+		HIGH("7Test: Iter %d Tsi721 ACKID FAULT\n",
+			iter++, info->seven_test_downtime);
+		ctl  = TSI721_SP_ACKID_STAT_CLR_OUTSTD_ACKID;
+		ret |= rio_lcfg_write(info->mp_h, TSI721_SP_ACKID_STAT, 4, ctl);
 		sem_post(&tsi721_mutex);
 	}
 
@@ -570,6 +582,9 @@ void do_tsi721_pw_rx(struct worker *info)
 		}
 		if (plm_stat & TSI721_PLM_STATUS_LINK_INIT) {
 			INFO("\tHandling Link Init\n");
+		}
+		if (plm_stat & TSI721_PLM_STATUS_PORT_ERR) {
+			INFO("\tHandling Port Err\n");
 		}
 	}
 exit:
@@ -1239,13 +1254,26 @@ uint32_t handle_tsi721_port_write(DAR_DEV_INFO_t *dev_h,
 	uint32_t unused;
 	plm_stat = pw_payload[2];
 
+	/* Cause a DLT event to handle PORT_ERR events. */
+    if (plm_stat & TSI721_PLM_STATUS_PORT_ERR) {
+	uint32_t temp_ctl;
+	INFO("\tHandling PORT_ERR\n");
+        ret |= rio_lcfg_read(mp_h, TSI721_SP_CTL, 4, &ctl);
+	temp_ctl = ctl | TSI721_SP_CTL_PORT_DIS;
+	ret |= rio_lcfg_write(mp_h, TSI721_SP_CTL, 4, temp_ctl);
+	ret |= rio_lcfg_read(mp_h, TSI721_SP_CTL, 4, &unused);
+	info->clear_port_dis = 1;
+	if (!(plm_stat & TSI721_PLM_STATUS_DLT))
+		goto exit;
+    }
+
 	if (plm_stat & TSI721_PLM_STATUS_DLT) {
 		INFO("\tHandling DLT\n");
 		tsi721_disable_dma();
-		ret = tsi721_wait_for_empty(info);
+		ret |= tsi721_wait_for_empty(info);
 		if (ret) {
 			ERR("Wait for empty failed %d ...\n", ret);
-			goto exit;
+			goto clear_port_dis;
 		}
 		tsi721_reset_own_port_from_cli();
 		// Force completion of previous PCIe writes
@@ -1255,6 +1283,18 @@ uint32_t handle_tsi721_port_write(DAR_DEV_INFO_t *dev_h,
 		// Force completion of previous PCIe write
 		ret |= rio_lcfg_read(mp_h, TSI721_SP_CTL, 4, &unused);
 	}
+
+clear_port_dis:
+    if (info->clear_port_dis) {
+	info->clear_port_dis = 0;
+        sleep(5);
+        ret |= tsi721_clear_port_dis();
+	INFO("\tFinished handling PORT_ERR\n");
+        if (ret) {
+		ERR("Clear port dis failed %d ...\n", ret);
+	}
+        goto exit;
+    }
 
 	if (!(plm_stat & TSI721_PLM_STATUS_LINK_INIT))
 		goto exit;
@@ -1834,9 +1874,9 @@ exit:
 uint32_t reset_cps_port(DAR_DEV_INFO_t *dev_h, uint32_t port);
 
 uint32_t handle_cps_link_down(DAR_DEV_INFO_t *dev_h,
-			int port)
+			int port, uint32_t err_stat)
 {
-	uint32_t ctl, cpb = 1, tx_disc = 1;
+	uint32_t ctl, ctl_temp, cpb = 1, tx_disc = 1;
 	uint32_t ret;
 	uint32_t did = PORT_TO_DID(port);
 	uint32_t limit;
@@ -1856,8 +1896,12 @@ uint32_t handle_cps_link_down(DAR_DEV_INFO_t *dev_h,
 
 	// Set port lockout to cause packet discard
 	ret |= DARRegRead(dev_h, CPS1848_PORT_X_CTL_1_CSR(port), &ctl);
-	ret |= DARRegWrite(dev_h, CPS1848_PORT_X_CTL_1_CSR(port),
-				ctl | CPS1848_PORT_X_CTL_1_CSR_PORT_LOCKOUT);
+	ctl_temp = ctl | CPS1848_PORT_X_CTL_1_CSR_PORT_LOCKOUT;
+	if (err_stat & CPS1848_PORT_X_ERR_STAT_CSR_PORT_ERR) {
+		ctl_temp = ctl_temp | CPS1848_PORT_X_CTL_1_CSR_PORT_DIS;
+	}
+	ret |= DARRegWrite(dev_h, CPS1848_PORT_X_CTL_1_CSR(port), ctl_temp);
+
 	if (ret) {
 		ERR("Error reading/writing port control 0x%x\n", ret);
 		return ret;
@@ -1881,6 +1925,12 @@ uint32_t handle_cps_link_down(DAR_DEV_INFO_t *dev_h,
 		return ret;
 	}
 
+	if (err_stat & CPS1848_PORT_X_ERR_STAT_CSR_PORT_ERR) 
+	{
+		//Wait for 3 seconds and then clear PORT_DIS
+		sleep(3);
+	}
+	
 	//  Port is now empty, and all packets have been discarded.
 	ret |= DARRegWrite(dev_h, CPS1848_PORT_X_CTL_1_CSR(port), ctl);
 	// Ensure all previous PCIe writes are completed
@@ -1927,16 +1977,22 @@ uint32_t cps_poll_for_status(struct worker *info)
 	}
 	for (int port = 0; port < NUM_PORTS(dev_h); port++) {
 		int did = PORT_TO_DID(port);
+		uint32_t err_stat_reg;
+
 		if (CONN_PORT(dev_h) == port)
 			continue;
 
 		ret = DARRegRead(dev_h, CPS1848_PORT_X_ERR_STAT_CSR(port),
-				&err_stat);
+				&err_stat_reg);
 		if (ret) {
 			ERR("Poll port %d error 0x%x\n", port, ret);
 			break;
 		}
-		err_stat = !!(CPS1848_PORT_X_ERR_STAT_CSR_PORT_OK & err_stat);
+		err_stat = !(CPS1848_PORT_X_ERR_STAT_CSR_PORT_ERR
+					& err_stat_reg)
+			&& (CPS1848_PORT_X_ERR_STAT_CSR_PORT_OK
+					& err_stat_reg);
+
 		if (err_stat == devid_status[did])
 			continue;
 
@@ -1946,11 +2002,14 @@ uint32_t cps_poll_for_status(struct worker *info)
 		if (err_stat)
 			ret = handle_cps_link_up(dev_h, port);
 		else
-			ret = handle_cps_link_down(dev_h, port);
-		if (ret) {
+			ret = handle_cps_link_down(dev_h, port, err_stat_reg);
+
+		if (ret)
+		{
 			ERR("CPS port %d handling error 0x%x\n", port, ret);
 			break;
 		}
+		
 	}
 
 	rc = DARrioReleaseDeviceLock(dev_h, my_devid, &sw_lock);
@@ -2226,6 +2285,77 @@ unlock:
 	sem_post(&tsi721_mutex);
 }
 
+static uint32_t cps_ackfault_creation(struct worker *info)
+{
+	uint32_t ret = 0, rc;
+	uint32_t stat;
+	struct worker *hndlr = info->hs_worker[CPS_I];
+	DAR_DEV_INFO_t *dev_h = hndlr->dev_h;
+	uint16_t my_devid;
+	uint16_t sw_lock;
+
+	if (!dev_h)
+	{
+		ERR("No switch device handle\n");
+		return 1;
+	}
+	my_devid = PORT_TO_DID(CONN_PORT(dev_h));
+	ret = lock_switch(dev_h, info, &my_devid, &sw_lock);
+	if (ret)
+	{
+		ERR("Could not get device lock\n");
+		goto exit;
+	}
+
+	ret = DARRegRead(dev_h, CPS1848_PORT_X_LOCAL_ACKID_CSR(info->ackIDfault_port), &stat);
+	if (ret)
+	{
+		ERR("Poll port %d error 0x%x\n", info->ackIDfault_port, ret);
+		goto exit;
+	}
+	DBG("Port ACK ID status %d", stat);
+
+	DARRegWrite(dev_h, CPS1848_PORT_X_LOCAL_ACKID_CSR(info->ackIDfault_port), 
+		CPS1848_PORT_X_LOCAL_ACKID_CSR_CLR);
+
+	//Read again to make sure the regiester is indeed cleared. 
+	ret = DARRegRead(dev_h, CPS1848_PORT_X_LOCAL_ACKID_CSR(info->ackIDfault_port), &stat);
+	if (ret)
+	{
+		ERR("Poll port %d error 0x%x\n", info->ackIDfault_port, ret);
+		goto exit;
+	}
+	DBG("Port ACK ID status %d", stat);
+
+exit:
+	rc = DARrioReleaseDeviceLock(dev_h, my_devid, &sw_lock);
+	if (rc) {
+		if (sw_lock != my_devid)
+			return ret;
+		ERR("DARrioReleaseDeviceLock Failed Lock 0x%x Err 0x%x.\n",
+			sw_lock, rc);
+		if (!ret)
+			ret = rc;
+	}
+	return ret;
+}
+
+void do_cps_ackfault_creation(struct worker *info)
+{
+	uint32_t ret;
+	uint32_t iter = 0;
+	do 
+	{
+		DBG("\tWaiting for tsi721_mutex\n");
+		sem_wait(&tsi721_mutex);
+		ret = cps_ackfault_creation(info);
+		HIGH("Iteration %d AckID Mismatch on CPS Port %d\n",
+			iter++, info->ackIDfault_port);
+		sem_post(&tsi721_mutex);
+		DBG("\tSleeping for %d second\n", info->ackIDfault_creation_period);
+		sleep(info->ackIDfault_creation_period);
+	} while (!info->stop_req && !ret);
+}
 
 #ifdef __cplusplus
 }

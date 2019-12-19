@@ -1,0 +1,5 @@
+t 12 -1 0
+w 12 H
+AckIDFault 12 1 1 30
+sleep 2
+wait 12 R

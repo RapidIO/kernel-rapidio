@@ -67,6 +67,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern "C" {
 #endif
 
+#define SEVEN_TEST_ERROR_TYPE_NONE  0x00000000
+#define SEVEN_TEST_ERROR_TYPE_ACKID (1<<0)
+#define SEVEN_TEST_ERROR_TYPE_ALL   0xFFFFFFFF
+
 /**
  * @struct worker
  *
@@ -107,6 +111,7 @@ enum req_type {
 	cps_poll_for_pw,
 	cps_test_switch_lock,
 	maint_traffic,
+	ackfault_on_switch,
 	last_action
 };
 
@@ -228,7 +233,12 @@ struct worker {
 	uint32_t seven_test_downtime;
 	uint32_t seven_test_err_resp_time;
 	uint32_t seven_test_resp_to_time;
+	uint32_t seven_test_error_types;
 	float seven_test_delay;
+
+	uint32_t clear_port_dis;
+	uint32_t ackIDfault_creation_period;
+	uint32_t ackIDfault_port;
 };
 
 /**

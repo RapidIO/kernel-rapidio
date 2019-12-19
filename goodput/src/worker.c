@@ -1622,6 +1622,9 @@ void *worker_thread(void *parm)
 		case maint_traffic:
 			do_maint_traffic(info);
 			break;
+		case ackfault_on_switch:
+			do_cps_ackfault_creation(info);
+			break;
 		case no_action:
 		case last_action:
 		default:

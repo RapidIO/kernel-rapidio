@@ -1,0 +1,155 @@
+AckID Mismatch Detection and Handling for Tsi721 PCI Express-to-RapidIO Bridge
+==============================================================================
+
+I. Overview
+
+An ackID mismatch condition occurs when one end of a link is reset, or the
+ackID register is manually corrupted.  Packet exchange is no longer possible
+after this corruption occurs.  The RapidIO standard error recovery mechanism
+also fails, causing detection of a PORT_ERR condition.  This software
+demonstrates insertion of an ackID mismatch error both on the Tsi721 and on
+the connected CPS switch.  It also demonstrates recovery from this condition.
+
+II. Known Problems
+==================
+
+None
+
+III. System prerequisites
+=========================
+
+The demonstration requires the Tsi721 mport device driver and rio_mport_cdev
+module to be loaded.
+
+Configuration options are found in /etc/modprobe.d/rapidio.conf.
+
+3.1 Hardware configuration
+--------------------------
+
+The demonstration depends on having a controller node connected to port 0
+on the CPS switch, and an endpoint node connected to port 1 on the CPS switch.
+
+IV. Kernel and Demonstration Compilation Instructions
+=====================================================
+
+There are two components to the demonstration:
+- An updated RapidIO kernel driver
+- An updated goodput demonstration application
+
+Download the software to both the controller and endpoint nodes.
+
+4.1 Kernel driver installation
+------------------------------
+
+In the kernel-rapidio directory, on both the controller and the endpoint,
+perform the following commands:
+
+make clean
+make all
+sudo make install
+
+Reboot the controller and endpoint.
+
+4.2 Goodput installation
+------------------------
+
+In the kernel-rapidio/goodput subdirectory, perform the following commands:
+
+make clean
+make all
+
+4.3 Script update for endpoint destination ID
+---------------------------------------------
+
+In directory goodput/scripts/cps_hs, edit script 5_cps_eack.txt to set
+destination ID corresponding to the endpoint. The ID is contained in 
+the last argument.
+
+For example, if the endpoint has destination ID 6, the script should be 
+edited from:
+
+7T 12 A 30 2
+
+to
+
+7T 12 A 30 6
+
+
+V. Demonstration Execution
+--------------------------
+
+On both the controller and the endpoint, perform the following steps:
+
+sudo modprobe rio-mport-cdev
+sudo ./goodput
+
+This should result in the Goodput splash screen appearing, and then a command
+prompt like the following:
+
+Goodput>
+
+Two separate demonstrations are available:
+- Fault insertion on the endpoint's Tsi721
+- Fault insertion on the CPS port connected to the endpoint
+
+The demonstrations may not be run at the same time.
+
+The steps to perform the demonstrations are identical except for the last step.
+
+5.1 Common Demonstration Setup
+------------------------------
+
+The following commands involve executing scripts of Goodput commands.  The
+script files are found in the goodput/scripts/cps_hs directory.  The scripts
+are all named as follows:
+
+#_cps_Xstep.txt
+
+Where:
+# - Single digit, indicating the script execution sequence (0, 1, 2, ...)
+X - either 'e' (endpoint) or 'c' (controller), indicates where the script
+    should be executed
+step - 'hs' for hot swap setup, 'dma' to start DMA transactions, and
+       'ack' for ackID mismatch demonstration.
+
+Perform the following steps in the order given.
+
+Enter the following command at the prompt on the endpoint:
+
+. 0_cps_ehs.txt
+
+Enter the following command at the prompt on the controller:
+
+. 1_cps_chs.txt
+
+Enter the following command at the prompt on the endpoint:
+
+. 2_cps_edma.txt
+
+Enter the following command at the prompt on the controller:
+
+. 3_cps_cdma.txt
+
+5.1 Tsi721 ackID Mismatch Demonstration
+---------------------------------------
+
+Enter the following command at the prompt on the endpoint to demonstrate
+creation, detection, and recovery from an ackID mismatch on the Tsi721:
+
+. 5_cps_eack.txt
+
+After this, periodically output should appear on the controller node
+indicating that a port has been disabled, and then that the port has
+been enabled.
+
+5.2 CPS ackID Mismatch Demonstration
+---------------------------------------
+
+Enter the following command at the prompt on the controller to demonstrate
+creation, detection, and recovery from an ackID mismatch on the CPS switch:
+
+. 6_cps_cack.txt
+
+After this, every 30 seconds output should appear on the controller node
+indicating that port 1 has been disabled, and then that port 1 has
+been enabled.
