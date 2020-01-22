@@ -38,7 +38,7 @@
 #include <getopt.h>
 #include "tsi721_umd.h"
 
-#define MAX_MSG_PER_BUF (16)
+#define MAX_MSG_PER_BUF (512)
 
 // Test basic opening and setup of the user-mode driver
 
@@ -189,6 +189,19 @@ int main(int argc, char** argv)
 
         printf("tsi721_umd_send %d success\n",i);
     }
+
+    // Try again using one big multi send
+    num_writes = dma_buf_size / msg_size;
+    struct tsi721_umd_packet* packet = malloc(num_writes * sizeof(struct tsi721_umd_packet));
+    for (i=0; i<num_writes; i++)
+    {
+        packet[i].phys_addr = (void*)(dma_buf_addr + i*(dma_buf_size/num_writes));
+        packet[i].rio_addr  = rio_base + i*msg_size;
+        packet[i].num_bytes = msg_size;
+        packet[i].dest_id   = dest_id;
+    }
+    tsi721_umd_send_multi(&umd, packet, num_writes);
+    printf("tsi721_umd_send_multi %d success\n",num_writes);
 
     ret = tsi721_umd_stop(&umd);
     if (ret != 0)
