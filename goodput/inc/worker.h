@@ -180,6 +180,8 @@ struct worker {
     uint64_t rdma_buff_size;
     void *rdma_ptr;
     int num_trans;
+    int num_packet;
+    struct tsi721_umd_packet* packet;
 
     int mb_valid;
     rio_mailbox_t mb;

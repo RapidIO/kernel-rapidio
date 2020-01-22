@@ -38,7 +38,9 @@
 #include <getopt.h>
 #include "tsi721_umd.h"
 
-#define MAX_MSG_PER_BUF (16)
+#define MAX_MSG_PER_BUF (512)
+
+#define min(x,y) ((x) < (y) ? (x) : (y))
 
 // Test basic opening and setup of the user-mode driver
 
@@ -73,8 +75,8 @@ int main(int argc, char** argv)
     uint32_t i;
     struct tsi721_umd umd;
     uint64_t q_addr = 0x50000000;
-    uint32_t q_size = 8 * 8192;
-    uint64_t dma_buf_addr = q_addr + 256*1024;
+    uint32_t q_size = 8 * 128 * 1024;
+    uint64_t dma_buf_addr = q_addr + q_size;
     uint32_t dma_buf_size = 1024*1024;
     uint32_t msg_size = dma_buf_size/MAX_MSG_PER_BUF;
     int32_t  dest_id = -1;
@@ -172,6 +174,8 @@ int main(int argc, char** argv)
     for (i=0; i<dma_buf_size/4; i++)
         ptr[i] = (i & 0x0000FFFF) | 0xCAFE0000;
 
+#if 0
+    // Test for single packet writes
     for (i=0; i<num_writes; i++)
     {
         ret = tsi721_umd_send(
@@ -187,7 +191,33 @@ int main(int argc, char** argv)
             return -1;
         }
 
-        printf("tsi721_umd_send %d success\n",i);
+        if ((i % 512 == 511) || i == num_writes-1)
+            printf("tsi721_umd_send %d success\n",i+1);
+    }
+#endif
+
+    printf("test multi write\n");
+
+    // Test multi-packet writes
+    struct tsi721_umd_packet packet[16*1024];
+    uint32_t writes_done = 0;
+    uint32_t writes_remain = num_writes;
+    while (writes_remain > 0)
+    {
+        uint32_t writes_this_iter = min(16*1024,writes_remain);
+
+        for (i=0; i<writes_this_iter; i++)
+        {
+            packet[i].phys_addr = (void*)(dma_buf_addr + i*msg_size);
+            packet[i].rio_addr  = rio_base + i*msg_size;
+            packet[i].num_bytes = msg_size;
+            packet[i].dest_id   = dest_id;
+        }
+
+        tsi721_umd_send_multi(&umd, packet, writes_this_iter);
+        writes_done += writes_this_iter;
+        printf("tsi721_umd_send_multi %d success\n", writes_done);
+        writes_remain -= writes_this_iter;
     }
 
     ret = tsi721_umd_stop(&umd);

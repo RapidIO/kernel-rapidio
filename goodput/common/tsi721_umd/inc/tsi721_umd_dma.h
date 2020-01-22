@@ -28,7 +28,20 @@ enum dma_rtype {
 };
 
 typedef struct {
-	uint32_t type_id;
+    union {
+	    uint32_t all;
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+        struct {
+            uint16_t devid;
+            uint16_t type;
+        } info;
+#else
+        struct {
+            uint16_t type;
+            uint16_t devid;
+        } info;
+#endif
+    } word0;
 
 #define TSI721_DMAD_DEVID	0x0000ffff
 #define TSI721_DMAD_CRF		0x00010000
@@ -37,7 +50,7 @@ typedef struct {
 #define TSI721_DMAD_IOF		0x08000000
 #define TSI721_DMAD_DTYPE	0xe0000000
 
-	uint32_t bcount;
+    uint32_t bcount;
 
 #define TSI721_DMAD_BCOUNT1	0x03ffffff /* if DTYPE == 1 */
 #define TSI721_DMAD_BCOUNT2	0x0000000f /* if DTYPE == 2 */
@@ -77,3 +90,6 @@ void tsi721_umd_create_dma_descriptor(tsi721_dma_desc* bd_ptr,
 			  uint64_t raddr_lsb64,
 			  uint8_t raddr_msb2,
 			  uint8_t *buffer_ptr);
+
+void tsi721_umd_init_dma_descriptors(tsi721_dma_desc* bd_ptr, uint32_t num_descriptors);
+void tsi721_umd_update_dma_descriptor(tsi721_dma_desc* bd_ptr, uint64_t raddr_lsb64, uint64_t raddr_msb2, uint16_t devid, uint32_t bcount, void* buffer_ptr);

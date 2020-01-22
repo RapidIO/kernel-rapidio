@@ -84,7 +84,7 @@ extern "C" {
 #endif
 
 #define PATTERN_SIZE  8
-#define UDM_QUEUE_SIZE  (8 * 8192)
+#define UDM_QUEUE_SIZE  (8 * 131072)
 #define INIT_CRC32 0xFF00FF00
 
 #define ADDR_L(x,y) ((uint64_t)((uint64_t)x + (uint64_t)y))
@@ -262,6 +262,7 @@ static int umd_dma_num_writer(struct worker *worker_info, uint32_t iter)
     uint64_t payload_size = worker_info->rdma_buff_size - sizeof(data_prefix);
     uint64_t xfer_offset = 0;
     uint64_t xfer_size;
+    tsi721_umd_packet packet[2];
 
     if (worker_info->stop_req)
     {
@@ -309,16 +310,10 @@ static int umd_dma_num_writer(struct worker *worker_info, uint32_t iter)
     DBG("Writer DMA Payload send 0x%p 0x%x 0x%p %d",
         (void *)payload_phys, xfer_size,
         payload_rio, worker_info->did_val);
-    rc = tsi721_umd_send(worker_info->umd_engine_p,
-                        (void *)payload_phys, xfer_size,
-                         payload_rio, worker_info->did_val);
-    if (rc != 0)
-    {
-        ERR("FAILED: payload dma transfer returned %d\n"
-            "        Offset 0x%x Pay Phys 0x%lx  Size 0x%x RIO 0x%x Did %d\n",
-            rc, prefix_phys, sizeof(data_prefix), prefix_rio, worker_info->did_val);
-        goto exit;
-    }
+    packet[0].phys_addr = (void*)payload_phys;
+    packet[0].rio_addr  = payload_rio;
+    packet[0].num_bytes = xfer_size;
+    packet[0].dest_id   = worker_info->did_val;
 
     //Calculate CRC after DMA sending to let H/W have some time to transfer data to the target device. 
     prefix->CRC32 = crc32(INIT_CRC32, &prefix->payload[0], prefix->xfer_size);
@@ -334,9 +329,12 @@ static int umd_dma_num_writer(struct worker *worker_info, uint32_t iter)
     DBG("Writer DMA Prefix send P 0x%p Bytes 0x%x RIO 0x%p Did %d",
         (void *)prefix_phys, sizeof(data_prefix),
         (void *)prefix_rio, worker_info->did_val);
-    rc = tsi721_umd_send(worker_info->umd_engine_p,
-                        (void *)prefix_phys, sizeof(data_prefix),
-                         prefix_rio, worker_info->did_val);
+    packet[1].phys_addr = (void*)prefix_phys;
+    packet[1].rio_addr  = prefix_rio;
+    packet[1].num_bytes = sizeof(data_prefix);
+    packet[1].dest_id   = worker_info->did_val;
+
+    rc = tsi721_umd_send_multi(worker_info->umd_engine_p, packet, 2);
     if(rc != 0)
     {
         ERR("FAILED: Prefix dma transfer returned %d "
@@ -530,35 +528,39 @@ exit:
 
 void umd_goodput(struct worker *info)
 {
+    uint32_t i;
+
     if (alloc_dma_tx_buffer(info))
         goto exit;
-
+    
     zero_stats(info);
     clock_gettime(CLOCK_MONOTONIC, &info->st_time);
 
+
+    for (i=0; i<info->num_packet; i++)
+    {
+        info->packet[i].phys_addr = ADDR_P(info->rdma_kbuff, i*info->acc_size);
+        info->packet[i].rio_addr  = ADDR_L(info->rio_addr, i*info->acc_size);
+        info->packet[i].num_bytes = info->acc_size;
+        info->packet[i].dest_id   = info->did_val;
+    }
+
     while (!info->stop_req) {
         start_iter_stats(info);
-        for (uint64_t count = 0; (count < info->byte_cnt) && !info->stop_req;
-             count += info->acc_size)
+
+        int rc = tsi721_umd_send_multi(info->umd_engine_p, info->packet, info->num_packet);
+        if (rc)
         {
-            int rc = 0;
-            rc = tsi721_umd_send(info->umd_engine_p,
-                                 ADDR_P(info->rdma_kbuff, count),
-                                 info->acc_size,
-                                 ADDR_L(info->rio_addr, count),
-                                 info->did_val
-                                );
-            if(rc)
-            {
-                ERR("FAILED: rc %d src 0x%p dest_id %d dest 0x%lx size 0x%lx\n",
-                     rc,
-                     ADDR_P(info->rdma_kbuff, count),
-                     info->did_val,
-                     ADDR_L(info->rio_addr, count),
-                     info->acc_size);
-                break;
-            }
-    }
+            ERR("FAILED: rc %d src 0x%p dest_id %d dest 0x%lx size 0x%lx acc_size 0x%lx\n",
+                 rc,
+                 ADDR_P(info->rdma_kbuff, 0),
+                 info->did_val,
+                 ADDR_L(info->rio_addr, 0),
+                 info->byte_cnt,
+                 info->acc_size);
+            break;
+        }
+
         info->perf_byte_cnt += info->byte_cnt;
         finish_iter_stats(info);
         clock_gettime(CLOCK_MONOTONIC, &info->end_time);
