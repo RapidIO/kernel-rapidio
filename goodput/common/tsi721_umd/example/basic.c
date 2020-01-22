@@ -172,6 +172,7 @@ int main(int argc, char** argv)
     for (i=0; i<dma_buf_size/4; i++)
         ptr[i] = (i & 0x0000FFFF) | 0xCAFE0000;
 
+#if 0
     for (i=0; i<num_writes; i++)
     {
         ret = tsi721_umd_send(
@@ -189,6 +190,9 @@ int main(int argc, char** argv)
 
         printf("tsi721_umd_send %d success\n",i);
     }
+#endif
+
+    printf("test multi write\n");
 
     // Try again using one big multi send
     num_writes = dma_buf_size / msg_size;

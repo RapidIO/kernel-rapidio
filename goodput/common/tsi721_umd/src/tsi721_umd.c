@@ -436,7 +436,7 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
  */
 int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *packet, uint32_t num_packet)
 {
-    int32_t ret, i, j;
+    int32_t ret, i;
     int8_t chan = -1;
     uint32_t packets_sent = 0, packets_remain = num_packet;
 
@@ -510,17 +510,16 @@ int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *pa
         }
 
         // Clear status entries and increment the status fifo read pointer
-        i = 0;
-        do
+        uint32_t rd = h->chan[chan].status_count;
+        uint32_t wr = TSI721_RD32(TSI721_DMACXDWRCNT(chan));
+        while (rd != wr)
         {
-            uint64_t* completion_queue_entry = completion_q_entry(&h->chan[chan],h->chan[chan].status_count+i,false);
-            for (j=0; j<8; j++)
-                completion_queue_entry[j] = 0;
-
-            i+= 8;
-        } while (i < (int32_t)sent_this_iter);
-
-        TSI721_WR32(TSI721_DMACXDSRP(chan), h->chan[chan].status_count);
+            uint64_t* completion_queue_entry = completion_q_entry(&h->chan[chan],rd,false);
+            *completion_queue_entry = 0;
+            rd = (rd + 1) & TSI721_DMACXDSRP_RD_PTR;
+        }
+        
+        TSI721_WR32(TSI721_DMACXDSRP(chan), rd);
 
         packets_remain -= sent_this_iter;
         packets_sent   += sent_this_iter;
