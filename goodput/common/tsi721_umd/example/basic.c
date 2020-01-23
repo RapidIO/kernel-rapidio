@@ -40,6 +40,8 @@
 
 #define MAX_MSG_PER_BUF (512)
 
+#define min(x,y) ((x) < (y) ? (x) : (y))
+
 // Test basic opening and setup of the user-mode driver
 
 void print_usage(void)
@@ -172,7 +174,7 @@ int main(int argc, char** argv)
     for (i=0; i<dma_buf_size/4; i++)
         ptr[i] = (i & 0x0000FFFF) | 0xCAFE0000;
 
-#if 0
+    // Test for single packet writes
     for (i=0; i<num_writes; i++)
     {
         ret = tsi721_umd_send(
@@ -188,24 +190,33 @@ int main(int argc, char** argv)
             return -1;
         }
 
-        printf("tsi721_umd_send %d success\n",i);
+        if ((i % 512 == 511) || i == num_writes-1)
+            printf("tsi721_umd_send %d success\n",i+1);
     }
-#endif
 
     printf("test multi write\n");
 
-    // Try again using one big multi send
-    num_writes = dma_buf_size / msg_size;
-    struct tsi721_umd_packet* packet = malloc(num_writes * sizeof(struct tsi721_umd_packet));
-    for (i=0; i<num_writes; i++)
+    // Test multi-packet writes
+    struct tsi721_umd_packet packet[512];
+    uint32_t writes_done = 0;
+    uint32_t writes_remain = num_writes;
+    while (writes_remain > 0)
     {
-        packet[i].phys_addr = (void*)(dma_buf_addr + i*(dma_buf_size/num_writes));
-        packet[i].rio_addr  = rio_base + i*msg_size;
-        packet[i].num_bytes = msg_size;
-        packet[i].dest_id   = dest_id;
+        uint32_t writes_this_iter = min(512,writes_remain);
+
+        for (i=0; i<writes_this_iter; i++)
+        {
+            packet[i].phys_addr = (void*)(dma_buf_addr + i*msg_size);
+            packet[i].rio_addr  = rio_base + i*msg_size;
+            packet[i].num_bytes = msg_size;
+            packet[i].dest_id   = dest_id;
+        }
+
+        tsi721_umd_send_multi(&umd, packet, writes_this_iter);
+        writes_done += writes_this_iter;
+        printf("tsi721_umd_send_multi %d success\n", writes_done);
+        writes_remain -= writes_this_iter;
     }
-    tsi721_umd_send_multi(&umd, packet, num_writes);
-    printf("tsi721_umd_send_multi %d success\n",num_writes);
 
     ret = tsi721_umd_stop(&umd);
     if (ret != 0)

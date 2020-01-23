@@ -67,20 +67,53 @@ static void* request_q_entry(struct dma_channel* chan, uint32_t id, const bool p
     return (void*)((uintptr_t)ptr + (id & REQUEST_Q_MASK) * TSI721_DESCRIPTOR_SIZE);
 }
 
-static void* completion_q_entry(struct dma_channel* chan, uint32_t id, const bool phys)
+static bool completion_q_entry_valid(uint64_t* entry)
 {
-    void* ptr;
+    uint32_t i;
+    bool all_zeros = true;
 
-    if (phys)
+    for (i=0; i<8; i++)
     {
-        ptr = chan->completion_q_phys;
-    }
-    else
-    {
-        ptr = chan->completion_q;
+        if (entry[i] != 0)
+        {
+            all_zeros = false;
+            break;
+        }
     }
 
-    return (void*)((uintptr_t)ptr + (id & COMPLETION_Q_MASK) * RESPONSE_DESCRIPTOR_SIZE);
+    return !all_zeros;
+}
+
+static void clear_completion_q_entry(uint64_t* entry)
+{
+    uint32_t i;
+
+    for (i=0; i<8; i++)
+        entry[i] = 0;
+}
+
+static void clear_completion_q(struct tsi721_umd* h, uint32_t chan)
+{
+    uint64_t* entry = h->chan[chan].completion_q_rd;
+    uint32_t wr;
+
+    // Scan until the first all-zeros entry, clearing all entries containing pointers
+    // Start from the previous read pointer -- the register read pointer cannot be directly
+    // used
+    while (completion_q_entry_valid(entry))
+    {
+        clear_completion_q_entry(entry);
+
+        entry += 8;
+        if (entry >= ((uint64_t*)h->chan[chan].completion_q + COMPLETION_Q_COUNT))
+            entry = h->chan[chan].completion_q;
+    }
+
+    h->chan[chan].completion_q_rd = entry;
+    
+    // Mark queue empty (read == write)
+    wr = TSI721_RD32(TSI721_DMACXDSWP(chan));
+    TSI721_WR32(TSI721_DMACXDSRP(chan), wr);
 }
 
 static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id);
@@ -211,6 +244,9 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
 
     chan->completion_q = (void*)((uintptr_t)chan->request_q + DEFAULT_REQUEST_Q_SIZE);
     chan->completion_q_phys = (void*)((uintptr_t)chan->request_q_phys + DEFAULT_REQUEST_Q_SIZE);
+    memset(chan->completion_q, 0, DEFAULT_COMPLETION_Q_SIZE);
+
+    chan->completion_q_rd = chan->completion_q;
     
     chan->reg_base = (void*)((uintptr_t)h->all_regs + TSI721_DMAC_BASE(channel_num));
     
@@ -372,7 +408,7 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
     {
         return -EPERM; // this should only occur on stop
     }
-
+    
     // Update descriptor in channel queue
     void* request_q_descriptor = request_q_entry(&h->chan[chan],h->chan[chan].req_count,false);
     tsi721_umd_update_dma_descriptor(request_q_descriptor, rio_addr, 0, dest_id, num_bytes, phys_addr);
@@ -394,7 +430,7 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
         // DMA completed with error
         return -EIO;
     }
-
+    
     // If this was the end of the descriptor array, move pointer back to start
     if ((h->chan[chan].req_count & REQUEST_Q_MASK) == 0)
     {
@@ -403,12 +439,7 @@ int32_t tsi721_umd_send(struct tsi721_umd* h, void* phys_addr, uint32_t num_byte
     }
     
     // Clear status entry and increment the status fifo read pointer
-    uint64_t* completion_queue_entry = completion_q_entry(&h->chan[chan],h->chan[chan].status_count,false);
-    for (i=0; i<8; i++)
-        completion_queue_entry[i] = 0;
-
-    h->chan[chan].status_count = (h->chan[chan].status_count + 1) & TSI721_DMACXDSRP_RD_PTR;
-    TSI721_WR32(TSI721_DMACXDSRP(chan), h->chan[chan].status_count);
+    clear_completion_q(h, chan);
     
     // Cleanup : mark DMA as idle and increment the free engine semaphore
     h->chan[chan].in_use = false;
@@ -474,7 +505,7 @@ int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *pa
     {
         return -EPERM; // this should only occur on stop
     }
-
+        
     while (packets_sent < num_packet)
     {
         uint32_t sent_this_iter = min(packets_remain, min(REQUEST_Q_COUNT,COMPLETION_Q_COUNT));
@@ -509,17 +540,7 @@ int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *pa
             return -EIO;
         }
 
-        // Clear status entries and increment the status fifo read pointer
-        uint32_t rd = h->chan[chan].status_count;
-        uint32_t wr = TSI721_RD32(TSI721_DMACXDWRCNT(chan));
-        while (rd != wr)
-        {
-            uint64_t* completion_queue_entry = completion_q_entry(&h->chan[chan],rd,false);
-            *completion_queue_entry = 0;
-            rd = (rd + 1) & TSI721_DMACXDSRP_RD_PTR;
-        }
-        
-        TSI721_WR32(TSI721_DMACXDSRP(chan), rd);
+        clear_completion_q(h,chan);
 
         packets_remain -= sent_this_iter;
         packets_sent   += sent_this_iter;

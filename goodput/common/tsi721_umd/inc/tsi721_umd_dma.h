@@ -30,10 +30,17 @@ enum dma_rtype {
 typedef struct {
     union {
 	    uint32_t all;
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+        struct {
+            uint16_t devid;
+            uint16_t type;
+        } info;
+#else
         struct {
             uint16_t type;
-            uint16_t devid;
+            uint16_t type;
         } info;
+#endif
     } word0;
 
 #define TSI721_DMAD_DEVID	0x0000ffff

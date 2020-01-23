@@ -53,47 +53,47 @@ extern "C" {
 #define TSI721_UMD_MAX_CLIENT_THREADS (32768)
 
 typedef enum {
-	TSI721_UMD_STATE_UNALLOCATED,
-	TSI721_UMD_STATE_UNCONFIGURED,
-	TSI721_UMD_STATE_CONFIGURED,
-	TSI721_UMD_STATE_READY
+    TSI721_UMD_STATE_UNALLOCATED,
+    TSI721_UMD_STATE_UNCONFIGURED,
+    TSI721_UMD_STATE_CONFIGURED,
+    TSI721_UMD_STATE_READY
 } TSI721_UMD_State;
 
 
 struct dma_channel
 {
-	bool      in_use;
-	void     *request_q_phys;    // physical memory address, needs to be reserved on boot
-	void     *request_q;         // virtual memory address mapped to request_q_phys
-	void     *completion_q_phys;
-	void     *completion_q;
-	uint32_t *dma_engine_regs;
-	uint32_t  queue_mem_size;    // total size for all queues
-	uint32_t  req_count;
-	uint32_t  status_count;
-	void     *reg_base;          // DMA register base address for this channel
+    bool      in_use;
+    void     *request_q_phys;    // physical memory address, needs to be reserved on boot
+    void     *request_q;         // virtual memory address mapped to request_q_phys
+    void     *completion_q_phys;
+    void     *completion_q;
+    void     *completion_q_rd;
+    uint32_t *dma_engine_regs;
+    uint32_t  queue_mem_size;    // total size for all queues
+    uint32_t  req_count;
+    void     *reg_base;          // DMA register base address for this channel
 };
 
 struct tsi721_umd
 {
-	int32_t dev_fd;     // rio_mport device handle
-	int32_t regs_fd;    // handle from mmap of register memory
-	volatile void *all_regs;  // register memory pointer
-	uint32_t regs_map_size; // size of the BAR0 register mapping
-	uint8_t chan_count; // count of channels used
-	uint8_t chan_mask;  // bitfield, allocated channels
-	struct dma_channel chan[TSI721_DMA_CHNUM]; // channel descriptors
-	sem_t              chan_sem;   // for blocking until a channel is available
-	pthread_mutex_t    chan_mutex; // Mutex updating channel status
-	TSI721_UMD_State state;
+    int32_t dev_fd;     // rio_mport device handle
+    int32_t regs_fd;    // handle from mmap of register memory
+    volatile void *all_regs;  // register memory pointer
+    uint32_t regs_map_size; // size of the BAR0 register mapping
+    uint8_t chan_count; // count of channels used
+    uint8_t chan_mask;  // bitfield, allocated channels
+    struct dma_channel chan[TSI721_DMA_CHNUM]; // channel descriptors
+    sem_t              chan_sem;   // for blocking until a channel is available
+    pthread_mutex_t    chan_mutex; // Mutex updating channel status
+    TSI721_UMD_State state;
 };
 
 struct tsi721_umd_packet
 {
-	void*    phys_addr;
-	uint64_t rio_addr;
-	uint32_t num_bytes;
-	uint32_t dest_id;
+    void*    phys_addr;
+    uint64_t rio_addr;
+    uint32_t num_bytes;
+    uint32_t dest_id;
 };
 
 extern int32_t tsi721_umd_open(struct tsi721_umd* h, uint32_t mport_id);
