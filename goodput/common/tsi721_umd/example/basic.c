@@ -174,6 +174,7 @@ int main(int argc, char** argv)
     for (i=0; i<dma_buf_size/4; i++)
         ptr[i] = (i & 0x0000FFFF) | 0xCAFE0000;
 
+#if 0
     // Test for single packet writes
     for (i=0; i<num_writes; i++)
     {
@@ -193,6 +194,7 @@ int main(int argc, char** argv)
         if ((i % 512 == 511) || i == num_writes-1)
             printf("tsi721_umd_send %d success\n",i+1);
     }
+#endif
 
     printf("test multi write\n");
 

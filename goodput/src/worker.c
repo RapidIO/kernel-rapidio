@@ -1645,9 +1645,9 @@ void *worker_thread(void *parm)
         case maint_traffic:
             do_maint_traffic(info);
             break;
-    case umd_dma_thru:
-        umd_goodput(info);
-        break;
+        case umd_dma_thru:
+            umd_goodput(info);
+            break;
         case no_action:
         case last_action:
         default:
