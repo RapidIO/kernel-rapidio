@@ -67,53 +67,10 @@ static void* request_q_entry(struct dma_channel* chan, uint32_t id, const bool p
     return (void*)((uintptr_t)ptr + (id & REQUEST_Q_MASK) * TSI721_DESCRIPTOR_SIZE);
 }
 
-static bool completion_q_entry_valid(uint64_t* entry)
-{
-    uint32_t i;
-    bool all_zeros = true;
-
-    for (i=0; i<8; i++)
-    {
-        if (entry[i] != 0)
-        {
-            all_zeros = false;
-            break;
-        }
-    }
-
-    return !all_zeros;
-}
-
-static void clear_completion_q_entry(uint64_t* entry)
-{
-    uint32_t i;
-
-    for (i=0; i<8; i++)
-        entry[i] = 0;
-}
-
 static void clear_completion_q(struct tsi721_umd* h, uint32_t chan)
 {
-    uint64_t* entry = h->chan[chan].completion_q_rd;
-    uint32_t wr;
-
-    // Scan until the first all-zeros entry, clearing all entries containing pointers
-    // Start from the previous read pointer -- the register read pointer cannot be directly
-    // used
-    while (completion_q_entry_valid(entry))
-    {
-        clear_completion_q_entry(entry);
-
-        entry += 8;
-        if (entry >= ((uint64_t*)h->chan[chan].completion_q + COMPLETION_Q_COUNT))
-            entry = h->chan[chan].completion_q;
-    }
-
-    h->chan[chan].completion_q_rd = entry;
-    
-    // Mark queue empty (read == write)
-    wr = TSI721_RD32(TSI721_DMACXDSWP(chan));
-    TSI721_WR32(TSI721_DMACXDSRP(chan), wr);
+    TSI721_WR32(TSI721_DMACXDSRP(chan),0);
+    TSI721_WR32(TSI721_DMACXDSWP(chan),0);
 }
 
 static int32_t map_bar0(struct tsi721_umd* h, int32_t mport_id);
@@ -246,8 +203,6 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
     chan->completion_q_phys = (void*)((uintptr_t)chan->request_q_phys + DEFAULT_REQUEST_Q_SIZE);
     memset(chan->completion_q, 0, DEFAULT_COMPLETION_Q_SIZE);
 
-    chan->completion_q_rd = chan->completion_q;
-    
     chan->reg_base = (void*)((uintptr_t)h->all_regs + TSI721_DMAC_BASE(channel_num));
     
     // Config the descriptor pointer registers, queue size

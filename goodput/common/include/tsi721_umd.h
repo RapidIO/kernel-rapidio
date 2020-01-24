@@ -67,7 +67,6 @@ struct dma_channel
     void     *request_q;         // virtual memory address mapped to request_q_phys
     void     *completion_q_phys;
     void     *completion_q;
-    void     *completion_q_rd;
     uint32_t *dma_engine_regs;
     uint32_t  queue_mem_size;    // total size for all queues
     uint32_t  req_count;
