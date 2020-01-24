@@ -145,6 +145,7 @@ void init_worker_info(struct worker *info, int first_time)
     info->rdma_kbuff = 0;
     info->rdma_ptr = NULL;
     info->num_trans = 0;
+    info->packet = NULL;
 
     info->mb_valid = 0;
     info->acc_skt = NULL;
@@ -626,6 +627,21 @@ int alloc_dma_tx_buffer(struct worker *info)
 {
     int rc = 0;
 
+    if (info->acc_size) {
+        int num_packet = info->byte_cnt / info->acc_size;
+
+        info->packet = (tsi721_umd_packet*) malloc(num_packet * sizeof(struct tsi721_umd_packet));
+
+        if (!info->packet)
+        {
+            ERR("FAILED: tried to allocate %d packets, buf size %d acc_size %d\n",
+                    num_packet,info->byte_cnt,info->acc_size); 
+            goto exit;
+        }
+
+        info->num_packet = num_packet;
+    }
+
     if (info->use_kbuf) {
         info->rdma_kbuff = RIO_MAP_ANY_ADDR;
         rc = rio_dbuf_alloc(info->mp_h, info->rdma_buff_size,
@@ -666,6 +682,12 @@ exit:
 
 void dealloc_dma_tx_buffer(struct worker *info)
 {
+    if (info->packet) {
+        info->num_packet = 0;
+        free(info->packet);
+        info->packet = NULL;
+    }
+
     if (info->use_kbuf) {
         if (NULL != info->rdma_ptr) {
             munmap(info->rdma_ptr, info->rdma_buff_size);

@@ -90,8 +90,6 @@ extern "C" {
 #define ADDR_L(x,y) ((uint64_t)((uint64_t)x + (uint64_t)y))
 #define ADDR_P(x,y) ((void *)((uint64_t)x + (uint64_t)y))
 
-#define MAX_UMD_PACKETS (16*1024)
-
 static const uint8_t PREFIX_PATTERN[PATTERN_SIZE]={0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF1};
 static const uint8_t STATUS_PATTERN[PATTERN_SIZE]={0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
 
@@ -533,37 +531,26 @@ exit:
 void umd_goodput(struct worker *info)
 {
     uint32_t i;
-    uint32_t num_packet = info->byte_cnt / info->acc_size;
 
     if (alloc_dma_tx_buffer(info))
         goto exit;
     
-    tsi721_umd_packet packet[MAX_UMD_PACKETS];
-
     zero_stats(info);
     clock_gettime(CLOCK_MONOTONIC, &info->st_time);
 
 
-    for (i=0; i<num_packet; i++)
+    for (i=0; i<info->num_packet; i++)
     {
-        packet[i].phys_addr = ADDR_P(info->rdma_kbuff, i*info->acc_size);
-        packet[i].rio_addr  = ADDR_L(info->rio_addr, i*info->acc_size);
-        packet[i].num_bytes = info->acc_size;
-        packet[i].dest_id   = info->did_val;
-    }
-
-    if (num_packet > MAX_UMD_PACKETS)
-    {
-        printf("%ld bytes with %ld access size would require %d packets, max %d\n",
-            info->byte_cnt, info->acc_size, num_packet, MAX_UMD_PACKETS);
-
-        goto exit;
+        info->packet[i].phys_addr = ADDR_P(info->rdma_kbuff, i*info->acc_size);
+        info->packet[i].rio_addr  = ADDR_L(info->rio_addr, i*info->acc_size);
+        info->packet[i].num_bytes = info->acc_size;
+        info->packet[i].dest_id   = info->did_val;
     }
 
     while (!info->stop_req) {
         start_iter_stats(info);
 
-        int rc = tsi721_umd_send_multi(info->umd_engine_p, packet, num_packet);
+        int rc = tsi721_umd_send_multi(info->umd_engine_p, info->packet, info->num_packet);
         if (rc)
         {
             ERR("FAILED: rc %d src 0x%p dest_id %d dest 0x%lx size 0x%lx acc_size 0x%lx\n",
