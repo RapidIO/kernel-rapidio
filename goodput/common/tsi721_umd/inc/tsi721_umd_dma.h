@@ -38,7 +38,7 @@ typedef struct {
 #else
         struct {
             uint16_t type;
-            uint16_t type;
+            uint16_t devid;
         } info;
 #endif
     } word0;

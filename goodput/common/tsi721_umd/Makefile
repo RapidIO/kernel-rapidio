@@ -44,7 +44,7 @@ LDFLAGS_STATIC+=$(TST_LIBS)
 LDFLAGS_DYNAMIC+=-lpthread
 
 CFLAGS+=-D$(DEBUG_CTL) -DRDMA_LL=$(LOG_LEVEL) -Lpthread -g
-CFLAGS+=-I../librio/inc -I../../inc -Iinc
+CFLAGS+=-I../librio/inc -I../../inc -Iinc -I/usr/include
 
 .PHONY: all clean
 
