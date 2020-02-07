@@ -98,7 +98,7 @@ module_param(dma_timeout, int, S_IRUGO);
 MODULE_PARM_DESC(dma_timeout, "DMA Transfer Timeout in msec (default: 3000)");
 
 #ifdef DEBUG
-static u32 dbg_level = DBG_NONE;
+static u32 dbg_level = DBG_ALL;
 module_param(dbg_level, uint, S_IWUSR | S_IWGRP | S_IRUGO);
 MODULE_PARM_DESC(dbg_level, "Debugging output level (default 0 = none)");
 #endif

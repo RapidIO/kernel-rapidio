@@ -1091,13 +1091,23 @@ static int tsi721_map_outb_win(struct rio_mport *mport, u16 destid, u64 rstart,
 		  "did=%d ra=0x%llx sz=0x%x", destid, rstart, size);
 
 	if (!is_power_of_2(size) || (size < 0x8000) || (rstart & (size - 1)))
+	{
+		tsi_debug(OBW, &priv->pdev->dev, "Fail: is_power_of_2 %d = %d, %d < 0x8000 = %d, %llx & %x = %lld\n",
+		size,is_power_of_2(size),size,size<0x8000,rstart,size-1,rstart & (size-1));
 		return -EINVAL;
+	}
 
 	if (priv->obwin_cnt == 0)
+	{
+		tsi_debug(OBW, &priv->pdev->dev, "Fail: priv->obwin_cnt %d == 0\n",priv->obwin_cnt);
 		return -EBUSY;
+	}
 
 	for (i = 0; i < 2; i++) {
+		tsi_debug(OBW, &priv->pdev->dev, "Checking p2r_bar %d.  free %llu vs size %u\n",
+			 i,priv->p2r_bar[i].free,size);
 		if (priv->p2r_bar[i].free >= size) {
+			tsi_debug(OBW, &priv->pdev->dev, "Trying to allocate %u from p2r_bar %d\n",size,i);
 			pbar = &priv->p2r_bar[i];
 			ret = tsi721_obw_alloc(priv, pbar, size, &obw);
 			if (!ret)
@@ -1213,6 +1223,8 @@ static void tsi721_init_pc2sr_mapping(struct tsi721_device *priv)
 			iowrite32(rval, priv->regs + TSI721_ZONE_SEL);
 		}
 	}
+
+	tsi_debug(OBW, &priv->pdev->dev, "p2r_bar sizes %llu %llu\n",priv->p2r_bar[0].size,priv->p2r_bar[1].size);
 
 	if (priv->p2r_bar[0].size == 0 && priv->p2r_bar[1].size == 0) {
 		priv->obwin_cnt = 0;
@@ -2969,6 +2981,7 @@ static int tsi721_probe(struct pci_dev *pdev,
 		goto err_disable_pdev;
 	}
 
+#if 0
 	/* BAR_1 (outbound doorbells) must be 16MB+ in 32-bit address space */
 	if (!(pci_resource_flags(pdev, BAR_1) & IORESOURCE_MEM) ||
 	    pci_resource_flags(pdev, BAR_1) & IORESOURCE_MEM_64 ||
@@ -2977,6 +2990,7 @@ static int tsi721_probe(struct pci_dev *pdev,
 		err = -ENODEV;
 		goto err_disable_pdev;
 	}
+#endif
 
 	/*
 	 * BAR_2 and BAR_4 (outbound translation) must be in 64-bit PCIe address
@@ -2987,6 +3001,7 @@ static int tsi721_probe(struct pci_dev *pdev,
 	 */
 
 	priv->p2r_bar[0].size = priv->p2r_bar[1].size = 0;
+	tsi_debug(INIT, &pdev->dev, "Init p2r bar sizes to 0\n");
 
 	if (pci_resource_flags(pdev, BAR_2) & IORESOURCE_MEM_64) {
 		if (pci_resource_flags(pdev, BAR_2) & IORESOURCE_PREFETCH)
@@ -2997,6 +3012,14 @@ static int tsi721_probe(struct pci_dev *pdev,
 			priv->p2r_bar[0].size = pci_resource_len(pdev, BAR_2);
 		}
 	}
+
+	{
+		uint32_t flags = pci_resource_flags(pdev, BAR_4);
+		tsi_debug(INIT, &pdev->dev,
+			"Checking for BAR4 config.  pci_resource_flags(pdev, BAR_4) = %x mem64 %d prefetch %d\n",
+			flags, flags & IORESOURCE_MEM_64, flags & IORESOURCE_PREFETCH);
+	}
+
 
 	if (pci_resource_flags(pdev, BAR_4) & IORESOURCE_MEM_64) {
 		if (pci_resource_flags(pdev, BAR_4) & IORESOURCE_PREFETCH)
@@ -3023,12 +3046,14 @@ static int tsi721_probe(struct pci_dev *pdev,
 		goto err_free_res;
 	}
 
+#if 0
 	priv->odb_base = pci_ioremap_bar(pdev, BAR_1);
 	if (!priv->odb_base) {
 		tsi_err(&pdev->dev, "Unable to map outbound doorbells space");
 		err = -ENOMEM;
 		goto err_unmap_bars;
 	}
+#endif
 
 	/* Configure DMA attributes. */
 	if (pci_set_dma_mask(pdev, DMA_BIT_MASK(64))) {
@@ -3212,9 +3237,12 @@ static int tsi721_probe(struct pci_dev *pdev,
 		goto err_unmap_bars;
 	}
 
+	/*
 	err = tsi721_doorbell_init(priv);
 	if (err)
 		goto err_free_bdma;
+	*/
+	tsi_debug(INIT, &pdev->dev, "skipping doorbell init");
 
 	tsi721_port_write_init(priv);
 

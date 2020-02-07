@@ -4,13 +4,15 @@
 #
 RAPIDIO_ENABLE_RX_TX_PORTS 	:= TRUE
 RAPIDIO_DMA_ENGINE		:= TRUE
-RAPIDIO_DEBUG  			:= FALSE
+RAPIDIO_DEBUG  			:= TRUE
 RAPIDIO_ENUM_BASIC		:= TRUE
 RAPIDIO_MPORT_CDEV		:= TRUE
 TSI721_PCIE_GEN3_WORKAROUND	:= FALSE
 
-KERNEL_VERSION := $(shell uname -r)
-KERNELDIR = /lib/modules/$(KERNEL_VERSION)/build
+#KERNEL_VERSION := $(shell uname -r)
+#KERNELDIR = /lib/modules/$(KERNEL_VERSION)/build
+KERNEL_VERSION := 4.4.52
+KERNELDIR = /home/cwarring/kernel_build/4.4.52/kdriver
 
 INSTDIR = /lib/modules/$(KERNEL_VERSION)/kernel/drivers/rapidio
 KERNEL := kernel-$(KERNEL_VERSION)

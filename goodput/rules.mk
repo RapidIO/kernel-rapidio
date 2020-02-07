@@ -80,7 +80,8 @@ export CXX
 KDIR=$(TOPDIR)/libmport/include
 RIODIR=$(TOPDIR)/libmport/include
 
-ARCH := $(shell arch)
+#ARCH := $(shell arch)
+ARCH = arm64
 
 OPTFLAGS = -ggdb -Ofast -fno-strict-overflow
 
