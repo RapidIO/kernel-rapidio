@@ -3056,6 +3056,7 @@ static int tsi721_probe(struct pci_dev *pdev,
 #endif
 
 	/* Configure DMA attributes. */
+	tsi_info(&pdev->dev, "Setting PCI DMA mask to 64\n");
 	if (pci_set_dma_mask(pdev, DMA_BIT_MASK(64))) {
 		err = pci_set_dma_mask(pdev, DMA_BIT_MASK(32));
 		if (err) {

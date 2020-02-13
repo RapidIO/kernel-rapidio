@@ -163,7 +163,7 @@ int tsi721_check_empty(void)
 	const uint32_t empty = TSI721_PBM_SP_STATUS_EG_EMPTY
 				| TSI721_PBM_SP_STATUS_IG_EMPTY;
 	rio_lcfg_read(mp_h, TSI721_PBM_SP_STATUS, 4, &pbm_stat);
-	rio_lcfg_read(mp_h, TSI721_PCIEDCTL, 4, &pcie_stat);
+	rio_lcfg_read(mp_h, TSI721_PCIEDCTL + TSI721_PCI_SRIO_MAINT_OFFSET, 4, &pcie_stat);
 	return (empty == (pbm_stat & empty))
 		&& !(pcie_stat & TSI721_PCIEDCTL_TP);
 }

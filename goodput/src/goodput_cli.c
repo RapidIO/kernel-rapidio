@@ -2707,7 +2707,7 @@ static int SevenStatusCmd(struct cli_env *env, int UNUSED(argc), char **UNUSED(a
     {TSI721_BRG_PKT_ERR_CNT, (char *)"RXERR BRG"},
     {TSI721_IBWIN_LBX(0), (char *)"IBW0 LB"},
     {TSI721_TLM_SP_FTYPE_FILTER_CTL, (char *)"FILTER"},
-    {TSI721_PCIEDCTL, (char *)"PCIE ST"},
+    {TSI721_PCIEDCTL + TSI721_PCI_SRIO_MAINT_OFFSET, (char *)"PCIE ST"},
 };
     int got_one = 0;
 
