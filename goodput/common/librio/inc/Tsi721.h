@@ -40,7 +40,7 @@ extern "C" {
 
 /* NOTE: this offset must be applied to PCIe register addresses when accessed via
  * S-RIO maintenance writes/reads */
-#define TSI721_PCI_SRIO_MAINT_OFFSET                     ((uint32_t)0x70000000)
+#define TSI721_PCI_SRIO_MAINT_OFFSET                     ((uint32_t)0x00070000)
 
 #define TSI721_PCI_ID                                    ((uint32_t)0x00000000)
 #define TSI721_PCI_CSR                                   ((uint32_t)0x00000004)
