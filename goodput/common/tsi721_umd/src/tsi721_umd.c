@@ -131,18 +131,12 @@ int32_t tsi721_umd_open(struct tsi721_umd* h, uint32_t mport_id)
     // Get device handle
     h->dev_fd = rio_mport_open(mport_id, 0);
     if (h->dev_fd <= 0)
-    {
-        printf("rio_mport_open of %d failed\n",mport_id);
         return -ENODEV;
-    }
     
     // Get pointer to BAR0 configuration space
     ret = map_bar0(h,mport_id);
     if (ret < 0)
-    {
-        printf("failed to map_bar0\n");
-        return -123;//ret;
-    }
+        return ret;
 
     h->state = TSI721_UMD_STATE_UNCONFIGURED;
 
@@ -189,33 +183,23 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
     uint64_t handle = (uintptr_t)queue_mem_phys;
     ret = rio_dbuf_alloc(h->dev_fd, queue_mem_size, &handle);
     if (ret < 0)
-    {
-        printf("Failed rio_dbuf_alloc of size %d to handle %lx\n",queue_mem_size,handle);
         return -ENOMEM;
-    }
-    printf("channel %d rio_dbuf_alloc success size %d handle %lx\n",channel_num,queue_mem_size,handle);
+
     queue_mem_phys = (void*)handle;
 
     chan->request_q_phys = queue_mem_phys;
     chan->request_q = mmap(NULL, queue_mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, h->dev_fd, handle);
 
     if (chan->request_q == MAP_FAILED)
-    {
-        printf("mmap failed to %lx, error %d %s\n",handle,errno,strerror(errno));
         return -ENOMEM;
-    }
-    printf("channel %d request q address set to %p\n",channel_num,chan->request_q);
 
     chan->completion_q = (void*)((uintptr_t)chan->request_q + DEFAULT_REQUEST_Q_SIZE);
     chan->completion_q_phys = (void*)((uintptr_t)chan->request_q_phys + DEFAULT_REQUEST_Q_SIZE);
     memset(chan->completion_q, 0, DEFAULT_COMPLETION_Q_SIZE);
-    printf("channel %d status  q address set to %p\n",channel_num,chan->completion_q);
 
     chan->reg_base = (void*)((uintptr_t)h->all_regs + TSI721_DMAC_BASE(channel_num));
     
     // Config the descriptor pointer registers, queue size
-    printf("channel %d request q physical address set to %p\n",channel_num,chan->request_q_phys);
-    printf("channel %d status  q physical address set to %p\n",channel_num,chan->completion_q_phys);
     TSI721_WR32(TSI721_DMACXDPTRH(channel_num), ((uintptr_t)chan->request_q_phys) >> 32);
     TSI721_WR32(TSI721_DMACXDPTRL(channel_num), ((uintptr_t)chan->request_q_phys) & 0xFFFFFFFF);
     TSI721_WR32(TSI721_DMACXDSBH(channel_num),  ((uintptr_t)chan->completion_q_phys) >> 32);
@@ -450,7 +434,6 @@ int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *pa
         return -EINVAL;
 
     // Wait for a channel to be available
-    printf("waiting for a channel\n");
     do {
         ret = sem_wait(&h->chan_sem);
     } while (ret != 0); // avoid spurious exit on signal
@@ -473,18 +456,13 @@ int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *pa
         return -EPERM; // this should only occur on stop
     }
 
-    printf("got channel %d\n",chan);
-        
     while (packets_sent < num_packet)
     {
         uint32_t sent_this_iter = min(packets_remain, min(REQUEST_Q_COUNT,COMPLETION_Q_COUNT));
         
-        printf("writing %d packets\n",sent_this_iter);
         // Set descriptor write pointer to start of array
         TSI721_WR32(TSI721_DMACXDPTRH(chan), ((uintptr_t)h->chan[chan].request_q_phys) >> 32);
         TSI721_WR32(TSI721_DMACXDPTRL(chan), ((uintptr_t)h->chan[chan].request_q_phys) & 0xFFFFFFFF);
-        printf("descriptor pointer regs updated\n");
-
         // Update descriptors with values from the packets. Always start from index 0
         tsi721_dma_desc* request_q_descriptor = request_q_entry(&h->chan[chan], 0, false);
         for (i=0; i<(int32_t)sent_this_iter; i++)
@@ -493,24 +471,14 @@ int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *pa
             tsi721_umd_update_dma_descriptor(request_q_descriptor + i, p->rio_addr, 0, p->dest_id, p->num_bytes, p->phys_addr);
         }
         
-        printf("descriptors updated\n");
-        
         // Start transfer.  Increment the req count and set it in the DMA descriptor write count register
         h->chan[chan].req_count += sent_this_iter;
         TSI721_WR32(TSI721_DMACXDWRCNT(chan), h->chan[chan].req_count);
-        printf("transfer started\n");
 
         // Poll status to wait for completion
         uint32_t status = TSI721_RD32(TSI721_DMACXSTS(chan));
-        bool bPrinted = false;
-        uint32_t prevStatus = status;
         while(status & TSI721_DMACXSTS_RUN)
         {
-            if (!bPrinted || status != prevStatus)
-            {
-                printf("Polling for status done, status %x\n",status);
-                bPrinted = true;
-            }
             usleep(1);
             status = TSI721_RD32(TSI721_DMACXSTS(chan));
         }
@@ -521,11 +489,7 @@ int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *pa
             return -EIO;
         }
 
-        printf("polling done\n");
-
         clear_completion_q(h,chan);
-
-        printf("completion clear done\n");
 
         packets_remain -= sent_this_iter;
         packets_sent   += sent_this_iter;

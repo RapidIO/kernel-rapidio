@@ -82,5 +82,4 @@ void tsi721_umd_update_dma_descriptor(tsi721_dma_desc* bd_ptr, uint64_t raddr_ls
 
     bd_ptr->t1.bufptr_hi = le32((uint64_t)buffer_ptr >> 32);
     bd_ptr->t1.bufptr_lo = le32((uint64_t)buffer_ptr & 0xffffffff);
-    printf("upda DMA descriptor @ %p word0 %08x word1 %08x\n",bd_ptr,*(uint32_t*)bd_ptr,*(uint32_t*)((uintptr_t)bd_ptr+4));
 }
