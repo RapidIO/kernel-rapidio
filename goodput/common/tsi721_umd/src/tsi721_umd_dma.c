@@ -55,14 +55,16 @@ void tsi721_umd_init_dma_descriptors(tsi721_dma_desc* bd_ptr, uint32_t num_descr
     const uint8_t prio  = 0;
     const uint8_t crf   = 0;
     enum dma_dtype dtype = DTYPE1;
+    const uint32_t word0 = le32((dtype << 29) | (rtype << 19) | (prio << 17) | (crf << 16));
 
     memset(bd_ptr, 0, sizeof(*bd_ptr) * num_descriptors);
     tsi721_dma_desc init_desc = {0};
-    init_desc.word0.all = le32((dtype << 29) | (rtype << 19) | (prio << 17) | (crf << 16));
+    init_desc.word0.all = word0;
 
     for (i=0; i<num_descriptors; i++)
     {
-        *(bd_ptr++) = init_desc;
+        *bd_ptr = init_desc;
+        bd_ptr++;
     }
 }
 
@@ -80,4 +82,5 @@ void tsi721_umd_update_dma_descriptor(tsi721_dma_desc* bd_ptr, uint64_t raddr_ls
 
     bd_ptr->t1.bufptr_hi = le32((uint64_t)buffer_ptr >> 32);
     bd_ptr->t1.bufptr_lo = le32((uint64_t)buffer_ptr & 0xffffffff);
+    printf("upda DMA descriptor @ %p word0 %08x word1 %08x\n",bd_ptr,*(uint32_t*)bd_ptr,*(uint32_t*)((uintptr_t)bd_ptr+4));
 }

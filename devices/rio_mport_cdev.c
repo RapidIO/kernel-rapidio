@@ -1209,14 +1209,28 @@ static int rio_mport_create_dma_mapping(struct mport_dev *md, struct file *filp,
 {
 	struct rio_mport_mapping *map;
 
+	printk(KERN_WARNING "rio_mport_create_dma_mapping addr %llx\n",dm->address);
+
 	map = kzalloc(sizeof(*map), GFP_KERNEL);
+	printk(KERN_WARNING "rio_mport_create_dma_mapping map %p\n",map);
 	if (map == NULL)
 		return -ENOMEM;
 
 	if (dm->address == RIO_MAP_ANY_ADDR) {
+		struct dma_attrs attrs;
+		printk(KERN_WARNING "rio_mport_create_dma_mapping dma_alloc_coherent\n");
+		/*
 		map->virt_addr = dma_alloc_coherent(md->mport->dev.parent,
 						    dm->length, &map->dma_addr,
 						    GFP_KERNEL);
+							*/
+		init_dma_attrs(&attrs);
+		dma_set_attr(DMA_ATTR_FORCE_CONTIGUOUS, &attrs); 
+
+		map->virt_addr = dma_alloc_attrs(md->mport->dev.parent,
+						    dm->length, &map->dma_addr,
+						    GFP_KERNEL, &attrs);
+		printk(KERN_WARNING "rio_mport_create_dma_mapping dma_alloc_coherent returns %p\n",map->virt_addr);
 		if (!map->virt_addr) {
 			kfree(map);
 			return -ENOMEM;
@@ -2475,6 +2489,8 @@ static int mport_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
 	if (!found)
 		return -ENOMEM;
 
+	rmcd_debug(MMAP, "mmap dir %d phys %llx dma %llx virt %p sz %lld\n", map->dir, map->phys_addr, map->dma_addr, map->virt_addr, map->size);
+
 	offset = baddr - map->dma_addr;
 
 	if (size + offset > map->size)
@@ -2501,6 +2517,7 @@ static int mport_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
 	}
 
 	if (!ret) {
+		rmcd_debug(MMAP, "MMAP dma_to_phys(%llx) = %llx\n", map->dma_addr, dma_to_phys(md->mport->dev.parent, map->dma_addr));
 		vma->vm_private_data = map;
 		vma->vm_ops = &vm_ops;
 		mport_mm_open(vma);
