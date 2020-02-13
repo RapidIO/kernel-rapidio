@@ -75,7 +75,7 @@ int main(int argc, char** argv)
     uint32_t i;
     struct tsi721_umd umd;
     uint64_t q_addr = RIO_MAP_ANY_ADDR;
-    uint32_t q_size = 8 * 8192;
+    uint32_t q_size = 8 * 128 * 1024;
     uint64_t dma_buf_addr = RIO_MAP_ANY_ADDR;
     uint32_t dma_buf_size = 1024*1024;
     uint32_t msg_size = dma_buf_size/MAX_MSG_PER_BUF;
@@ -220,12 +220,12 @@ int main(int argc, char** argv)
     printf("test multi write\n");
 
     // Test multi-packet writes
-    struct tsi721_umd_packet packet[512];
+    struct tsi721_umd_packet packet[16*1024];
     uint32_t writes_done = 0;
     uint32_t writes_remain = num_writes;
     while (writes_remain > 0)
     {
-        uint32_t writes_this_iter = min(512,writes_remain);
+        uint32_t writes_this_iter = min(16*1024,writes_remain);
 
         for (i=0; i<writes_this_iter; i++)
         {

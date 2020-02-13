@@ -42,9 +42,9 @@
 
 #define TSI721_DESCRIPTOR_SIZE    32
 #define RESPONSE_DESCRIPTOR_SIZE  64
-#define REQUEST_Q_COUNT           128
+#define REQUEST_Q_COUNT           512
 #define REQUEST_Q_MASK            (REQUEST_Q_COUNT-1)
-#define COMPLETION_Q_COUNT        64
+#define COMPLETION_Q_COUNT        512
 #define COMPLETION_Q_MASK         (COMPLETION_Q_COUNT-1)
 #define DEFAULT_REQUEST_Q_SIZE    (REQUEST_Q_COUNT * TSI721_DESCRIPTOR_SIZE)
 #define DEFAULT_COMPLETION_Q_SIZE (COMPLETION_Q_COUNT * RESPONSE_DESCRIPTOR_SIZE)
@@ -204,7 +204,7 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
     TSI721_WR32(TSI721_DMACXDPTRL(channel_num), ((uintptr_t)chan->request_q_phys) & 0xFFFFFFFF);
     TSI721_WR32(TSI721_DMACXDSBH(channel_num),  ((uintptr_t)chan->completion_q_phys) >> 32);
     TSI721_WR32(TSI721_DMACXDSBL(channel_num),  ((uintptr_t)chan->completion_q_phys) & 0xFFFFFFFF);
-    TSI721_WR32(TSI721_DMACXDSSZ(channel_num),  2); // translates to 64 entries
+    TSI721_WR32(TSI721_DMACXDSSZ(channel_num),  5); // translates to 512 entries
 
     // Initialize hardware queue counters
     TSI721_WR32(TSI721_DMACXCTL(channel_num), TSI721_DMACXCTL_INIT);
@@ -459,7 +459,7 @@ int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *pa
     while (packets_sent < num_packet)
     {
         uint32_t sent_this_iter = min(packets_remain, min(REQUEST_Q_COUNT,COMPLETION_Q_COUNT));
-        
+
         // Set descriptor write pointer to start of array
         TSI721_WR32(TSI721_DMACXDPTRH(chan), ((uintptr_t)h->chan[chan].request_q_phys) >> 32);
         TSI721_WR32(TSI721_DMACXDPTRL(chan), ((uintptr_t)h->chan[chan].request_q_phys) & 0xFFFFFFFF);
