@@ -58,12 +58,39 @@ In the kernel-rapidio/goodput subdirectory, perform the following commands:
 make clean
 make all
 
-4.3 Script update for endpoint destination ID
----------------------------------------------
+4.3 Script update for endpoint destination IDs
+----------------------------------------------
 
-In directory goodput/scripts/cps_hs, edit script 5_cps_eack.txt to set
-destination ID corresponding to the endpoint. The ID is contained in 
-the last argument.
+In directory goodput/scripts/cps_hs, some scripts require editing for the
+destination IDs of the test nodes.
+
+Edit script 2_cps_eobw.txt to set the destination ID corresponding to the
+controller node.
+
+For example, if the controller node has destination ID 5, the script should be
+updated from:
+
+OBDIO 3 1 0x200000000 0x100000 8 1
+
+to
+
+OBDIO 3 5 0x200000000 0x100000 8 1
+
+Edit script 3_cps_cobw.txt to set the destination ID corresponding to the
+endpoint node.
+
+For example, if the controller node has destination ID 8, the script should be
+updated from:
+
+OBDIO 3 6 0x200000000 0x100000 8 1
+
+to
+
+OBDIO 3 8 0x200000000 0x100000 8 1
+
+
+Edit script 5_cps_eack.txt to set destination ID corresponding to the endpoint.
+The ID is contained in the last argument.
 
 For example, if the endpoint has destination ID 6, the script should be 
 edited from:
@@ -109,7 +136,8 @@ Where:
 # - Single digit, indicating the script execution sequence (0, 1, 2, ...)
 X - either 'e' (endpoint) or 'c' (controller), indicates where the script
     should be executed
-step - 'hs' for hot swap setup, 'dma' to start DMA transactions, and
+step - 'hs' for hot swap setup, 'dma' to start DMA transactions, 
+       'obw' to start outbound window transactions and
        'ack' for ackID mismatch demonstration.
 
 Perform the following steps in the order given.
@@ -122,6 +150,34 @@ Enter the following command at the prompt on the controller:
 
 . 1_cps_chs.txt
 
+5.2 Data Transfer Setup
+-----------------------
+
+The next two scripts to run will depend on whether outbound window
+or DMA transactions are to be used between the controller and endpoint.
+Either the steps from section 5.2.1 or 5.2.2 should be run, depending
+on whether outbound window or DMA transfers are to be tested.
+
+5.2.1 Outbound Window Transfer Setup
+------------------------------------
+
+If outbound window transactions are to be used for transfers between
+controller and endpoint, run the following two commands: 
+
+Enter the following command at the prompt on the endpoint:
+
+. 2_cps_eobw.txt
+
+Enter the following command at the prompt on the controller:
+
+. 3_cps_cobw.txt
+
+5.2.2 DMA Transfer Setup
+------------------------
+
+If DMA transactions are to be used for transfers between
+controller and endpoint, run the following two commands:
+
 Enter the following command at the prompt on the endpoint:
 
 . 2_cps_edma.txt
@@ -130,7 +186,7 @@ Enter the following command at the prompt on the controller:
 
 . 3_cps_cdma.txt
 
-5.1 Tsi721 ackID Mismatch Demonstration
+5.3 Tsi721 ackID Mismatch Demonstration
 ---------------------------------------
 
 Enter the following command at the prompt on the endpoint to demonstrate
@@ -142,7 +198,7 @@ After this, periodically output should appear on the controller node
 indicating that a port has been disabled, and then that the port has
 been enabled.
 
-5.2 CPS ackID Mismatch Demonstration
+5.4 CPS ackID Mismatch Demonstration
 ---------------------------------------
 
 Enter the following command at the prompt on the controller to demonstrate

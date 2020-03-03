@@ -1,0 +1,9 @@
+// Script to run on all endpoints in CPS hot swap test.
+// NOTE: Assumes controller node is attached to port 0/destID 1.
+//
+// This script starts DMA after all targets have been initialized.
+// Note: dma <thread> 0xff will dma to any enabled destID.
+t 3 -1 1
+w 3 H
+
+OBDIO 3 6 0x200000000 0x100000 8 0

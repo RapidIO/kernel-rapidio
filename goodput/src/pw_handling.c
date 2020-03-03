@@ -642,15 +642,10 @@ uint32_t init_switch_handle(DAR_DEV_INFO_t *dev_h)
 	uint32_t rc = 1;
 	uint32_t temp_devid;
 	uint32_t switch_comp_tag;
-	int i;
 
 	ret = SRIO_API_ReadRegFunc(dev_h, RIO_DEV_IDENT, &temp_devid);
 	if (ret)
 		goto exit;
-
-	INFO("DMA is Enabled\n");
-	for (i = 0; i < MAX_WORKERS; i++)
-		wkr[i].port_ok = 1;
 
 	dev_h->devID = temp_devid;
 	dev_h->driver_family = rio_get_driver_family(temp_devid);

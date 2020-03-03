@@ -320,10 +320,14 @@ void finish_iter_stats(struct worker *info)
 
 void direct_io_tx(struct worker *info, volatile void * volatile ptr)
 {
-	while (!info->port_ok && !info->stop_req) {
+	did_reg_t did_val = info->did_val;
+
+	while ((!info->port_ok || !devid_status[did_val])
+		&& !info->stop_req) {
 		const struct timespec point_one_ms = {0, 100000};
 		nanosleep(&point_one_ms, NULL);
 	}
+
 	if (info->stop_req)
 		return;
 
