@@ -74,9 +74,9 @@ int main(int argc, char** argv)
     int ret;
     uint32_t i;
     struct tsi721_umd umd;
-    uint64_t q_addr = 0x50000000;
+    uint64_t q_addr = RIO_MAP_ANY_ADDR;
     uint32_t q_size = 8 * 128 * 1024;
-    uint64_t dma_buf_addr = q_addr + q_size;
+    uint64_t dma_buf_addr = RIO_MAP_ANY_ADDR;
     uint32_t dma_buf_size = 1024*1024;
     uint32_t msg_size = dma_buf_size/MAX_MSG_PER_BUF;
     int32_t  dest_id = -1;
@@ -114,13 +114,13 @@ int main(int argc, char** argv)
                     ret = sscanf(optarg,"%ld",&rio_base);
                 break;
             case 's':
-                dma_buf_addr = atoll(optarg);
+                dma_buf_addr = strtoull(optarg, NULL, 0);
                 break;
             case 'S':
                 dma_buf_size = atoi(optarg);
                 break;
             case 'q':
-                q_addr = atoll(optarg);
+                q_addr = strtoull(optarg, NULL, 0);
                 break;
             case 'Q':
                 q_size = atoi(optarg);
@@ -141,7 +141,10 @@ int main(int argc, char** argv)
 
     ret = tsi721_umd_open(&umd, 0);
     if (ret < 0)
+    {
+        printf("tsi721_umd_open failed\n");
         return -1;
+    }
 
     // Write some data into physical memory to be used for DMA test
     uint64_t handle = dma_buf_addr;
@@ -151,6 +154,7 @@ int main(int argc, char** argv)
         printf("Failed to allocate buffer to hold output payload\n");
         return -1;
     }
+    dma_buf_addr = handle;
 
     uint32_t* ptr = mmap(NULL, dma_buf_size, PROT_READ | PROT_WRITE, MAP_SHARED, umd.dev_fd, handle);
     if (ptr == MAP_FAILED)
@@ -160,10 +164,13 @@ int main(int argc, char** argv)
     }
 
     // Allocate queue and DMA buffer into physical memory
-    printf("Allocated DMA queues at phys %lx\n",q_addr);
+    printf("Allocating DMA queues at phys %lx\n",q_addr);
     ret = tsi721_umd_queue_config_multi(&umd, 0x03, (void*)q_addr, q_size);
     if (ret < 0)
+    {
+        printf("Failed tsi721_umd_queue_config_multi %d %s\n",ret,strerror(ret));
         return -1;
+    }
 
     ret = tsi721_umd_start(&umd);
     if (ret < 0)
@@ -173,6 +180,14 @@ int main(int argc, char** argv)
 
     for (i=0; i<dma_buf_size/4; i++)
         ptr[i] = (i & 0x0000FFFF) | 0xCAFE0000;
+
+    /*
+    printf("Checking buffer contents\n");
+    for (i=0; i<dma_buf_size/4; i++)
+    {
+        printf("[%08x] = %08x\n",i,ptr[i]);
+    }
+    */
 
 #if 0
     // Test for single packet writes
@@ -214,6 +229,7 @@ int main(int argc, char** argv)
             packet[i].dest_id   = dest_id;
         }
 
+        printf("tsi721_umd_send_multi writes_remain %d\n",writes_remain);
         tsi721_umd_send_multi(&umd, packet, writes_this_iter);
         writes_done += writes_this_iter;
         printf("tsi721_umd_send_multi %d success\n", writes_done);

@@ -131,16 +131,12 @@ int32_t tsi721_umd_open(struct tsi721_umd* h, uint32_t mport_id)
     // Get device handle
     h->dev_fd = rio_mport_open(mport_id, 0);
     if (h->dev_fd <= 0)
-    {
         return -ENODEV;
-    }
     
     // Get pointer to BAR0 configuration space
     ret = map_bar0(h,mport_id);
     if (ret < 0)
-    {
-        return -123;//ret;
-    }
+        return ret;
 
     h->state = TSI721_UMD_STATE_UNCONFIGURED;
 
@@ -187,17 +183,15 @@ int32_t tsi721_umd_queue_config(struct tsi721_umd* h, uint8_t channel_num, void*
     uint64_t handle = (uintptr_t)queue_mem_phys;
     ret = rio_dbuf_alloc(h->dev_fd, queue_mem_size, &handle);
     if (ret < 0)
-    {
         return -ENOMEM;
-    }
+
+    queue_mem_phys = (void*)handle;
 
     chan->request_q_phys = queue_mem_phys;
     chan->request_q = mmap(NULL, queue_mem_size, PROT_READ | PROT_WRITE, MAP_SHARED, h->dev_fd, handle);
 
     if (chan->request_q == MAP_FAILED)
-    {
         return -ENOMEM;
-    }
 
     chan->completion_q = (void*)((uintptr_t)chan->request_q + DEFAULT_REQUEST_Q_SIZE);
     chan->completion_q_phys = (void*)((uintptr_t)chan->request_q_phys + DEFAULT_REQUEST_Q_SIZE);
@@ -262,7 +256,8 @@ int32_t tsi721_umd_queue_config_multi(struct tsi721_umd* h, uint8_t channel_mask
                 h->chan_count++;
             }
             
-            ptr += queue_size;
+            if ((uintptr_t)phys_mem != RIO_MAP_ANY_ADDR)
+                ptr += queue_size;
         }
     }
 
@@ -460,7 +455,7 @@ int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *pa
     {
         return -EPERM; // this should only occur on stop
     }
-        
+
     while (packets_sent < num_packet)
     {
         uint32_t sent_this_iter = min(packets_remain, min(REQUEST_Q_COUNT,COMPLETION_Q_COUNT));
@@ -468,7 +463,6 @@ int32_t tsi721_umd_send_multi(struct tsi721_umd* h, struct tsi721_umd_packet *pa
         // Set descriptor write pointer to start of array
         TSI721_WR32(TSI721_DMACXDPTRH(chan), ((uintptr_t)h->chan[chan].request_q_phys) >> 32);
         TSI721_WR32(TSI721_DMACXDPTRL(chan), ((uintptr_t)h->chan[chan].request_q_phys) & 0xFFFFFFFF);
-
         // Update descriptors with values from the packets. Always start from index 0
         tsi721_dma_desc* request_q_descriptor = request_q_entry(&h->chan[chan], 0, false);
         for (i=0; i<(int32_t)sent_this_iter; i++)
