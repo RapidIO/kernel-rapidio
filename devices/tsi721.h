@@ -920,6 +920,7 @@ struct tsi721_obw_bar {
 
 struct tsi721_ob_win {
 	u64		base;
+	void*		remap_base;
 	u32		size;
 	u16		destid;
 	u64		rstart;

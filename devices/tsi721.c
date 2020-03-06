@@ -1066,11 +1066,14 @@ tsi721_obw_alloc(struct tsi721_device *priv, struct tsi721_obw_bar *pbar,
 
 	new_win->active = true;
 	new_win->base = win_base;
+	new_win->remap_base = ioremap_wc(win_base,size);
+	tsi_debug(OBW, &priv->pdev->dev, "ioremap_wc win_base %llx remap_base %p\n",win_base,new_win->remap_base);
 	new_win->size = size;
 	new_win->pbar = pbar;
 	priv->obwin_cnt--;
 	pbar->free -= size;
 	*win_id = new_win_idx;
+
 	return 0;
 }
 
@@ -1173,6 +1176,7 @@ static void tsi721_unmap_outb_win(struct rio_mport *mport,
 		    ob_win->destid == destid && ob_win->rstart == rstart) {
 			tsi_debug(OBW, &priv->pdev->dev,
 				  "free OBW%d @%llx", i, ob_win->base);
+			iounmap((void*)ob_win->remap_base);
 			ob_win->active = false;
 			iowrite32(0, priv->regs + TSI721_OBWINLB(i));
 			ob_win->pbar->free += ob_win->size;

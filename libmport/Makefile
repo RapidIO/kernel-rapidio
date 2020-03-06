@@ -8,9 +8,10 @@ LIBDIR=$(DESTDIR)$(PREFIX)/lib
 BINDIR=$(DESTDIR)$(PREFIX)/bin
 INCDIR=./include
 O?=.
+debug=1
 
 ifdef debug
-CFLAGS=-Wall -Wsign-compare -fPIC -DDEBUG -g
+CFLAGS=-Wall -Wsign-compare -fPIC -DDEBUG -g -march=haswell -O3
 else
 CFLAGS=-O2 -Wall -Wsign-compare -fPIC -DNDEBUG
 endif

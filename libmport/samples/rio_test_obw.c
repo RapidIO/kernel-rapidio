@@ -46,6 +46,7 @@
 #include <time.h>
 #include <signal.h>
 #include <pthread.h>
+#include <immintrin.h>
 
 #include <rio_mport_lib.h>
 
@@ -373,6 +374,7 @@ int do_obwin_test(int random, int verify, int loop_count)
 		/* Write data from the local source buffer to
 		 * the remote target inbound buffer */
 		memcpy(obw_ptr, (U8P)buf_src + src_off, len);
+		_mm_mfence();
 		clock_gettime(CLOCK_MONOTONIC, &wr_endtime);
 		if (debug)
 			printf("\tRead %d bytes to dst offset 0x%x\n",
